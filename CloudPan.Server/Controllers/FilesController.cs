@@ -212,18 +212,17 @@ public class FilesController : ControllerBase
 
         var isDirectory = entry.Type == (int)FileType.Directory;
 
-        // 先删除物理文件，再删除 DB（物理操作失败不阻塞 DB）
+        // 先删除 DB 条目（保证一致），再尽力清理物理文件
+        await _index.DeleteAsync(request.Path, isDirectory);
+
         if (isDirectory)
         {
-            try { _storage.DeleteDirectory(request.Path); } catch { }
+            try { _storage.DeleteDirectory(request.Path); } catch { /* 物理删除失败不阻塞——DB 已更新 */ }
         }
         else
         {
             try { _storage.Delete(request.Path); } catch { }
         }
-
-        // 删除 DB 条目
-        await _index.DeleteAsync(request.Path, isDirectory);
 
         var newVersion = await _version.NextVersionAsync();
 

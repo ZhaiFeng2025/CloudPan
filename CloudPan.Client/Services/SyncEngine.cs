@@ -460,17 +460,16 @@ public class SyncEngine
             }
         }
 
-        // 2. 加载远端快照
-        var snapshots = await db.RemoteSnapshots.ToListAsync(ct);
-        var snapshotPaths = new HashSet<string>(snapshots.Select(s => s.Path));
+        // 2. 加载远端快照（字典 O(1) 查找，替代 O(n) FirstOrDefault）
+        var snapshotDict = (await db.RemoteSnapshots.ToListAsync(ct))
+            .ToDictionary(s => s.Path, s => s);
 
         // 3. 比对：新文件/修改文件 → 入队上传
         foreach (var path in localFiles)
         {
             var fullPath = ToLocalPath(path);
-            var snapshot = snapshots.FirstOrDefault(s => s.Path == path);
 
-            if (snapshot == null)
+            if (!snapshotDict.TryGetValue(path, out var snapshot))
             {
                 // 新文件
                 await EnqueueLocalChangeAsync(path, SyncOperation.Upload);
@@ -478,7 +477,7 @@ public class SyncEngine
             }
 
             // 大小对比（Phase 0 简化策略，不计算哈希）
-            var localSize = (int)new FileInfo(fullPath).Length;
+            var localSize = new FileInfo(fullPath).Length;
             if (localSize != snapshot.Size)
             {
                 _logger.LogInformation("全量扫描检测到变更: {Path} ({OldSize} → {NewSize})",
@@ -488,17 +487,17 @@ public class SyncEngine
         }
 
         // 4. 比对：本地已删除 → 入队删除
-        foreach (var snapshot in snapshots)
+        foreach (var (path, snapshot) in snapshotDict)
         {
-            if (snapshot.Type == (int)CloudPan.Shared.FileType.File && !localFiles.Contains(snapshot.Path))
+            if (snapshot.Type == (int)CloudPan.Shared.FileType.File && !localFiles.Contains(path))
             {
-                _logger.LogInformation("全量扫描检测到本地删除: {Path}", snapshot.Path);
-                await EnqueueLocalChangeAsync(snapshot.Path, SyncOperation.Delete);
+                _logger.LogInformation("全量扫描检测到本地删除: {Path}", path);
+                await EnqueueLocalChangeAsync(path, SyncOperation.Delete);
             }
         }
 
         _logger.LogInformation("全量扫描完成（文件: {FileCount}, 快照: {SnapshotCount}）",
-            localFiles.Count, snapshots.Count);
+            localFiles.Count, snapshotDict.Count);
     }
 
     private string ToRelativePath(string fullPath)

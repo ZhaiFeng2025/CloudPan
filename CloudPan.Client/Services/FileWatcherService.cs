@@ -132,10 +132,11 @@ public class FileWatcherService : IDisposable
     private void OnWatcherError(object sender, ErrorEventArgs e)
     {
         _logger.LogError($"FileSystemWatcher 错误: {e.GetException().Message}");
-        // 重启 watcher
+        // 重启 watcher（先释放旧 timer 防止泄漏）
         try
         {
             _watcher?.Dispose();
+            _scanTimer?.Dispose();
             Start();
         }
         catch { }
