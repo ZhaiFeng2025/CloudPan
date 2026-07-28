@@ -52,9 +52,9 @@ builder.Services.AddDbContextFactory<CloudPanDbContext>(options =>
 });
 
 // 服务层
-builder.Services.AddSingleton(new FileStorageService(syncRoot));
-builder.Services.AddSingleton<FileIndexService>();
-builder.Services.AddSingleton<VersionService>();
+builder.Services.AddSingleton<IFileStorageService>(new FileStorageService(syncRoot));
+builder.Services.AddSingleton<IFileIndexService, FileIndexService>();
+builder.Services.AddSingleton<IVersionService, VersionService>();
 
 // Controller
 builder.Services.AddControllers();
@@ -72,7 +72,7 @@ var app = builder.Build();
 // ============================================================
 
 // 确保目录和数据库存在
-var storage = app.Services.GetRequiredService<FileStorageService>();
+var storage = app.Services.GetRequiredService<IFileStorageService>();
 storage.EnsureSyncRootExists();
 
 using (var scope = app.Services.CreateScope())

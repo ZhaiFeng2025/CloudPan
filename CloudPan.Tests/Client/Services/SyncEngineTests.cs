@@ -261,6 +261,35 @@ public class SyncEngineTests : IDisposable
         Assert.NotNull(item);
         Assert.Equal((int)QueuePriority.Normal, item.Priority);
     }
+
+    // ============================================================
+    // ProcessQueueAsync 测试（通过 StartAsync 间接测试）
+    // ============================================================
+
+    [Fact]
+    public async Task ProcessQueue_上传成功_从队列移除()
+    {
+        var filePath = Path.Combine(_syncRoot, "process-upload.txt");
+        await File.WriteAllTextAsync(filePath, "test content for upload");
+
+        // 入队上传
+        await _engine.EnqueueLocalChangeAsync("/process-upload.txt", SyncOperation.Upload);
+
+        // 启动引擎处理一个周期后立即取消
+        using var cts = new CancellationTokenSource();
+        _ = _engine.StartAsync(cts.Token);
+        await Task.Delay(1500, cts.Token); // 等待处理
+        cts.Cancel();
+        await Task.Delay(200); // 等待取消传播
+
+        // 验证 MockApiClient 收到上传调用
+        Assert.True(_api.UploadCalls.ContainsKey("/process-upload.txt"));
+
+        // 验证队列项已移除
+        await using var dbCheck = await _dbFactory.CreateDbContextAsync();
+        var remaining = await dbCheck.SyncQueue.CountAsync(q => q.FilePath == "/process-upload.txt");
+        Assert.Equal(0, remaining);
+    }
 }
 
 /// <summary>测试用 ClientDbContext 工厂。</summary>

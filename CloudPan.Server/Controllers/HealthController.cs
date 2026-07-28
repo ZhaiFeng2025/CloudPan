@@ -10,9 +10,9 @@ namespace CloudPan.Server.Controllers;
 [Route("api/health")]
 public class HealthController : ControllerBase
 {
-    private readonly VersionService _versionService;
+    private readonly IVersionService _versionService;
 
-    public HealthController(VersionService versionService)
+    public HealthController(IVersionService versionService)
     {
         _versionService = versionService;
     }

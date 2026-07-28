@@ -13,11 +13,11 @@ namespace CloudPan.Server.Controllers;
 [Route("api/files")]
 public class FilesController : ControllerBase
 {
-    private readonly FileStorageService _storage;
-    private readonly FileIndexService _index;
-    private readonly VersionService _version;
+    private readonly IFileStorageService _storage;
+    private readonly IFileIndexService _index;
+    private readonly IVersionService _version;
 
-    public FilesController(FileStorageService storage, FileIndexService index, VersionService version)
+    public FilesController(IFileStorageService storage, IFileIndexService index, IVersionService version)
     {
         _storage = storage;
         _index = index;

@@ -9,7 +9,7 @@ namespace CloudPan.Server.Services;
 /// 使用 AppConfig 表的 global_version 键做原子递增。
 /// SQLite WAL 模式下写操作串行，保证并发安全。
 /// </summary>
-public class VersionService
+public class VersionService : IVersionService
 {
     private readonly IDbContextFactory<CloudPanDbContext> _dbFactory;
 

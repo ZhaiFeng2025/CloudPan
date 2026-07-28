@@ -6,7 +6,7 @@ namespace CloudPan.Server.Services;
 /// 物理文件存储服务。
 /// 管理同步根下的文件读写、SHA-256 计算、原子写入（.tmp → rename）。
 /// </summary>
-public class FileStorageService
+public class FileStorageService : IFileStorageService
 {
     private readonly string _syncRoot;
     private readonly string _versionsDir;

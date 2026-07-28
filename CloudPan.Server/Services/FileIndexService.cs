@@ -9,7 +9,7 @@ namespace CloudPan.Server.Services;
 /// 文件索引服务。管理 FileEntry 的 CRUD 操作。
 /// 版本号由 VersionService 统一分配。
 /// </summary>
-public class FileIndexService
+public class FileIndexService : IFileIndexService
 {
     private readonly IDbContextFactory<CloudPanDbContext> _dbFactory;
 
