@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+
 namespace CloudPan.Client.UI;
 
 /// <summary>

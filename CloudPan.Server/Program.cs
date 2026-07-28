@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using CloudPan.Server.Data;
 using CloudPan.Server.Models;
 using CloudPan.Server.Services;
+using Serilog;
+using Serilog.Events;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,6 +12,25 @@ var builder = WebApplication.CreateBuilder(args);
 // ============================================================
 var syncRoot = builder.Configuration.GetValue<string>("SyncRoot")
                ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "CloudPan");
+
+// Serilog 结构化日志
+var logDir = Path.Combine(syncRoot, ".cloudpan", "logs");
+Directory.CreateDirectory(logDir);
+
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+    .WriteTo.Console(
+        outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
+    .WriteTo.File(
+        Path.Combine(logDir, "server-.log"),
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 7,
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
+    .CreateLogger();
+
+builder.Host.UseSerilog();
 
 var dbPath = Path.Combine(syncRoot, ".cloudpan", "server.db");
 
@@ -97,12 +118,14 @@ using (var scope = app.Services.CreateScope())
 app.MapControllers();
 
 // 启动日志
-var urls = "http://0.0.0.0:8443";
-Console.WriteLine("========================================");
-Console.WriteLine($"  CloudPan Server v0.1.0");
-Console.WriteLine($"  同步根: {syncRoot}");
-Console.WriteLine($"  数据库: {dbPath}");
-Console.WriteLine($"  监听:   {urls}");
-Console.WriteLine("========================================");
+app.Lifetime.ApplicationStarted.Register(() =>
+{
+    var logger = app.Services.GetRequiredService<ILogger<Program>>();
+    logger.LogInformation("CloudPan Server v0.1.0 启动");
+    logger.LogInformation("同步根: {SyncRoot}", syncRoot);
+    logger.LogInformation("监听: http://0.0.0.0:8443");
+});
+
+app.Lifetime.ApplicationStopped.Register(Log.CloseAndFlush);
 
 app.Run();

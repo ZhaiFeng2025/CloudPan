@@ -1,6 +1,7 @@
 using CloudPan.Shared;
 using CloudPan.Client.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace CloudPan.Client.Services;
 
@@ -10,10 +11,10 @@ namespace CloudPan.Client.Services;
 /// </summary>
 public class SyncEngine
 {
-    private readonly ApiClient _api;
+    private readonly IApiClient _api;
     private readonly string _syncRoot;
     private readonly IDbContextFactory<ClientDbContext> _dbFactory;
-    private readonly ClientLogger _logger;
+    private readonly ILogger<SyncEngine> _logger;
 
     // 队列优先级阈值（与 shared-spec.json config.queuePriorityThreshold 对齐）
     private const int QueuePriorityThreshold = 1_048_576; // 1MB
@@ -25,7 +26,7 @@ public class SyncEngine
     public event Action<string>? StatusChanged;
     public event Action<int, int>? QueueProgressChanged; // (completed, total)
 
-    public SyncEngine(ApiClient api, string syncRoot, IDbContextFactory<ClientDbContext> dbFactory, ClientLogger logger)
+    public SyncEngine(IApiClient api, string syncRoot, IDbContextFactory<ClientDbContext> dbFactory, ILogger<SyncEngine> logger)
     {
         _api = api;
         _syncRoot = syncRoot;
@@ -36,7 +37,7 @@ public class SyncEngine
     public async Task StartAsync(CancellationToken ct = default)
     {
         _running = true;
-        _logger.Info("同步引擎启动");
+        _logger.LogInformation("同步引擎启动");
 
         try
         {
@@ -44,7 +45,7 @@ public class SyncEngine
         }
         catch (Exception ex)
         {
-            _logger.Error($"首次同步失败（将继续尝试增量同步）: {ex.Message}");
+            _logger.LogError($"首次同步失败（将继续尝试增量同步）: {ex.Message}");
         }
 
         while (_running && !ct.IsCancellationRequested)
@@ -58,7 +59,7 @@ public class SyncEngine
                 }
                 catch (Exception ex)
                 {
-                    _logger.Error($"同步周期异常: {ex.Message}");
+                    _logger.LogError($"同步周期异常: {ex.Message}");
                 }
             }
             await Task.Delay(3000, ct);
@@ -104,7 +105,7 @@ public class SyncEngine
             var localSize = (int)new FileInfo(fullPath).Length;
             if (snapshot != null && localSize == snapshot.Size)
             {
-                _logger.Info($"跳过上传（大小未变）: {relativePath}");
+                _logger.LogInformation($"跳过上传（大小未变）: {relativePath}");
                 return;
             }
             fileSize = localSize;
@@ -118,7 +119,7 @@ public class SyncEngine
             FileSize = fileSize
         });
         await db.SaveChangesAsync();
-        _logger.Info($"入队: {operation} {relativePath}");
+        _logger.LogInformation($"入队: {operation} {relativePath}");
     }
 
     // ============================================================
@@ -128,7 +129,7 @@ public class SyncEngine
     private async Task FullSyncAsync(CancellationToken ct)
     {
         NotifyStatus("首次全量同步...");
-        _logger.Info("开始全量同步");
+        _logger.LogInformation("开始全量同步");
 
         await using var db = await _dbFactory.CreateDbContextAsync();
         var cursor = await db.SyncCursor.FindAsync(1);
@@ -213,7 +214,7 @@ public class SyncEngine
             {
                 if (File.Exists(localPath)) SafeDelete(localPath);
                 if (snapshot != null) db.RemoteSnapshots.Remove(snapshot);
-                _logger.Info($"同步删除: {item.Path}");
+                _logger.LogInformation($"同步删除: {item.Path}");
                 continue;
             }
 
@@ -238,7 +239,7 @@ public class SyncEngine
                     // 哈希相同 → 内容未变，直接更新版本号
                     snapshot.Version = item.Version;
                     snapshot.State = item.State;
-                    _logger.Info($"跳过下载（哈希未变）: {item.Path}");
+                    _logger.LogInformation($"跳过下载（哈希未变）: {item.Path}");
                 }
                 else
                 {
@@ -306,7 +307,7 @@ public class SyncEngine
             {
                 item.RetryCount++;
                 item.LastError = ex.Message;
-                _logger.Error($"传输异常 [{item.RetryCount}/10]: {item.FilePath} — {ex.Message}");
+                _logger.LogError($"传输异常 [{item.RetryCount}/10]: {item.FilePath} — {ex.Message}");
             }
 
             if (success || item.RetryCount >= 10)
@@ -314,7 +315,7 @@ public class SyncEngine
                 db.SyncQueue.Remove(item);
                 _queueCompleted++;
                 if (item.RetryCount >= 10)
-                    _logger.Error($"传输放弃（已达最大重试）: {item.FilePath}");
+                    _logger.LogError($"传输放弃（已达最大重试）: {item.FilePath}");
             }
 
             await db.SaveChangesAsync();
@@ -327,7 +328,7 @@ public class SyncEngine
         var localPath = ToLocalPath(item.FilePath);
         if (!File.Exists(localPath))
         {
-            _logger.Warn($"上传跳过——文件不存在，移除队列项: {item.FilePath}");
+            _logger.LogWarning($"上传跳过——文件不存在，移除队列项: {item.FilePath}");
             return true; // 文件已不存在，从队列移除
         }
 
@@ -335,7 +336,7 @@ public class SyncEngine
         NotifyStatus($"上传: {item.FilePath}");
 
         var result = await _api.UploadAsync(localPath, item.FilePath, item.BaseVersion ?? 0, lastModified);
-        _logger.Info($"上传完成: {item.FilePath} → v{result?.Data.Version}");
+        _logger.LogInformation($"上传完成: {item.FilePath} → v{result?.Data.Version}");
 
         // 上传成功后更新本地快照，避免下次增量同步认为需要重新下载
         await using var db = await _dbFactory.CreateDbContextAsync();
@@ -387,7 +388,7 @@ public class SyncEngine
             await db.SaveChangesAsync();
         }
 
-        _logger.Info($"下载完成: {item.FilePath}");
+        _logger.LogInformation($"下载完成: {item.FilePath}");
         return true;
     }
 
@@ -409,7 +410,7 @@ public class SyncEngine
         if (File.Exists(localPath))
         {
             SafeDelete(localPath);
-            _logger.Info($"本地删除: {item.FilePath}");
+            _logger.LogInformation($"本地删除: {item.FilePath}");
         }
 
         await using var db = await _dbFactory.CreateDbContextAsync();
@@ -441,12 +442,4 @@ public class SyncEngine
     {
         StatusChanged?.Invoke(status);
     }
-}
-
-/// <summary>客户端日志。避开 Microsoft.Extensions.Logging.ClientLogger 命名冲突。</summary>
-public class ClientLogger
-{
-    public void Info(string msg) => Console.WriteLine($"[INFO] {DateTime.Now:HH:mm:ss} {msg}");
-    public void Warn(string msg) => Console.WriteLine($"[WARN] {DateTime.Now:HH:mm:ss} {msg}");
-    public void Error(string msg) => Console.WriteLine($"[ERROR] {DateTime.Now:HH:mm:ss} {msg}");
 }

@@ -9,7 +9,7 @@ namespace CloudPan.Client.Services;
 /// 服务端 HTTP API 客户端。
 /// Phase 0：HTTP 明文，无 Token 认证。
 /// </summary>
-public class ApiClient : IDisposable
+public class ApiClient : IApiClient, IDisposable
 {
     private readonly HttpClient _http;
     private static readonly JsonSerializerOptions JsonOptions = new()

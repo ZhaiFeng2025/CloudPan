@@ -1,4 +1,5 @@
 using CloudPan.Shared;
+using Microsoft.Extensions.Logging;
 
 namespace CloudPan.Client.Services;
 
@@ -10,11 +11,11 @@ public class FileWatcherService : IDisposable
 {
     private readonly string _syncRoot;
     private readonly SyncEngine _engine;
-    private readonly ClientLogger _logger;
+    private readonly ILogger<FileWatcherService> _logger;
     private FileSystemWatcher? _watcher;
     private System.Threading.Timer? _scanTimer;
 
-    public FileWatcherService(string syncRoot, SyncEngine engine, ClientLogger logger)
+    public FileWatcherService(string syncRoot, SyncEngine engine, ILogger<FileWatcherService> logger)
     {
         _syncRoot = syncRoot;
         _engine = engine;
@@ -46,7 +47,7 @@ public class FileWatcherService : IDisposable
         _scanTimer = new System.Threading.Timer(async _ => await FullScanAsync(), null,
             TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
 
-        _logger.Info($"文件监控已启动: {_syncRoot}");
+        _logger.LogInformation($"文件监控已启动: {_syncRoot}");
     }
 
     private async void OnChanged(object sender, FileSystemEventArgs e)
@@ -63,18 +64,18 @@ public class FileWatcherService : IDisposable
 
             if (File.Exists(e.FullPath))
             {
-                _logger.Info($"检测到文件变更: {relativePath}");
+                _logger.LogInformation($"检测到文件变更: {relativePath}");
                 await _engine.EnqueueLocalChangeAsync(relativePath, SyncOperation.Upload);
             }
             else if (Directory.Exists(e.FullPath))
             {
-                _logger.Info($"检测到目录创建: {relativePath}");
+                _logger.LogInformation($"检测到目录创建: {relativePath}");
                 await _engine.EnqueueLocalChangeAsync(relativePath, SyncOperation.Upload); // 目录通过 mkdir 同步
             }
         }
         catch (Exception ex)
         {
-            _logger.Error($"文件事件处理异常: {ex.Message}");
+            _logger.LogError($"文件事件处理异常: {ex.Message}");
         }
     }
 
@@ -84,12 +85,12 @@ public class FileWatcherService : IDisposable
         {
             if (ShouldIgnore(e.FullPath)) return;
             var relativePath = ToRelativePath(e.FullPath);
-            _logger.Info($"检测到删除: {relativePath}");
+            _logger.LogInformation($"检测到删除: {relativePath}");
             await _engine.EnqueueLocalChangeAsync(relativePath, SyncOperation.Delete);
         }
         catch (Exception ex)
         {
-            _logger.Error($"删除事件处理异常: {ex.Message}");
+            _logger.LogError($"删除事件处理异常: {ex.Message}");
         }
     }
 
@@ -104,7 +105,7 @@ public class FileWatcherService : IDisposable
             if (Directory.Exists(e.FullPath))
             {
                 // 目录重命名：递归枚举所有子文件，入队上传
-                _logger.Info($"检测到目录重命名: {oldPath} → {newPath}");
+                _logger.LogInformation($"检测到目录重命名: {oldPath} → {newPath}");
                 await _engine.EnqueueLocalChangeAsync(oldPath, SyncOperation.Delete);
 
                 foreach (var file in Directory.GetFiles(e.FullPath, "*", SearchOption.AllDirectories))
@@ -116,20 +117,20 @@ public class FileWatcherService : IDisposable
             }
             else
             {
-                _logger.Info($"检测到文件重命名: {oldPath} → {newPath}");
+                _logger.LogInformation($"检测到文件重命名: {oldPath} → {newPath}");
                 await _engine.EnqueueLocalChangeAsync(oldPath, SyncOperation.Delete);
                 await _engine.EnqueueLocalChangeAsync(newPath, SyncOperation.Upload);
             }
         }
         catch (Exception ex)
         {
-            _logger.Error($"重命名事件处理异常: {ex.Message}");
+            _logger.LogError($"重命名事件处理异常: {ex.Message}");
         }
     }
 
     private void OnWatcherError(object sender, ErrorEventArgs e)
     {
-        _logger.Error($"FileSystemWatcher 错误: {e.GetException().Message}");
+        _logger.LogError($"FileSystemWatcher 错误: {e.GetException().Message}");
         // 重启 watcher
         try
         {
@@ -141,7 +142,7 @@ public class FileWatcherService : IDisposable
 
     private async Task FullScanAsync()
     {
-        _logger.Info("定时全量扫描...");
+        _logger.LogInformation("定时全量扫描...");
         await Task.CompletedTask; // Phase 0：简化实现，依赖增量同步
     }
 
