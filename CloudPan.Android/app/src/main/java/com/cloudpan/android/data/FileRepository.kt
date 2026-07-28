@@ -119,6 +119,48 @@ class FileRepository(private val settings: SettingsStore) {
         }
     }
 
+    suspend fun searchFiles(query: String): Result<List<FileEntryDto>> {
+        return safeCall {
+            val response = api().searchFiles(query)
+            if (response.isSuccessful) {
+                val body = response.body()
+                @Suppress("UNCHECKED_CAST")
+                val data = (body?.get("data") as? List<Map<String, Any>>) ?: emptyList()
+                data.map { map ->
+                    FileEntryDto(
+                        path = map["path"] as? String ?: "",
+                        type = (map["type"] as? Double)?.toInt() ?: 0,
+                        hash = map["hash"] as? String,
+                        size = (map["size"] as? Double)?.toLong() ?: 0L,
+                        version = (map["version"] as? Double)?.toInt() ?: 0,
+                        lastModified = map["lastModified"] as? String ?: "",
+                        state = (map["state"] as? Double)?.toInt() ?: 0
+                    )
+                }
+            } else emptyList()
+        }
+    }
+
+    suspend fun getDevices(): Result<List<DeviceDto>> {
+        return safeCall {
+            val response = api().getDevices()
+            if (response.isSuccessful) {
+                val body = response.body()
+                @Suppress("UNCHECKED_CAST")
+                val data = (body?.get("data") as? List<Map<String, Any>>) ?: emptyList()
+                data.map { map ->
+                    DeviceDto(
+                        id = map["deviceId"] as? String ?: "",
+                        name = map["name"] as? String ?: "",
+                        person = map["person"] as? String,
+                        lastSeen = map["lastSeen"] as? String ?: "",
+                        online = (map["online"] as? Double)?.toInt() ?: 0
+                    )
+                }
+            } else emptyList()
+        }
+    }
+
     suspend fun healthCheck(): Result<Boolean> {
         return safeCall {
             val r = api().healthCheck()

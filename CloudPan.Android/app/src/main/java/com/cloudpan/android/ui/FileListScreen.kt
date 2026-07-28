@@ -34,6 +34,9 @@ fun FileListScreen(
     var files by remember { mutableStateOf<List<FileEntryDto>>(emptyList()) }
     var status by remember { mutableStateOf("加载中...") }
     var currentPath by remember { mutableStateOf("/") }
+    var searchQuery by remember { mutableStateOf("") }
+    var isSearching by remember { mutableStateOf(false) }
+    var sortBy by remember { mutableStateOf("name") } // name, size, date
     var selectedFile by remember { mutableStateOf<FileEntryDto?>(null) }
     var isDownloading by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<FileEntryDto?>(null) }
@@ -45,25 +48,28 @@ fun FileListScreen(
     fun loadFiles() {
         scope.launch {
             status = "加载中..."
-            val result = if (currentPath == "/") {
-                repository.getFileTree()
+            if (searchQuery.length >= 2) {
+                val result = repository.searchFiles(searchQuery)
+                result.onSuccess { items ->
+                    files = sortFiles(items, sortBy)
+                    status = "搜索「$searchQuery」: ${files.size} 个结果"
+                    isSearching = true
+                }.onFailure { e -> snackbarHostState.showSnackbar("搜索失败: ${e.message}") }
             } else {
-                repository.getFileTreeInFolder(currentPath)
-            }
-            result.onSuccess { response ->
-                files = response.data
-                    .filter { it.path != currentPath }           // 排除自身
-                    .filter { isDirectChild(currentPath, it.path) } // 只显示直接子级
-                    .sortedBy { it.path }
-                status = "${files.size} 个项目"
-            }.onFailure { e ->
-                status = "❌ ${e.message}"
-                snackbarHostState.showSnackbar("加载失败: ${e.message}")
+                isSearching = false
+                val result = if (currentPath == "/") repository.getFileTree()
+                    else repository.getFileTreeInFolder(currentPath)
+                result.onSuccess { response ->
+                    files = sortFiles(response.data
+                        .filter { it.path != currentPath }
+                        .filter { isDirectChild(currentPath, it.path) }, sortBy)
+                    status = "${files.size} 个项目"
+                }.onFailure { e -> snackbarHostState.showSnackbar("加载失败: ${e.message}") }
             }
         }
     }
 
-    LaunchedEffect(currentPath) { loadFiles() }
+    LaunchedEffect(currentPath, searchQuery, sortBy) { loadFiles() }
     LaunchedEffect(refreshTrigger) { if (refreshTrigger > 0) loadFiles() }
 
     // ---- 对话框 ----
@@ -148,33 +154,58 @@ fun FileListScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    // 面包屑导航
-                    ClickableText(
-                        text = buildBreadcrumb(currentPath),
-                        style = MaterialTheme.typography.titleSmall,
-                        onClick = { offset ->
-                            val clicked = getPathAtOffset(currentPath, offset)
-                            if (clicked != null) currentPath = clicked
+            Column {
+                // 搜索栏
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                    placeholder = { Text("搜索文件...") },
+                    singleLine = true,
+                    leadingIcon = { Text("🔍") },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) { Text("✕") }
                         }
-                    )
-                },
-                navigationIcon = {
-                    if (currentPath != "/") {
-                        IconButton(onClick = {
-                            currentPath = currentPath.substringBeforeLast("/", "/")
-                            if (!currentPath.endsWith("/")) currentPath += "/"
-                            if (currentPath.isEmpty() || currentPath == "") currentPath = "/"
-                        }) { Text("⬅") }
                     }
-                },
-                actions = {
-                    IconButton(onClick = { showNewFolderDialog = true }) { Text("📁+") }
-                    IconButton(onClick = { loadFiles() }) { Text("🔄") }
-                    IconButton(onClick = onBackToSettings) { Text("⚙️") }
-                }
-            )
+                )
+                TopAppBar(
+                    title = {
+                        if (!isSearching) {
+                            ClickableText(
+                                text = buildBreadcrumb(currentPath),
+                                style = MaterialTheme.typography.titleSmall,
+                                onClick = { offset ->
+                                    val clicked = getPathAtOffset(currentPath, offset)
+                                    if (clicked != null) currentPath = clicked
+                                }
+                            )
+                        } else {
+                            Text("搜索结果")
+                        }
+                    },
+                    navigationIcon = {
+                        if (currentPath != "/" && !isSearching) {
+                            IconButton(onClick = {
+                                currentPath = currentPath.substringBeforeLast("/", "/")
+                                if (!currentPath.endsWith("/")) currentPath += "/"
+                                if (currentPath.isEmpty() || currentPath == "") currentPath = "/"
+                            }) { Text("⬅") }
+                        }
+                    },
+                    actions = {
+                        // 排序切换
+                        IconButton(onClick = {
+                            sortBy = when (sortBy) { "name" -> "size"; "size" -> "date"; else -> "name" }
+                        }) {
+                            Text(when (sortBy) { "name" -> "🔤"; "size" -> "📏"; else -> "📅" })
+                        }
+                        IconButton(onClick = { showNewFolderDialog = true }) { Text("📁+") }
+                        IconButton(onClick = { loadFiles() }) { Text("🔄") }
+                        IconButton(onClick = onBackToSettings) { Text("⚙️") }
+                    }
+                )
+            }
         },
         floatingActionButton = {
             if (onPickFileForUpload != null) {
@@ -241,6 +272,13 @@ private fun getPathAtOffset(path: String, offset: Int): String? {
     val str = buildBreadcrumb(path)
     return str.getStringAnnotations("path", offset, offset)
         .firstOrNull()?.item
+}
+
+/** 文件排序。 */
+private fun sortFiles(list: List<FileEntryDto>, sortBy: String): List<FileEntryDto> = when (sortBy) {
+    "size" -> list.sortedByDescending { it.size }
+    "date" -> list.sortedByDescending { it.lastModified }
+    else -> list.sortedWith(compareBy({ it.type != 1 }, { it.path })) // name: 文件夹在前
 }
 
 /** 判断 filePath 是否为 folderPath 的直接子级（不包含更深层文件）。 */

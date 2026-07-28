@@ -64,4 +64,7 @@ interface CloudPanApi {
     suspend fun createShare(
         @Body request: Map<String, @JvmSuppressWildcards Any>
     ): Response<ShareResponse>
+
+    @GET("api/devices")
+    suspend fun getDevices(): Response<Map<String, Any>>
 }
