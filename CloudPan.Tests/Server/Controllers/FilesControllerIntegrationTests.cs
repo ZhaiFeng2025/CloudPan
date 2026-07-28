@@ -313,4 +313,79 @@ public class FilesControllerIntegrationTests : IClassFixture<WebApplicationFacto
         var downloadedContent = await reader.ReadToEndAsync();
         Assert.Equal(content, downloadedContent);
     }
+
+    // ============================================================
+    // 冲突检测
+    // ============================================================
+
+    [Fact]
+    public async Task Upload_版本冲突_返回409和冲突副本()
+    {
+        var guid = Guid.NewGuid().ToString("N")[..8];
+        var remotePath = $"/conflict-{guid}.txt";
+
+        // 第一次上传 → 版本 1
+        var localFile1 = Path.Combine(_tempDir, $"_src1_{guid}.txt");
+        await File.WriteAllTextAsync(localFile1, "version 1");
+
+        using (var form = new MultipartFormDataContent())
+        {
+            await using var fs = File.OpenRead(localFile1);
+            form.Add(new StreamContent(fs), "file", "file1.txt");
+            form.Add(new StringContent(remotePath), "path");
+            form.Add(new StringContent("0"), "baseVersion");
+            form.Add(new StringContent(DateTime.UtcNow.ToString("O")), "lastModified");
+            var r = await _client.PostAsync("/api/files/upload", form);
+            r.EnsureSuccessStatusCode();
+        }
+
+        // 第二次上传（baseVersion=1 且版本匹配 → 正常覆盖 → 版本 2）
+        var localFile2 = Path.Combine(_tempDir, $"_src2_{guid}.txt");
+        await File.WriteAllTextAsync(localFile2, "version 2");
+
+        using (var form = new MultipartFormDataContent())
+        {
+            await using var fs = File.OpenRead(localFile2);
+            form.Add(new StreamContent(fs), "file", "file2.txt");
+            form.Add(new StringContent(remotePath), "path");
+            form.Add(new StringContent("1"), "baseVersion"); // 当前版本是 1，匹配
+            form.Add(new StringContent(DateTime.UtcNow.ToString("O")), "lastModified");
+            var r = await _client.PostAsync("/api/files/upload", form);
+            r.EnsureSuccessStatusCode(); // 正常覆盖
+        }
+
+        // 第三次上传（baseVersion=1，但服务端已是 v2 → 冲突！）
+        var localFile3 = Path.Combine(_tempDir, $"_src3_{guid}.txt");
+        await File.WriteAllTextAsync(localFile3, "version 3 - conflict!");
+
+        using (var form = new MultipartFormDataContent())
+        {
+            await using var fs = File.OpenRead(localFile3);
+            form.Add(new StreamContent(fs), "file", "file3.txt");
+            form.Add(new StringContent(remotePath), "path");
+            form.Add(new StringContent("1"), "baseVersion"); // 过时！服务端已是 v2
+            form.Add(new StringContent(DateTime.UtcNow.ToString("O")), "lastModified");
+            var r = await _client.PostAsync("/api/files/upload", form);
+
+            Assert.Equal(System.Net.HttpStatusCode.Conflict, r.StatusCode);
+
+            var body = await r.Content.ReadFromJsonAsync<JsonElement>(JsonOptions);
+            var error = body.GetProperty("error");
+            Assert.Equal("CONFLICT", error.GetProperty("code").GetString());
+            Assert.True(error.GetProperty("conflictPath").GetString().Contains("冲突"));
+        }
+    }
+
+    // ============================================================
+    // Token 认证
+    // ============================================================
+
+    [Fact]
+    public async Task 无Token_返回401()
+    {
+        // 创建一个不带认证头的临时客户端
+        using var noAuthClient = _factory.CreateClient();
+        var response = await noAuthClient.GetAsync("/api/files/tree");
+        Assert.Equal(System.Net.HttpStatusCode.Unauthorized, response.StatusCode);
+    }
 }

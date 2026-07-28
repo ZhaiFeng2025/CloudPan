@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using CloudPan.Shared;
+using CloudPan.Server.Models;
 using CloudPan.Server.Services;
 
 namespace CloudPan.Server.Controllers;
@@ -46,10 +47,10 @@ public class FilesController : ControllerBase
 
     /// <summary>
     /// POST /api/files/upload — 上传文件（multipart）。
-    /// Phase 0：不校验 baseVersion，直接覆盖写入。
+    /// Phase 1a：校验 baseVersion，版本不匹配时保存冲突副本。
     /// </summary>
     [HttpPost("upload")]
-    [RequestSizeLimit(50_000_000)] // 50MB max for Phase 0 (no chunked upload yet)
+    [RequestSizeLimit(50_000_000)]
     public async Task<IActionResult> Upload(
         IFormFile file,
         [FromForm] string path,
@@ -67,6 +68,16 @@ public class FilesController : ControllerBase
         var pathErr = _storage.ValidatePath(path);
         if (pathErr != null)
             return BadRequest(new { error = new { code = "BAD_REQUEST", message = pathErr } });
+
+        // 冲突检测：baseVersion > 0 且当前版本 > baseVersion → 冲突
+        if (baseVersion > 0)
+        {
+            var existing = await _index.GetByPathAsync(path);
+            if (existing != null && existing.Version > baseVersion)
+            {
+                return await HandleUploadConflictAsync(file, path, existing, lastModified, baseVersion);
+            }
+        }
 
         // 先分配版本号，再写文件，避免孤儿文件
         var newVersion = await _version.NextVersionAsync();
@@ -94,6 +105,45 @@ public class FilesController : ControllerBase
                 hash = entry.CurrentHash,
                 size = entry.CurrentSize,
                 conflictResolved = false
+            }
+        });
+    }
+
+    /// <summary>上传冲突处理：保存冲突副本（_冲突_yyyyMMdd_HHmmss）。</summary>
+    private async Task<IActionResult> HandleUploadConflictAsync(
+        IFormFile file, string path, FileEntry existing, string? lastModified, int baseVersion)
+    {
+        var conflictVersion = await _version.NextVersionAsync();
+
+        // 生成冲突文件名
+        var nameWithoutExt = Path.GetFileNameWithoutExtension(path);
+        var ext = Path.GetExtension(path);
+        var suffix = DateTime.Now.ToString("_冲突_yyyyMMdd_HHmmss"); // spec: conflictSuffixPattern
+        var conflictPath = Path.GetDirectoryName(path)?.Replace('\\', '/') ?? "";
+        if (!conflictPath.EndsWith('/') && !string.IsNullOrEmpty(conflictPath))
+            conflictPath += "/";
+        conflictPath = conflictPath + nameWithoutExt + suffix + ext;
+        if (!conflictPath.StartsWith('/')) conflictPath = "/" + conflictPath;
+
+        // 保存冲突副本
+        await using var stream = file.OpenReadStream();
+        await _storage.AtomicWriteAsync(conflictPath, stream, expectedHash: null);
+
+        var conflictHash = await _storage.ComputeHashAsync(_storage.GetAbsolutePath(conflictPath));
+        var conflictEntry = await _index.UpsertFileAsync(
+            conflictPath, FileType.File, conflictHash, file.Length,
+            lastModified ?? DateTime.UtcNow.ToString("O"), conflictVersion,
+            FileState.Conflict);
+
+        return StatusCode(409, new
+        {
+            error = new
+            {
+                code = "CONFLICT",
+                message = $"版本冲突：客户端基于 v{baseVersion}，服务端当前 v{existing.Version}",
+                currentVersion = existing.Version,
+                baseVersion = baseVersion,
+                conflictPath = conflictEntry.Path
             }
         });
     }
@@ -129,6 +179,7 @@ public class FilesController : ControllerBase
 
     /// <summary>
     /// POST /api/files/delete — 删除文件或文件夹（递归）。
+    /// Phase 1a：检查 baseVersion 防冲突。
     /// </summary>
     [HttpPost("delete")]
     public async Task<IActionResult> Delete([FromBody] DeleteRequest request)
@@ -143,6 +194,21 @@ public class FilesController : ControllerBase
         var entry = await _index.GetByPathAsync(request.Path);
         if (entry == null)
             return NotFound(new { error = new { code = "NOT_FOUND", message = $"文件不存在: {request.Path}" } });
+
+        // 冲突检测
+        if (request.BaseVersion > 0 && entry.Version > request.BaseVersion)
+        {
+            return StatusCode(409, new
+            {
+                error = new
+                {
+                    code = "CONFLICT",
+                    message = $"版本冲突：客户端基于 v{request.BaseVersion}，服务端当前 v{entry.Version}",
+                    currentVersion = entry.Version,
+                    baseVersion = request.BaseVersion
+                }
+            });
+        }
 
         var isDirectory = entry.Type == (int)FileType.Directory;
 
