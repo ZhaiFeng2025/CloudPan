@@ -271,4 +271,45 @@ public class FilesControllerIntegrationTests : IClassFixture<WebApplicationFacto
         var body = await response.Content.ReadFromJsonAsync<JsonElement>(JsonOptions);
         Assert.Equal(newPath, body.GetProperty("data").GetProperty("newPath").GetString());
     }
+
+    // ============================================================
+    // 下载 + 完整性校验
+    // ============================================================
+
+    [Fact]
+    public async Task Download_上传后下载_内容一致且返回哈希头()
+    {
+        var guid = Guid.NewGuid().ToString("N")[..8];
+        var remotePath = $"/download-test-{guid}.txt";
+        var content = $"download integrity check {guid}";
+
+        // 上传
+        var localFile = Path.Combine(_tempDir, $"src_{guid}.txt");
+        await File.WriteAllTextAsync(localFile, content);
+
+        using var form = new MultipartFormDataContent();
+        await using var fileStream = File.OpenRead(localFile);
+        form.Add(new StreamContent(fileStream), "file", $"src_{guid}.txt");
+        form.Add(new StringContent(remotePath), "path");
+        form.Add(new StringContent("0"), "baseVersion");
+        form.Add(new StringContent(DateTime.UtcNow.ToString("O")), "lastModified");
+        await _client.PostAsync("/api/files/upload", form);
+
+        // 下载
+        var downloadPath = Path.Combine(_tempDir, $"dl_{guid}.txt");
+        var response = await _client.GetAsync(
+            $"/api/files/download?path={Uri.EscapeDataString(remotePath)}");
+        response.EnsureSuccessStatusCode();
+
+        // 验证响应头包含哈希
+        Assert.True(response.Headers.TryGetValues("X-File-Hash", out var hashValues));
+        var hash = hashValues.First();
+        Assert.Equal(64, hash.Length); // SHA-256 64 hex chars
+
+        // 验证内容一致
+        using var dlStream = await response.Content.ReadAsStreamAsync();
+        using var reader = new StreamReader(dlStream);
+        var downloadedContent = await reader.ReadToEndAsync();
+        Assert.Equal(content, downloadedContent);
+    }
 }

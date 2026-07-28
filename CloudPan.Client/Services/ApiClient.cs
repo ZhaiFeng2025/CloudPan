@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CloudPan.Shared;
@@ -67,6 +68,7 @@ public class ApiClient : IApiClient, IDisposable
     }
 
     /// <summary>下载文件。返回服务端文件最后修改时间。</summary>
+    /// <exception cref="InvalidDataException">文件 SHA-256 与服务端不匹配（触发重传）。</exception>
     public async Task<string?> DownloadAsync(string remotePath, string localPath, IProgress<long>? progress = null)
     {
         var url = $"/api/files/download?path={Uri.EscapeDataString(remotePath)}";
@@ -75,6 +77,9 @@ public class ApiClient : IApiClient, IDisposable
 
         var lastModified = response.Headers.TryGetValues("X-File-Modified", out var values)
             ? values.FirstOrDefault() : null;
+
+        var expectedHash = response.Headers.TryGetValues("X-File-Hash", out var hashValues)
+            ? hashValues.FirstOrDefault() : null;
 
         var dir = Path.GetDirectoryName(localPath);
         if (dir != null) Directory.CreateDirectory(dir);
@@ -86,10 +91,37 @@ public class ApiClient : IApiClient, IDisposable
             await stream.CopyToAsync(fileStream);
         }
 
+        // 下载后 SHA-256 校验（与 shared-spec.json §5 对齐）
+        if (!string.IsNullOrEmpty(expectedHash))
+        {
+            var actualHash = await ComputeSha256Async(tmpPath);
+            if (!string.Equals(actualHash, expectedHash, StringComparison.OrdinalIgnoreCase))
+            {
+                SafeDelete(tmpPath);
+                throw new InvalidDataException(
+                    $"下载校验失败: {remotePath}。期望哈希: {expectedHash[..16]}..., 实际: {actualHash[..16]}...");
+            }
+        }
+
         // 原子替换（同卷 Move+overwrite 是原子的）
         File.Move(tmpPath, localPath, overwrite: true);
 
         return lastModified;
+    }
+
+    /// <summary>计算文件 SHA-256（64 字符十六进制）。</summary>
+    private static async Task<string> ComputeSha256Async(string filePath)
+    {
+        using var sha = SHA256.Create();
+        await using var stream = File.OpenRead(filePath);
+        var hash = await sha.ComputeHashAsync(stream);
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    /// <summary>安全删除文件，不抛异常。</summary>
+    private static void SafeDelete(string path)
+    {
+        try { File.Delete(path); } catch { }
     }
 
     /// <summary>删除文件。</summary>

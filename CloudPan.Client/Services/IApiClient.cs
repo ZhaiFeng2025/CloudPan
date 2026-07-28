@@ -18,6 +18,7 @@ public interface IApiClient
     Task<UploadApiResponse?> UploadAsync(string localPath, string remotePath, int baseVersion, string lastModified, IProgress<long>? progress = null);
 
     /// <summary>下载文件。返回服务端文件最后修改时间。</summary>
+    /// <exception cref="InvalidDataException">文件 SHA-256 与服务端不匹配。</exception>
     Task<string?> DownloadAsync(string remotePath, string localPath, IProgress<long>? progress = null);
 
     /// <summary>删除文件。</summary>
