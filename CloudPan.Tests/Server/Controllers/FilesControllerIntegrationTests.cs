@@ -15,6 +15,8 @@ public class FilesControllerIntegrationTests : IClassFixture<WebApplicationFacto
     private readonly WebApplicationFactory<Program> _factory;
     private readonly HttpClient _client;
     private readonly string _tempDir;
+    private const string TestToken = "test-token-integration";
+    private const string TestDeviceId = "test-device-001";
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -28,16 +30,15 @@ public class FilesControllerIntegrationTests : IClassFixture<WebApplicationFacto
         // 覆盖配置，使用临时目录作为同步根
         _factory = factory.WithWebHostBuilder(builder =>
         {
-            builder.ConfigureAppConfiguration((ctx, config) =>
-            {
-                config.AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    ["SyncRoot"] = _tempDir
-                });
-            });
+            builder.UseSetting("SyncRoot", _tempDir);
+            // 通过环境变量注入测试 Token（app.Configuration 可访问）
+            Environment.SetEnvironmentVariable("CloudPan__Token", TestToken);
         });
 
         _client = _factory.CreateClient();
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", TestToken);
+        _client.DefaultRequestHeaders.Add("X-Device-Id", TestDeviceId);
     }
 
     public void Dispose()
@@ -184,12 +185,12 @@ public class FilesControllerIntegrationTests : IClassFixture<WebApplicationFacto
     [Fact]
     public async Task Search_匹配关键词_返回结果()
     {
-        // 上传关键词文件
-        var testFilePath = Path.Combine(_tempDir, "keyword_file.txt");
-        await File.WriteAllTextAsync(testFilePath, "searchable");
+        // 上传关键词文件（本地文件名与远程路径不同，避免文件锁冲突）
+        var localFile = Path.Combine(_tempDir, "_src_keyword_file.txt");
+        await File.WriteAllTextAsync(localFile, "searchable");
 
         using var form = new MultipartFormDataContent();
-        await using var fileStream = File.OpenRead(testFilePath);
+        await using var fileStream = File.OpenRead(localFile);
         form.Add(new StreamContent(fileStream), "file", "keyword_file.txt");
         form.Add(new StringContent("/keyword_file.txt"), "path");
         form.Add(new StringContent("0"), "baseVersion");

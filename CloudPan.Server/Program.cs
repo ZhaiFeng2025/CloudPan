@@ -1,5 +1,7 @@
+using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using CloudPan.Server.Data;
+using CloudPan.Server.Middleware;
 using CloudPan.Server.Models;
 using CloudPan.Server.Services;
 using Serilog;
@@ -106,6 +108,34 @@ using (var scope = app.Services.CreateScope())
         db.AppConfigs.Add(new AppConfig { Key = "global_version", Value = "0" });
     }
 
+    // 首次启动时生成家庭共享 Token（仅输出一次）
+    if (!await db.AppConfigs.AnyAsync(c => c.Key == "token_hash"))
+    {
+        // 优先从 app 配置读取（支持测试注入），否则自动生成
+        var presetToken = app.Configuration.GetValue<string>("CloudPan:Token");
+        string token;
+        if (!string.IsNullOrEmpty(presetToken))
+        {
+            token = presetToken;
+        }
+        else
+        {
+            // 生产环境：自动生成 64 字符随机 Token
+            token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine();
+            Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
+            Console.WriteLine("║  家庭共享 Token（仅显示一次，请妥善保存）                    ║");
+            Console.WriteLine($"║  {token}  ║");
+            Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
+            Console.WriteLine();
+            Console.ResetColor();
+        }
+        var tokenHash = Convert.ToHexString(SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(token))).ToLowerInvariant();
+        db.AppConfigs.Add(new AppConfig { Key = "token_hash", Value = tokenHash });
+    }
+
     await db.SaveChangesAsync();
 }
 
@@ -113,8 +143,8 @@ using (var scope = app.Services.CreateScope())
 // 中间件管道
 // ============================================================
 
-// Phase 0：不启用认证中间件
-// Phase 1a：添加 Token 认证中间件
+// Token 认证中间件（/api/health 和 /share/ 公开，其余需要 Bearer token）
+app.UseTokenAuth();
 
 app.MapControllers();
 

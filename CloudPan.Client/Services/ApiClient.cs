@@ -18,10 +18,24 @@ public class ApiClient : IApiClient, IDisposable
         PropertyNameCaseInsensitive = true
     };
 
-    public ApiClient(string baseUrl)
+    /// <summary>
+    /// 创建 API 客户端。
+    /// </summary>
+    /// <param name="baseUrl">服务端地址。</param>
+    /// <param name="token">家庭共享 Token。Phase 0 可传空字符串。</param>
+    /// <param name="deviceId">设备 GUID。</param>
+    public ApiClient(string baseUrl, string token = "", string deviceId = "")
     {
         _http = new HttpClient { BaseAddress = new Uri(baseUrl.TrimEnd('/')) };
         _http.Timeout = TimeSpan.FromSeconds(60);
+
+        // 认证头（Phase 1a：Token 认证）
+        if (!string.IsNullOrEmpty(token))
+            _http.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        if (!string.IsNullOrEmpty(deviceId))
+            _http.DefaultRequestHeaders.Add("X-Device-Id", deviceId);
     }
 
     /// <summary>健康检查。</summary>

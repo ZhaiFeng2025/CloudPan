@@ -8,10 +8,12 @@ echo ========================================
 echo   CloudPan Client v0.1.0
 echo   ^(^) : %SYNCDIR%
 echo   ^(^) : http://localhost:8443
-echo   ^(^) : put file in above folder to sync
+echo.
+echo   如果没有 Token，请先启动服务端获取 Token
+echo   用法: start-client.bat [serverUrl] [syncRoot] [token]
 echo ========================================
 echo.
 
-dotnet run --project CloudPan.Client -- http://localhost:8443 "%SYNCDIR%"
+dotnet run --project CloudPan.Client -- http://localhost:8443 "%SYNCDIR%" "%CLOUDPAN_TOKEN%"
 
 pause

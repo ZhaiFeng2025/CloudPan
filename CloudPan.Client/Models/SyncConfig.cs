@@ -10,4 +10,10 @@ public record SyncConfig
 
     /// <summary>服务端地址，如 http://localhost:8443。</summary>
     public string ServerUrl { get; init; } = "http://localhost:8443";
+
+    /// <summary>家庭共享 Token（64 字符十六进制）。</summary>
+    public string Token { get; init; } = "";
+
+    /// <summary>设备 GUID，首次连接时生成，持久化存储。</summary>
+    public string DeviceId { get; init; } = "";
 }

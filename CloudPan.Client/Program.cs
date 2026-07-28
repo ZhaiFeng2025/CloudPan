@@ -13,19 +13,34 @@ public static class Program
 {
     public static string SyncRoot { get; private set; } = "";
     private static string ServerUrl { get; set; } = "http://localhost:8443";
+    private static string Token { get; set; } = "";
 
     [STAThread]
     public static void Main(string[] args)
     {
         // 1. 解析命令行参数
+        //   start-client.bat [serverUrl] [syncRoot] [token]
         if (args.Length >= 1) ServerUrl = args[0];
         SyncRoot = args.Length >= 2
             ? args[1]
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "CloudPan");
+        Token = args.Length >= 3 ? args[2] : "";
 
         Directory.CreateDirectory(SyncRoot);
-        var dbPath = Path.Combine(SyncRoot, ".cloudpan", "client.db");
-        Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
+        var configDir = Path.Combine(SyncRoot, ".cloudpan");
+        var dbPath = Path.Combine(configDir, "client.db");
+        Directory.CreateDirectory(configDir);
+
+        // 设备 ID：首次启动生成 GUID，持久化到 .cloudpan/device.id
+        var deviceIdPath = Path.Combine(configDir, "device.id");
+        var deviceId = File.Exists(deviceIdPath)
+            ? File.ReadAllText(deviceIdPath).Trim()
+            : null;
+        if (string.IsNullOrEmpty(deviceId))
+        {
+            deviceId = Guid.NewGuid().ToString("N");
+            File.WriteAllText(deviceIdPath, deviceId);
+        }
 
         // 2. Serilog 日志初始化
         var logDir = Path.Combine(SyncRoot, ".cloudpan", "logs");
@@ -48,14 +63,21 @@ public static class Program
         services.AddLogging(b => b.AddSerilog(dispose: true));
 
         // 配置
-        services.AddSingleton(new SyncConfig { SyncRoot = SyncRoot, ServerUrl = ServerUrl });
+        var syncConfig = new SyncConfig
+        {
+            SyncRoot = SyncRoot,
+            ServerUrl = ServerUrl,
+            Token = Token,
+            DeviceId = deviceId
+        };
+        services.AddSingleton(syncConfig);
 
         // 数据库（DbContextFactory 确保并发安全）
         services.AddSingleton<IDbContextFactory<ClientDbContext>>(_ => new ClientDbFactory(dbPath));
         EnsureDbCreated(dbPath);
 
-        // HTTP 客户端
-        services.AddSingleton<IApiClient>(new ApiClient(ServerUrl));
+        // HTTP 客户端（注入认证头）
+        services.AddSingleton<IApiClient>(new ApiClient(ServerUrl, Token, deviceId));
 
         // 服务层
         services.AddSingleton<SyncEngine>();
