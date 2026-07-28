@@ -130,3 +130,9 @@ app.Lifetime.ApplicationStarted.Register(() =>
 app.Lifetime.ApplicationStopped.Register(Log.CloseAndFlush);
 
 app.Run();
+
+/// <summary>
+/// 使 WebApplicationFactory&lt;Program&gt; 在集成测试中可用。
+/// 顶层语句隐式生成的 Program 类为 internal，此声明将其扩展为 public partial。
+/// </summary>
+public partial class Program { }
