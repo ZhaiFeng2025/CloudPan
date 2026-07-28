@@ -57,6 +57,7 @@ builder.Services.AddSingleton<IFileIndexService, FileIndexService>();
 builder.Services.AddSingleton<IVersionService, VersionService>();
 
 // Controller
+builder.Services.AddMemoryCache();
 builder.Services.AddControllers();
 
 // 大文件上传支持

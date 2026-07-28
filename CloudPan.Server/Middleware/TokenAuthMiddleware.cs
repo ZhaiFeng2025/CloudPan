@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using CloudPan.Server.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace CloudPan.Server.Middleware;
 
@@ -52,15 +53,19 @@ public class TokenAuthMiddleware
             return;
         }
 
-        // 验证 token 哈希
+        // 验证 token 哈希（内存缓存避免每次请求查 DB）
         var tokenHash = ComputeSha256(token);
-        var dbFactory = context.RequestServices.GetRequiredService<IDbContextFactory<CloudPanDbContext>>();
-        await using var db = await dbFactory.CreateDbContextAsync();
-
-        var storedHash = await db.AppConfigs
-            .Where(c => c.Key == "token_hash")
-            .Select(c => c.Value)
-            .FirstOrDefaultAsync();
+        var cache = context.RequestServices.GetRequiredService<IMemoryCache>();
+        var storedHash = await cache.GetOrCreateAsync("token_hash_cache", async entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
+            var dbFactory = context.RequestServices.GetRequiredService<IDbContextFactory<CloudPanDbContext>>();
+            await using var db = await dbFactory.CreateDbContextAsync();
+            return await db.AppConfigs
+                .Where(c => c.Key == "token_hash")
+                .Select(c => c.Value)
+                .FirstOrDefaultAsync();
+        });
 
         if (storedHash == null)
         {
@@ -79,6 +84,8 @@ public class TokenAuthMiddleware
         }
 
         // 提取设备 ID（放在 HttpContext.Items 中供控制器使用）
+        var dbFactory = context.RequestServices.GetRequiredService<IDbContextFactory<CloudPanDbContext>>();
+        await using var db = await dbFactory.CreateDbContextAsync();
         var deviceId = context.Request.Headers["X-Device-Id"].FirstOrDefault();
         if (!string.IsNullOrEmpty(deviceId))
         {

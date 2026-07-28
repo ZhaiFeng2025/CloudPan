@@ -18,6 +18,13 @@ interface CloudPanApi {
         @Query("cursor") cursor: String? = null
     ): Response<FileTreeResponse>
 
+    /** 获取指定文件夹下的文件列表。 */
+    @GET("api/files/tree")
+    suspend fun getFileTreeInFolder(
+        @Query("path") folderPath: String,
+        @Query("limit") limit: Int = 5000
+    ): Response<FileTreeResponse>
+
     @Multipart
     @POST("api/files/upload")
     suspend fun uploadFile(

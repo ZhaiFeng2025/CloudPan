@@ -35,8 +35,16 @@ class FileRepository(private val settings: SettingsStore) {
         _api = null
     }
 
-    suspend fun getFileTree(sinceVersion: Int = 0, cursor: String? = null): Result<FileTreeResponse> {
+    suspend fun getFileTree(sinceVersion: Int = 0, cursor: String? = null, subPath: String? = null): Result<FileTreeResponse> {
+        // Retrofit 的 @Query 支持 null 参数自动忽略
         return safeCall { api().getFileTree(sinceVersion, 100, cursor) }
+        // 注：CloudPanApi.getFileTree 暂不支持 subPath，需要直接拼接 URL
+    }
+
+    suspend fun getFileTreeInFolder(folderPath: String): Result<FileTreeResponse> {
+        return safeCall {
+            api().getFileTreeInFolder(folderPath, 100)
+        }
     }
 
     suspend fun downloadFile(remotePath: String, localDir: File): Result<File> {
