@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CloudPan — API 接口契约 v1.0</title>
+<style>
+  :root {
+    --bg: #fafaf9; --card: #ffffff; --text: #1c1917; --text-muted: #57534e;
+    --border: #e7e5e4; --accent: #2563eb; --accent-light: #eff6ff;
+    --get: #16a34a; --post: #2563eb; --delete: #dc2626; --ws: #9333ea;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif; background: var(--bg); color: var(--text); line-height: 1.75; font-size: 15px; }
+  .container { max-width: 920px; margin: 0 auto; padding: 60px 24px 80px; }
+  .cover { text-align: center; padding: 60px 0 48px; border-bottom: 2px solid var(--border); margin-bottom: 48px; }
+  .cover h1 { font-size: 30px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 6px; }
+  .cover .subtitle { font-size: 16px; color: var(--text-muted); margin-bottom: 16px; }
+  .cover .meta { display: flex; justify-content: center; gap: 28px; font-size: 13px; color: var(--text-muted); flex-wrap: wrap; }
+
+  section { margin-bottom: 48px; }
+  h2 { font-size: 20px; font-weight: 700; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid var(--border); }
+  h3 { font-size: 16px; font-weight: 600; margin: 24px 0 10px; }
+
+  p { margin-bottom: 10px; color: var(--text-muted); }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+  thead { background: var(--accent-light); }
+  th { text-align: left; padding: 8px 12px; font-weight: 600; font-size: 12px; color: var(--text-muted); border-bottom: 2px solid var(--border); text-transform: uppercase; }
+  td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+
+  .method { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 800; font-family: "SF Mono", "Consolas", monospace; color: #fff; min-width: 48px; text-align: center; }
+  .method.get { background: var(--get); }
+  .method.post { background: var(--post); }
+  .method.delete { background: var(--delete); }
+  .method.ws { background: var(--ws); }
+
+  .path { font-family: "SF Mono", "Consolas", monospace; font-size: 13px; font-weight: 600; }
+
+  .endpoint { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; margin-bottom: 20px; }
+  .endpoint .header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .endpoint .header .desc { color: var(--text-muted); font-size: 14px; }
+
+  .params { margin: 10px 0; }
+  .params th { background: #f8fafc; font-size: 11px; }
+  .params td.type { font-family: "SF Mono", "Consolas", monospace; font-size: 12px; color: var(--accent); }
+
+  pre { background: #1e1e1e; color: #d4d4d4; padding: 14px 18px; border-radius: 8px; font-family: "SF Mono", "Cascadia Code", "Consolas", monospace; font-size: 12px; line-height: 1.5; overflow-x: auto; margin: 10px 0; }
+  pre .key { color: #9cdcfe; }
+  pre .str { color: #ce9178; }
+  pre .num { color: #b5cea8; }
+  pre .comment { color: #6a9955; }
+
+  .note { border-left: 3px solid var(--accent); padding: 8px 14px; margin: 10px 0; background: var(--accent-light); border-radius: 0 6px 6px 0; font-size: 13px; color: var(--text-muted); }
+
+  .toc ol { padding-left: 20px; columns: 2; column-gap: 24px; }
+  .toc li { margin-bottom: 4px; font-size: 14px; }
+  .toc { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; margin-bottom: 40px; }
+
+  @media (max-width: 640px) { .container { padding: 24px 14px 40px; } .toc ol { columns: 1; } pre { font-size: 11px; padding: 10px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="cover">
+  <h1>CloudPan API 接口契约</h1>
+  <p class="subtitle">服务端与客户端通信协议规范</p>
+  <div class="meta">
+    <span>版本 1.2</span>
+    <span>2026-07-28</span>
+    <span>适用范围：C# 服务端 + C# Windows 客户端 + Kotlin Android 客户端</span>
+  </div>
+</div>
+
+<div class="toc">
+  <h2>目录</h2>
+  <ol>
+    <li>通用约定</li>
+    <li>认证</li>
+    <li>文件操作</li>
+    <li>版本管理</li>
+    <li>缩略图与搜索</li>
+    <li>分享链接</li>
+    <li>设备管理</li>
+    <li>健康检查</li>
+    <li>WebSocket 实时通知</li>
+    <li>错误码</li>
+    <li>数据类型参考</li>
+  </ol>
+</div>
+
+<!-- ==================== 1. 通用约定 ==================== -->
+<section>
+  <h2>1. 通用约定</h2>
+
+  <h3>1.1 基础信息</h3>
+  <table>
+    <tr><td style="width:160px;font-weight:600;">Base URL</td><td><code>https://{host}:8443</code></td></tr>
+    <tr><td style="font-weight:600;">内容类型</td><td>请求/响应均为 <code>application/json; charset=utf-8</code>（文件上传除外）</td></tr>
+    <tr><td style="font-weight:600;">字符编码</td><td>UTF-8</td></tr>
+    <tr><td style="font-weight:600;">时间格式</td><td>ISO 8601 UTC（<code>2026-07-27T14:30:00Z</code>）</td></tr>
+    <tr><td style="font-weight:600;">路径编码</td><td>URL 中的文件路径需 <code>encodeURIComponent</code>，相对同步根的路径（如 <code>/docs/report.docx</code> → <code>%2Fdocs%2Freport.docx</code>）</td></tr>
+  </table>
+
+  <h3>1.2 请求头</h3>
+  <table>
+    <tr><th style="width:160px">Header</th><th>值</th><th>说明</th></tr>
+    <tr><td><code>Authorization</code></td><td><code>Bearer {token}</code></td><td>所有 /api/* 端点必须携带（/share/* 除外）</td></tr>
+    <tr><td><code>X-Device-Id</code></td><td>设备唯一标识</td><td>所有 /api/* 端点必须携带</td></tr>
+    <tr><td><code>Content-Type</code></td><td>见各端点</td><td>JSON 或 multipart</td></tr>
+  </table>
+
+  <h3>1.3 成功响应格式</h3>
+  <pre><span class="comment">// 单条数据</span>
+{ <span class="key">"data"</span>: { ... } }
+
+<span class="comment">// 列表数据</span>
+{ <span class="key">"data"</span>: [ ... ] }
+
+<span class="comment">// 文件下载：直接返回文件流，响应头携带元信息</span></pre>
+
+  <h3>1.4 错误响应格式</h3>
+  <pre>{ <span class="key">"error"</span>: { <span class="key">"code"</span>: <span class="str">"CONFLICT"</span>, <span class="key">"message"</span>: <span class="str">"版本冲突：当前版本为 v5，你基于 v3"</span>, <span class="key">"details"</span>: { <span class="key">"currentVersion"</span>: <span class="num">5</span>, <span class="key">"yourBaseVersion"</span>: <span class="num">3</span> } } }</pre>
+</section>
+
+<!-- ==================== 2. 认证 ==================== -->
+<section>
+  <h2>2. 认证</h2>
+
+  <h3>2.1 认证流程</h3>
+  <table>
+    <tr><td style="width:60px;font-weight:600;">1</td><td>客户端首次连接时，用户在界面输入服务端地址 + Token</td></tr>
+    <tr><td style="font-weight:600;">2</td><td>客户端执行 TLS 握手，服务端返回自签证书</td></tr>
+    <tr><td style="font-weight:600;">3</td><td>客户端展示证书指纹（SHA-256），用户确认后 pin 住。不匹配则拒绝连接</td></tr>
+    <tr><td style="font-weight:600;">4</td><td>所有后续请求在 <code>Authorization: Bearer {token}</code> 中携带 Token</td></tr>
+    <tr><td style="font-weight:600;">5</td><td>服务端对 Token 做 SHA-256 后与存储的哈希比对。不匹配 → 401</td></tr>
+  </table>
+
+  <h3>2.2 证书 Pin 指纹</h3>
+  <p>客户端首次连接成功后，将服务端证书的 SHA-256 指纹持久化存储。后续每次 TLS 握手时校验。指纹变化 → <strong>客户端本地拒绝连接</strong>并弹窗告警（可能是中间人攻击，也可能是服务端重新生成了证书）。此检查发生在 TLS 层，服务端无感知——不会有对应的 HTTP 错误码。</p>
+
+  <div class="note">
+    <strong>Android 实现</strong>：使用 OkHttp 的 <code>CertificatePinner</code>。首次连接时手动获取证书指纹，用户确认后调用 <code>CertificatePinner.Builder().add(host, "sha256/xxx").build()</code>。
+  </div>
+
+  <h3>2.3 Android 轮询模式</h3>
+  <p>Android 端不使用 WebSocket（移动网络下长连接耗电且不稳定）。改为每 15 分钟发送 <code>GET /api/files/tree?sinceVersion={本地maxVersion}&limit=100</code> 查询增量变更。如有变更 → 触发下载或通知。轮询前先 ping <code>GET /api/health</code> 确认可达性。照片备份为独立 Foreground Service，不受轮询间隔影响。</p>
+</section>
+
+<!-- ==================== 3. 文件操作 ==================== -->
+<section>
+  <h2>3. 文件操作</h2>
+
+  <!-- 3.1 文件树 -->
+  <div class="endpoint">
+    <div class="header"><span class="method get">GET</span><span class="path">/api/files/tree</span><span class="desc">获取文件树（含哈希和版本信息）</span></div>
+    <table class="params">
+      <thead><tr><th style="width:90px">参数</th><th style="width:60px">位置</th><th style="width:60px">必填</th><th>说明</th></tr></thead>
+      <tr><td class="type">since</td><td>query</td><td>否</td><td>ISO 8601 UTC 时间戳。仅返回此后有变更的文件。不传则返回全量。推荐改用 <code>sinceVersion</code></td></tr>
+      <tr><td class="type">sinceVersion</td><td>query</td><td>否</td><td><strong>（推荐）</strong>全局单调版本号。仅返回版本号 > sinceVersion 的文件变更。比时间戳更可靠（无时钟偏差问题）</td></tr>
+      <tr><td class="type">path</td><td>query</td><td>否</td><td>子目录路径。仅返回该目录下的内容</td></tr>
+      <tr><td class="type">limit</td><td>query</td><td>否</td><td>每页条数（默认 5000，最大 10000）。超出则分页</td></tr>
+      <tr><td class="type">cursor</td><td>query</td><td>否</td><td>分页游标（上次响应中的 <code>nextCursor</code>）。不传则返回第一页</td></tr>
+    </table>
+    <p><strong>响应 200：</strong></p>
+    <pre>{
+  <span class="key">"data"</span>: [ ... ],
+  <span class="key">"nextCursor"</span>: <span class="str">"eyJwYXRoIjoiL3Bob3Rvcy96ei5qcGcifQ=="</span>,
+  <span class="key">"hasMore"</span>: <span class="num">true</span>,
+  <span class="key">"maxVersion"</span>: <span class="num">15420</span>
+}</pre>
+    <div class="note"><strong>分页</strong>：如果 <code>hasMore=true</code>，客户端用 <code>cursor=nextCursor</code> 请求下一页。<strong>sinceVersion 推荐用法</strong>：客户端本地记录 <code>maxVersion</code>，下次请求时传 <code>sinceVersion=maxVersion</code>，仅拉取增量变更。首次同步传 <code>sinceVersion=0</code> 获取全量。</div>
+  </div>
+
+  <!-- 3.2 上传 -->
+  <div class="endpoint">
+    <div class="header"><span class="method post">POST</span><span class="path">/api/files/upload</span><span class="desc">上传文件</span></div>
+    <table class="params">
+      <thead><tr><th style="width:80px">参数</th><th style="width:60px">位置</th><th style="width:60px">必填</th><th>说明</th></tr></thead>
+      <tr><td class="type">file</td><td>multipart</td><td>是</td><td>文件内容（二进制流）</td></tr>
+      <tr><td class="type">path</td><td>multipart</td><td>是</td><td>相对路径，如 "/docs/report.docx"</td></tr>
+      <tr><td class="type">baseVersion</td><td>multipart</td><td>是</td><td>客户端基于哪个版本修改。首次上传传 0</td></tr>
+      <tr><td class="type">lastModified</td><td>multipart</td><td>是</td><td>文件最后修改时间（ISO 8601 UTC）</td></tr>
+    </table>
+    <p><strong>Content-Type:</strong> <code>multipart/form-data</code></p>
+    <p><strong>响应 200（成功，无冲突）：</strong></p>
+    <pre>{
+  <span class="key">"data"</span>: {
+    <span class="key">"path"</span>:    <span class="str">"/docs/report.docx"</span>,
+    <span class="key">"version"</span>: <span class="num">13</span>,
+    <span class="key">"hash"</span>:    <span class="str">"d3b0c44298fc1c15..."</span>,
+    <span class="key">"size"</span>:    <span class="num">245800</span>,
+    <span class="key">"conflictResolved"</span>: <span class="num">false</span>
+  }
+}</pre>
+    <p><strong>响应 200（上传方在冲突中胜出）：</strong></p>
+    <pre>{
+  <span class="key">"data"</span>: {
+    <span class="key">"path"</span>:    <span class="str">"/docs/report.docx"</span>,
+    <span class="key">"version"</span>: <span class="num">13</span>,
+    <span class="key">"hash"</span>:    <span class="str">"d3b0c44298fc1c15..."</span>,
+    <span class="key">"size"</span>:    <span class="num">245800</span>,
+    <span class="key">"conflictResolved"</span>: <span class="num">true</span>,
+    <span class="key">"conflictCopyPath"</span>: <span class="str">"/docs/report_冲突_20260727_143000.docx"</span>
+  }
+}</pre>
+    <p><strong>响应 409（冲突）：</strong></p>
+    <pre>{
+  <span class="key">"error"</span>: {
+    <span class="key">"code"</span>:    <span class="str">"CONFLICT"</span>,
+    <span class="key">"message"</span>: <span class="str">"版本冲突"</span>,
+    <span class="key">"details"</span>: {
+      <span class="key">"currentVersion"</span>:  <span class="num">13</span>,
+      <span class="key">"yourBaseVersion"</span>: <span class="num">11</span>,
+      <span class="key">"conflictWinner"</span>:  <span class="str">"server"</span>,
+      <span class="key">"conflictCopyPath"</span>: <span class="str">"/docs/report_冲突_20260727_143000.docx"</span>
+    }
+  }
+}</pre>
+    <div class="note"><strong>冲突处理流程</strong>：客户端收到 409 → 服务端已保留冲突副本 → 客户端应拉取最新版本，然后重新上传（此时 baseVersion = currentVersion）。如果服务端判定上传方胜出（lastModified 更新），则 conflictWinner = "uploader"，服务端直接更新当前版本，旧版本存为副本。此时返回 200 而非 409。</div>
+  </div>
+
+  <!-- 3.3 下载 -->
+  <div class="endpoint">
+    <div class="header"><span class="method get">GET</span><span class="path">/api/files/download?path=...</span><span class="desc">下载文件</span></div>
+    <table class="params">
+      <thead><tr><th style="width:80px">参数</th><th style="width:60px">位置</th><th style="width:60px">必填</th><th>说明</th></tr></thead>
+      <tr><td class="type">path</td><td>query</td><td>是</td><td>文件相对路径（需 URL 编码）</td></tr>
+      <tr><td class="type">version</td><td>query</td><td>否</td><td>指定下载历史版本。不传则下载当前版本</td></tr>
+    </table>
+    <p><strong>响应 200：</strong>文件二进制流（<code>Content-Type: application/octet-stream</code>）</p>
+    <table>
+      <thead><tr><th style="width:180px">响应头</th><th>说明</th></tr></thead>
+      <tr><td><code>X-File-Hash</code></td><td>文件 SHA-256（客户端下载后必须校验）</td></tr>
+      <tr><td><code>X-File-Version</code></td><td>版本号</td></tr>
+      <tr><td><code>X-File-Size</code></td><td>字节数</td></tr>
+      <tr><td><code>X-File-Modified</code></td><td>最后修改时间</td></tr>
+      <tr><td><code>Content-Disposition</code></td><td><code>attachment; filename="report.docx"</code></td></tr>
+    </table>
+  </div>
+
+  <!-- 3.4 删除 -->
+  <div class="endpoint">
+    <div class="header"><span class="method post">POST</span><span class="path">/api/files/delete</span><span class="desc">删除文件</span></div>
+    <table class="params">
+      <thead><tr><th style="width:80px">参数</th><th style="width:60px">位置</th><th style="width:60px">必填</th><th>说明</th></tr></thead>
+      <tr><td class="type">path</td><td>body</td><td>是</td><td>文件/文件夹相对路径</td></tr>
+      <tr><td class="type">baseVersion</td><td>body</td><td>是</td><td>基准版本号（用于冲突检测）</td></tr>
+    </table>
+    <pre>→ { <span class="key">"path"</span>: <span class="str">"/docs/old.docx"</span>, <span class="key">"baseVersion"</span>: <span class="num">5</span> }
+← 200 { <span class="key">"data"</span>: { <span class="key">"path"</span>: <span class="str">"/docs/old.docx"</span>, <span class="key">"deletedVersion"</span>: <span class="num">6</span> } }
+← 409 冲突（删除时文件已被修改）
+<span class="comment">// 删除文件夹 → 递归删除全部子文件和子文件夹。每个子文件产生独立的版本记录</span></pre>
+  </div>
+
+  <!-- 3.5 移动/重命名 -->
+  <div class="endpoint">
+    <div class="header"><span class="method post">POST</span><span class="path">/api/files/move</span><span class="desc">移动或重命名文件/文件夹</span></div>
+    <table class="params">
+      <thead><tr><th style="width:80px">参数</th><th style="width:60px">位置</th><th style="width:60px">必填</th><th>说明</th></tr></thead>
+      <tr><td class="type">oldPath</td><td>body</td><td>是</td><td>原路径</td></tr>
+      <tr><td class="type">newPath</td><td>body</td><td>是</td><td>新路径</td></tr>
+      <tr><td class="type">baseVersion</td><td>body</td><td>是</td><td>基准版本号</td></tr>
+    </table>
+    <pre>→ { <span class="key">"oldPath"</span>: <span class="str">"/docs/draft.docx"</span>, <span class="key">"newPath"</span>: <span class="str">"/docs/final.docx"</span>, <span class="key">"baseVersion"</span>: <span class="num">3</span> }
+← 200 { <span class="key">"data"</span>: { <span class="key">"oldPath"</span>: <span class="str">"/docs/draft.docx"</span>, <span class="key">"newPath"</span>: <span class="str">"/docs/final.docx"</span>, <span class="key">"version"</span>: <span class="num">4</span> } }</pre>
+  </div>
+
+  <!-- 3.6 创建文件夹 -->
+  <div class="endpoint">
+    <div class="header"><span class="method post">POST</span><span class="path">/api/files/mkdir</span><span class="desc">创建文件夹</span></div>
+    <pre>→ { <span class="key">"path"</span>: <span class="str">"/docs/新项目"</span> }
+← 200 { <span class="key">"data"</span>: { <span class="key">"path"</span>: <span class="str">"/docs/新项目"</span> } }
+← 409 路径已存在</pre>
+  </div>
+
+  <!-- 3.7 大文件分块上传 -->
+  <div class="endpoint">
+    <div class="header"><span class="method post">POST</span><span class="path">/api/files/upload/chunk</span><span class="desc">大文件（≥10MB）分块上传</span></div>
+    <table class="params">
+      <thead><tr><th style="width:100px">参数</th><th style="width:60px">位置</th><th style="width:60px">必填</th><th>说明</th></tr></thead>
+      <tr><td class="type">path</td><td>multipart</td><td>是</td><td>文件路径</td></tr>
+      <tr><td class="type">chunkIndex</td><td>multipart</td><td>是</td><td>块索引（从 0 开始）</td></tr>
+      <tr><td class="type">totalChunks</td><td>multipart</td><td>是</td><td>总块数</td></tr>
+      <tr><td class="type">chunkHash</td><td>multipart</td><td>是</td><td>当前块的 SHA-256</td></tr>
+      <tr><td class="type">fileHash</td><td>multipart</td><td>是</td><td>完整文件的 SHA-256（仅第一块携带）</td></tr>
+      <tr><td class="type">baseVersion</td><td>multipart</td><td>是</td><td>同普通上传</td></tr>
+      <tr><td class="type">lastModified</td><td>multipart</td><td>是</td><td>同普通上传</td></tr>
+      <tr><td class="type">chunk</td><td>multipart</td><td>是</td><td>块数据（≤4MB）</td></tr>
+    </table>
+    <p><strong>响应 200（块已接收，等待下一块）：</strong></p>
+    <pre>{ <span class="key">"data"</span>: { <span class="key">"status"</span>: <span class="str">"chunk_received"</span>, <span class="key">"chunkIndex"</span>: <span class="num">3</span>, <span class="key">"totalChunks"</span>: <span class="num">10</span> } }</pre>
+    <p><strong>响应 200（最后一块，上传完成）：</strong></p>
+    <pre>{ <span class="key">"data"</span>: { <span class="key">"status"</span>: <span class="str">"complete"</span>, <span class="key">"path"</span>: <span class="str">"/photos/large.jpg"</span>, <span class="key">"version"</span>: <span class="num">5</span>, <span class="key">"hash"</span>: <span class="str">"abc123..."</span>, <span class="key">"size"</span>: <span class="num">52428800</span> } }</pre>
+    <p><strong>响应 200（块哈希匹配，跳过）：</strong></p>
+    <pre>{ <span class="key">"data"</span>: { <span class="key">"status"</span>: <span class="str">"chunk_skipped"</span>, <span class="key">"chunkIndex"</span>: <span class="num">3</span> } }</pre>
+    <div class="note"><strong>上传流程</strong>：① 客户端计算所有块的哈希 ② 调用 GET /api/files/upload/chunk/status 查询服务端已有块 ③ 仅上传缺失的块 ④ 第一块携带 fileHash ⑤ 服务端比对：如果该 fileHash 与服务端当前版本哈希相同 → 跳过全部上传 ⑥ 所有块收齐后 → 服务端合并、校验 fileHash、原子替换。</div>
+
+  </div>
+
+  <!-- 3.8 分块上传状态查询 -->
+  <div class="endpoint">
+    <div class="header"><span class="method get">GET</span><span class="path">/api/files/upload/chunk/status</span><span class="desc">查询分块上传进度（用于断点续传）</span></div>
+    <table class="params">
+      <thead><tr><th style="width:90px">参数</th><th style="width:60px">位置</th><th style="width:60px">必填</th><th>说明</th></tr></thead>
+      <tr><td class="type">path</td><td>query</td><td>是</td><td>文件路径</td></tr>
+      <tr><td class="type">fileHash</td><td>query</td><td>是</td><td>完整文件的 SHA-256</td></tr>
+      <tr><td class="type">totalChunks</td><td>query</td><td>是</td><td>总块数</td></tr>
+    </table>
+    <pre>← 200 { <span class="key">"data"</span>: { <span class="key">"missingChunks"</span>: [<span class="num">3</span>, <span class="num">5</span>, <span class="num">7</span>], <span class="key">"serverFileHash"</span>: <span class="str">"abc..."</span> } }</pre>
+    <div class="note"><strong>断点续传逻辑</strong>：① serverFileHash == 请求的 fileHash → 文件内容未变，全部跳过 ② missingChunks 为空 → 所有块已在服务端，合并即完成 ③ missingChunks 非空 → 仅上传数组中列出的块索引。如果文件路径在服务端不存在（首次上传），返回所有块缺失。</div>
+  </div>
+</section>
+
+<!-- ==================== 4. 版本管理 ==================== -->
+<section>
+  <h2>4. 版本管理</h2>
+
+  <div class="endpoint">
+    <div class="header"><span class="method get">GET</span><span class="path">/api/versions?path=...</span><span class="desc">获取文件的历史版本列表</span></div>
+    <table class="params">
+      <thead><tr><th style="width:80px">参数</th><th style="width:60px">位置</th><th style="width:60px">必填</th><th>说明</th></tr></thead>
+      <tr><td class="type">path</td><td>query</td><td>是</td><td>文件路径（需 URL 编码）</td></tr>
+    </table>
+    <pre>← 200 {
+  <span class="key">"data"</span>: [
+    { <span class="key">"version"</span>: <span class="num">12</span>, <span class="key">"hash"</span>: <span class="str">"abc..."</span>, <span class="key">"size"</span>: <span class="num">245800</span>, <span class="key">"timestamp"</span>: <span class="str">"2026-07-27T14:30:00Z"</span>, <span class="key">"deviceName"</span>: <span class="str">"张三的笔记本"</span> },
+    { <span class="key">"version"</span>: <span class="num">11</span>, <span class="key">"hash"</span>: <span class="str">"def..."</span>, <span class="key">"size"</span>: <span class="num">245760</span>, <span class="key">"timestamp"</span>: <span class="str">"2026-07-26T09:15:00Z"</span>, <span class="key">"deviceName"</span>: <span class="str">"台式机"</span> }
+  ]
+}</pre>
+    <div class="note">仅返回 P2 版本历史范围内保留的版本（默认 5 个）。列表按版本号降序排列。</div>
+  </div>
+
+  <div class="endpoint">
+    <div class="header"><span class="method post">POST</span><span class="path">/api/versions/restore</span><span class="desc">回滚到指定历史版本</span></div>
+    <table class="params">
+      <thead><tr><th style="width:80px">参数</th><th style="width:60px">位置</th><th style="width:60px">必填</th><th>说明</th></tr></thead>
+      <tr><td class="type">path</td><td>body</td><td>是</td><td>文件路径</td></tr>
+      <tr><td class="type">version</td><td>body</td><td>是</td><td>要回滚到的版本号</td></tr>
+    </table>
+    <pre>→ { <span class="key">"path"</span>: <span class="str">"/docs/report.docx"</span>, <span class="key">"version"</span>: <span class="num">11</span> }
+← 200 { <span class="key">"data"</span>: { <span class="key">"path"</span>: <span class="str">"/docs/report.docx"</span>, <span class="key">"newVersion"</span>: <span class="num">13</span>, <span class="key">"hash"</span>: <span class="str">"def..."</span>, <span class="key">"size"</span>: <span class="num">245760</span> } }</pre>
+    <div class="note">回滚操作本身创建新版本（不删除中间版本）。version 12 → 回滚到 11 → 当前版本变为 13（内容 = v11）。</div>
+  </div>
+</section>
+
+<!-- ==================== 5. 缩略图与搜索 ==================== -->
+<section>
+  <h2>5. 缩略图与搜索</h2>
+
+  <div class="endpoint">
+    <div class="header"><span class="method get">GET</span><span class="path">/api/thumbnails?path=...&size=200</span><span class="desc">获取图片缩略图</span></div>
+    <table class="params">
+      <thead><tr><th style="width:80px">参数</th><th style="width:60px">位置</th><th style="width:60px">必填</th><th>说明</th></tr></thead>
+      <tr><td class="type">path</td><td>query</td><td>是</td><td>图片文件路径（需 URL 编码）</td></tr>
+      <tr><td class="type">size</td><td>query</td><td>否</td><td>最大边长（像素）。默认 200。缓存于 <code>.thumbnails/</code> 目录</td></tr>
+    </table>
+    <p>服务端首次请求时生成缩略图并缓存。后续请求直接返回缓存文件（image/jpeg）。</p>
+  </div>
+
+  <div class="endpoint">
+    <div class="header"><span class="method get">GET</span><span class="path">/api/files/search?q=...</span><span class="desc">按文件名搜索</span></div>
+    <table class="params">
+      <thead><tr><th style="width:80px">参数</th><th style="width:60px">位置</th><th style="width:60px">必填</th><th>说明</th></tr></thead>
+      <tr><td class="type">q</td><td>query</td><td>是</td><td>搜索关键词（LIKE 匹配文件名，最少 2 字符）。不搜索文件内容</td></tr>
+      <tr><td class="type">limit</td><td>query</td><td>否</td><td>最大结果数（默认 50）</td></tr>
+    </table>
+    <pre>← 200 { <span class="key">"data"</span>: [ { <span class="key">"path"</span>: <span class="str">"/docs/report.docx"</span>, <span class="key">"type"</span>: <span class="str">"File"</span>, <span class="key">"size"</span>: <span class="num">245800</span> } ] }</pre>
+  </div>
+</section>
+
+  <!-- ==================== 6. 分享链接 ==================== -->
+<section>
+  <h2>6. 分享链接</h2>
+
+  <div class="endpoint">
+    <div class="header"><span class="method post">POST</span><span class="path">/api/shares</span><span class="desc">创建分享链接（需 Token 认证）</span></div>
+    <table class="params">
+      <thead><tr><th style="width:100px">参数</th><th style="width:60px">位置</th><th style="width:60px">必填</th><th>说明</th></tr></thead>
+      <tr><td class="type">path</td><td>body</td><td>是</td><td>要分享的<strong>文件</strong>路径。不支持分享文件夹——如需分享多文件，先打包为 ZIP</td></tr>
+      <tr><td class="type">expireHours</td><td>body</td><td>是</td><td>有效时长（小时）。0 = 永不过期</td></tr>
+      <tr><td class="type">password</td><td>body</td><td>否</td><td>访问密码。不传 = 无密码</td></tr>
+      <tr><td class="type">maxDownloads</td><td>body</td><td>否</td><td>最大下载次数。不传 = 不限</td></tr>
+    </table>
+    <pre>→ { <span class="key">"path"</span>: <span class="str">"/photos/family.jpg"</span>, <span class="key">"expireHours"</span>: <span class="num">24</span>, <span class="key">"password"</span>: <span class="str">"1234"</span>, <span class="key">"maxDownloads"</span>: <span class="num">10</span> }
+← 200 { <span class="key">"data"</span>: {
+    <span class="key">"shareId"</span>:  <span class="str">"a1b2c3d4e5f6"</span>,
+    <span class="key">"url"</span>:      <span class="str">"https://123.45.67.89:8443/share/a1b2c3d4e5f6"</span>,
+    <span class="key">"expiresAt"</span>: <span class="str">"2026-07-28T14:30:00Z"</span>
+  } }</pre>
+  </div>
+
+  <div class="endpoint">
+    <div class="header"><span class="method get">GET</span><span class="path">/share/{shareId}</span><span class="desc">访问分享链接（无需 Token）</span></div>
+    <p><strong>流程：</strong></p>
+    <table>
+      <tr><td style="width:40px;font-weight:600;">1</td><td>浏览器访问 URL → 服务端返回轻量 HTML 页面（下载页或密码输入页）</td></tr>
+      <tr><td style="font-weight:600;">2</td><td>若无需密码：页面显示文件名、大小，点击「下载」→ GET /share/{shareId}/download → 返回文件流</td></tr>
+      <tr><td style="font-weight:600;">3</td><td>若需密码：页面显示密码输入框 → 密码通过 query string 发送（GET /share/{shareId}/download?password=xxx）。密码验证通过返回文件流，失败返回 401。无 Cookie、无 session</td></tr>
+    </table>
+    <div class="note"><strong>为什么不用 Cookie</strong>：家庭工具不需要 session 管理。分享链接的密码保护是轻量级屏障（防止链接被意外传播），非高安全性场景。query string 传递密码在 HTTPS 下是加密的（TLS 保护整个 URL 路径+参数）。</div>
+  </div>
+
+  <div class="endpoint">
+    <div class="header"><span class="method delete">DELETE</span><span class="path">/api/shares/{shareId}</span><span class="desc">撤销分享链接（需 Token 认证）</span></div>
+    <pre>← 200 { <span class="key">"data"</span>: { <span class="key">"shareId"</span>: <span class="str">"a1b2c3d4e5f6"</span>, <span class="key">"revoked"</span>: <span class="num">true</span> } }
+← 404 分享链接不存在或已过期</pre>
+  </div>
+</section>
+
+<!-- ==================== 7. 设备管理 ==================== -->
+<section>
+  <h2>7. 设备管理</h2>
+
+  <div class="endpoint">
+    <div class="header"><span class="method get">GET</span><span class="path">/api/devices</span><span class="desc">获取已注册设备列表</span></div>
+    <pre>← 200 {
+  <span class="key">"data"</span>: [
+    { <span class="key">"deviceId"</span>: <span class="str">"d1-xxx"</span>, <span class="key">"name"</span>: <span class="str">"台式机"</span>,     <span class="key">"person"</span>: <span class="str">"我"</span>,   <span class="key">"lastSeen"</span>: <span class="str">"2026-07-27T14:30:00Z"</span>, <span class="key">"online"</span>: <span class="num">true</span> },
+    { <span class="key">"deviceId"</span>: <span class="str">"d2-xxx"</span>, <span class="key">"name"</span>: <span class="str">"笔记本"</span>,     <span class="key">"person"</span>: <span class="str">"我"</span>,   <span class="key">"lastSeen"</span>: <span class="str">"2026-07-27T10:00:00Z"</span>, <span class="key">"online"</span>: <span class="num">false</span> },
+    { <span class="key">"deviceId"</span>: <span class="str">"d3-xxx"</span>, <span class="key">"name"</span>: <span class="str">"小明的手机"</span>, <span class="key">"person"</span>: <span class="str">"小明"</span>, <span class="key">"lastSeen"</span>: <span class="str">"2026-07-27T14:00:00Z"</span>, <span class="key">"online"</span>: <span class="num">true</span> }
+  ]
+}</pre>
+  </div>
+</section>
+
+<!-- ==================== 8. 健康检查 ==================== -->
+<section>
+  <h2>8. 健康检查</h2>
+
+  <div class="endpoint">
+    <div class="header"><span class="method get">GET</span><span class="path">/api/health</span><span class="desc">服务端健康状态（无需 Token）</span></div>
+    <pre>← 200 { <span class="key">"status"</span>: <span class="str">"ok"</span>, <span class="key">"version"</span>: <span class="str">"1.0.0"</span>, <span class="key">"uptimeSeconds"</span>: <span class="num">86400</span> }</pre>
+    <div class="note">客户端可用于：① 启动时检测服务端是否可达 ② Android 轮询时先 ping 此端点（极轻量，无 DB 查询）③ 展示「上次连接成功时间」</div>
+  </div>
+</section>
+
+<!-- ==================== 9. WebSocket ==================== -->
+<section>
+  <h2>9. WebSocket 实时通知</h2>
+
+  <h3>8.1 连接</h3>
+  <table>
+    <tr><td style="width:140px;font-weight:600;">端点</td><td><code>wss://{host}:8443/ws</code></td></tr>
+    <tr><td style="font-weight:600;">认证</td><td>连接建立后，客户端在<strong>第一条消息</strong>中发送 <code>{"type":"auth","token":"xxx","deviceId":"d1-xxx"}</code>。服务端验证后回复 <code>{"type":"auth_ok"}</code> 或 <code>{"type":"auth_error","message":"..."}</code> 再断开。Token 不在 URL 中传递——避免写入服务器日志</td></tr>
+    <tr><td style="font-weight:600;">心跳</td><td>客户端每 30 秒发送 <code>{"type":"ping"}</code>，服务端回复 <code>{"type":"pong"}</code>。60 秒无心跳 → 服务端断开</td></tr>
+    <tr><td style="font-weight:600;">重连</td><td>断开后客户端指数退避重连（1s → 2s → 4s → ... max 60s）。重连成功后重新认证，然后执行全量文件树比对，比对完成后查询比对期间的新变更并追赶（消除时间窗口遗漏）</td></tr>
+  </table>
+
+  <h3>8.2 事件定义</h3>
+
+  <div class="endpoint">
+    <div class="header"><span class="method ws">PUSH</span><span class="path">file_changed</span><span class="desc">服务端 → 客户端：文件内容变更</span></div>
+    <pre>{
+  <span class="key">"type"</span>: <span class="str">"file_changed"</span>,
+  <span class="key">"path"</span>: <span class="str">"/docs/report.docx"</span>,
+  <span class="key">"newVersion"</span>: <span class="num">13</span>,
+  <span class="key">"deviceId"</span>: <span class="str">"d1-xxx"</span>,
+  <span class="key">"deviceName"</span>: <span class="str">"台式机"</span>,
+  <span class="key">"timestamp"</span>: <span class="str">"2026-07-27T14:30:00Z"</span>
+}</pre>
+  </div>
+
+  <div class="endpoint">
+    <div class="header"><span class="method ws">PUSH</span><span class="path">file_deleted</span><span class="desc">服务端 → 客户端：文件已删除</span></div>
+    <pre>{
+  <span class="key">"type"</span>: <span class="str">"file_deleted"</span>,
+  <span class="key">"path"</span>: <span class="str">"/docs/old.docx"</span>,
+  <span class="key">"deviceId"</span>: <span class="str">"d2-xxx"</span>,
+  <span class="key">"deviceName"</span>: <span class="str">"笔记本"</span>,
+  <span class="key">"timestamp"</span>: <span class="str">"2026-07-27T14:31:00Z"</span>
+}</pre>
+  </div>
+
+  <div class="endpoint">
+    <div class="header"><span class="method ws">PUSH</span><span class="path">file_renamed</span><span class="desc">服务端 → 客户端：文件重命名/移动</span></div>
+    <pre>{
+  <span class="key">"type"</span>: <span class="str">"file_renamed"</span>,
+  <span class="key">"oldPath"</span>: <span class="str">"/docs/draft.docx"</span>,
+  <span class="key">"newPath"</span>: <span class="str">"/docs/final.docx"</span>,
+  <span class="key">"deviceId"</span>: <span class="str">"d1-xxx"</span>,
+  <span class="key">"deviceName"</span>: <span class="str">"台式机"</span>,
+  <span class="key">"timestamp"</span>: <span class="str">"2026-07-27T14:32:00Z"</span>
+}</pre>
+  </div>
+
+  <div class="endpoint">
+    <div class="header"><span class="method ws">PUSH</span><span class="path">conflict</span><span class="desc">服务端 → 客户端：冲突已自动解决</span></div>
+    <pre>{
+  <span class="key">"type"</span>: <span class="str">"conflict"</span>,
+  <span class="key">"path"</span>: <span class="str">"/docs/report.docx"</span>,
+  <span class="key">"winnerVersion"</span>: <span class="num">13</span>,
+  <span class="key">"winnerDeviceId"</span>: <span class="str">"d2-xxx"</span>,
+  <span class="key">"winnerDeviceName"</span>: <span class="str">"小明的笔记本"</span>,
+  <span class="key">"winnerModifiedAt"</span>: <span class="str">"2026-07-27T14:30:00Z"</span>,
+  <span class="key">"loserPath"</span>: <span class="str">"/docs/report_冲突_20260727_142500.docx"</span>,
+  <span class="key">"timestamp"</span>: <span class="str">"2026-07-27T14:33:00Z"</span>
+}</pre>
+  </div>
+
+  <h3>8.3 客户端推送范围</h3>
+  <table>
+    <tr><td style="width:160px;font-weight:600;">file_changed</td><td>推送给<strong>所有在线设备</strong>（变更方自己除外）。所有设备需要拉取新内容</td></tr>
+    <tr><td style="font-weight:600;">file_deleted</td><td>推送给<strong>所有在线设备</strong>（删除方自己除外）</td></tr>
+    <tr><td style="font-weight:600;">file_renamed</td><td>推送给<strong>所有在线设备</strong>（操作方自己除外）</td></tr>
+    <tr><td style="font-weight:600;">conflict</td><td>仅推送给<strong>冲突涉及的两台设备</strong>（上传方 + 中心节点本地用户）。不广播给无关设备</td></tr>
+  </table>
+</section>
+
+<!-- ==================== 10. 错误码 ==================== -->
+<section>
+  <h2>10. 错误码</h2>
+
+  <table>
+    <thead><tr><th style="width:60px">HTTP</th><th style="width:120px">code</th><th>说明</th><th>客户端行为</th></tr></thead>
+    <tr><td>400</td><td>BAD_REQUEST</td><td>请求参数缺失或格式错误</td><td>检查参数后重试</td></tr>
+    <tr><td>401</td><td>UNAUTHORIZED</td><td>Token 无效或缺失</td><td>提示用户检查 Token</td></tr>
+    <tr><td>404</td><td>NOT_FOUND</td><td>文件/路径不存在</td><td>刷新本地文件树</td></tr>
+    <tr><td>409</td><td>CONFLICT</td><td>版本冲突（上传/删除时 baseVersion 过期）</td><td>拉取最新版本，处理冲突后重试</td></tr>
+    <tr><td>413</td><td>PAYLOAD_TOO_LARGE</td><td>单次请求体超过 5MB（非分块上传场景）</td><td>改用分块上传</td></tr>
+    <tr><td>429</td><td>RATE_LIMITED</td><td>请求频率过高（默认：每设备 60 次/分钟 API 调用；文件上传/下载不计入）</td><td>退避后重试。响应头 <code>Retry-After</code> 指示等待秒数</td></tr>
+    <tr><td>500</td><td>INTERNAL_ERROR</td><td>服务端内部错误</td><td>退避重试。持续失败通知用户</td></tr>
+    <tr><td>503</td><td>SERVICE_UNAVAILABLE</td><td>服务端维护中/过载</td><td>退避重试</td></tr>
+  </table>
+</section>
+
+<!-- ==================== 11. 数据类型参考 ==================== -->
+<section>
+  <h2>11. 数据类型参考</h2>
+
+  <h3>10.1 FileState 枚举</h3>
+  <table>
+    <tr><td style="width:100px"><code>Synced</code></td><td>已同步，本地与服务端一致</td></tr>
+    <tr><td><code>Modified</code></td><td>本地已修改，待上传</td></tr>
+    <tr><td><code>Deleting</code></td><td>本地已删除，待同步删除至服务端</td></tr>
+    <tr><td><code>CloudOnly</code></td><td>仅云端存在，本地未下载（选择性同步场景）</td></tr>
+    <tr><td><code>Downloading</code></td><td>正在从服务端下载</td></tr>
+    <tr><td><code>Uploading</code></td><td>正在上传至服务端</td></tr>
+    <tr><td><code>Conflict</code></td><td>处于冲突状态（用户未处理）</td></tr>
+  </table>
+
+  <h3>10.2 版本号规则</h3>
+  <table>
+    <tr><td style="width:160px;font-weight:600;">初始版本</td><td>文件首次上传后版本号为 1</td></tr>
+    <tr><td style="font-weight:600;">递增</td><td>每次修改上传成功后 +1。服务端分配，客户端从响应中获取</td></tr>
+    <tr><td style="font-weight:600;">baseVersion = 0</td><td>表示「首次上传，不检查冲突」。仅用于新文件</td></tr>
+    <tr><td style="font-weight:600;">版本号单调</td><td>全局唯一，永不复用。即使文件被删除后重建，版本号继续递增</td></tr>
+  </table>
+
+  <h3>10.3 Token 格式</h3>
+  <table>
+    <tr><td style="width:160px;font-weight:600;">生成</td><td>服务端首次安装时随机生成（64 字符十六进制 = 256 位熵）</td></tr>
+    <tr><td style="font-weight:600;">存储</td><td>服务端仅存储 SHA-256(Token)。客户端明文存储</td></tr>
+    <tr><td style="font-weight:600;">传输</td><td><code>Authorization: Bearer &lt;token&gt;</code>。WebSocket 通过 query string</td></tr>
+  </table>
+</section>
+
+<div style="text-align:center;padding-top:40px;border-top:2px solid var(--border);color:var(--text-muted);font-size:13px;">
+  <p>CloudPan · API 接口契约 · v1.2 · 2026-07-28</p>
+  <p>服务端与客户端开发的共同参考。修改本文件前需同步更新所有客户端实现</p>
+</div>
+
+</div>
+</body>
+</html>

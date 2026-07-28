@@ -1,0 +1,35 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.vs/
+*.DotSettings
+*.csproj.user
+
+# Node / npm
+node_modules/
+package-lock.json
+
+# Android
+*.apk
+*.aab
+.idea/
+.gradle/
+local.properties
+build/
+
+# IDE
+.vs/
+.vscode/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# CloudPan runtime
+.cloudpan/
+.tmp

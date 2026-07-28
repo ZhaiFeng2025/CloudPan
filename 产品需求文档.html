@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CloudPan — 产品需求规格书 v3.2</title>
+<style>
+  :root {
+    --bg: #fafaf9; --card: #ffffff; --text: #1c1917; --text-muted: #57534e;
+    --border: #e7e5e4; --accent: #2563eb; --accent-light: #eff6ff;
+    --p1: #dbeafe; --p1-text: #1e40af;
+    --p2: #dcfce7; --p2-text: #166534;
+    --p3: #f3e8ff; --p3-text: #6b21a8;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif; background: var(--bg); color: var(--text); line-height: 1.75; font-size: 15px; }
+  .container { max-width: 900px; margin: 0 auto; padding: 60px 24px 80px; }
+
+  /* 封面 */
+  .cover { text-align: center; padding: 60px 0 48px; border-bottom: 2px solid var(--border); margin-bottom: 48px; }
+  .cover h1 { font-size: 32px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 8px; }
+  .cover .subtitle { font-size: 16px; color: var(--text-muted); margin-bottom: 20px; }
+  .cover .meta { display: flex; justify-content: center; gap: 32px; font-size: 13px; color: var(--text-muted); flex-wrap: wrap; }
+  .cover .meta span { white-space: nowrap; }
+
+  /* 目录 */
+  .toc { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 24px 28px; margin-bottom: 48px; }
+  .toc h2 { font-size: 16px; margin-bottom: 12px; border: none; padding: 0; }
+  .toc ol { margin: 0; padding-left: 20px; columns: 2; column-gap: 32px; }
+  .toc li { margin-bottom: 4px; font-size: 14px; }
+
+  /* 章节 */
+  section { margin-bottom: 48px; }
+  h2 { font-size: 20px; font-weight: 700; margin-bottom: 18px; padding-bottom: 8px; border-bottom: 2px solid var(--border); }
+  h3 { font-size: 16px; font-weight: 600; margin: 24px 0 10px; color: var(--text); }
+  h4 { font-size: 14px; font-weight: 600; margin: 16px 0 8px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+  p { margin-bottom: 10px; color: var(--text-muted); }
+
+  /* 卡片 */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; margin-bottom: 16px; }
+
+  /* 表格 */
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+  thead { background: var(--accent-light); }
+  th { text-align: left; padding: 8px 12px; font-weight: 600; font-size: 12px; color: var(--text-muted); border-bottom: 2px solid var(--border); text-transform: uppercase; letter-spacing: 0.5px; }
+  td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+
+  /* 标签 */
+  .pri { display: inline-block; padding: 1px 8px; border-radius: 100px; font-size: 11px; font-weight: 700; }
+  .pri.p1 { background: var(--p1); color: var(--p1-text); }
+  .pri.p2 { background: var(--p2); color: var(--p2-text); }
+  .pri.p3 { background: var(--p3); color: var(--p3-text); }
+
+  /* 约束块 */
+  .constraint { border-left: 3px solid #f59e0b; padding: 10px 14px; margin: 12px 0; background: #fffbeb; border-radius: 0 6px 6px 0; font-size: 14px; }
+  .constraint strong { color: #92400e; }
+
+  /* 架构图 */
+  .arch { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 24px; font-family: "SF Mono", "Cascadia Code", "Consolas", monospace; font-size: 12px; line-height: 1.5; white-space: pre; overflow-x: auto; }
+
+  /* 定义列表 */
+  .def-list { margin: 12px 0; }
+  .def-list dt { font-weight: 700; margin-top: 10px; }
+  .def-list dd { margin-left: 16px; color: var(--text-muted); font-size: 14px; }
+
+  @media (max-width: 640px) {
+    .container { padding: 24px 14px 40px; }
+    .cover h1 { font-size: 24px; }
+    .toc ol { columns: 1; }
+    .arch { font-size: 10px; padding: 14px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- ==================== 封面 ==================== -->
+<div class="cover">
+  <h1>CloudPan</h1>
+  <p class="subtitle">家庭文件同步系统 — 产品需求规格书</p>
+  <div class="meta">
+    <span>版本 3.4</span>
+    <span>2026-07-28</span>
+    <span>状态：已定稿</span>
+    <span>范围：家庭使用（1-5 人）</span>
+  </div>
+</div>
+
+<!-- ==================== 目录 ==================== -->
+<div class="toc">
+  <h2>目录</h2>
+  <ol>
+    <li>系统约束与假设</li>
+    <li>产品定义</li>
+    <li>范围边界</li>
+    <li>系统架构</li>
+    <li>功能规格</li>
+    <li>同步模型</li>
+    <li>数据模型</li>
+    <li>通信协议</li>
+    <li>安全模型</li>
+    <li>外网访问</li>
+    <li>部署与运维</li>
+    <li>客户端规格</li>
+    <li>开发阶段</li>
+    <li>风险登记</li>
+  </ol>
+</div>
+
+<!-- ==================== 1. 系统约束与假设 ==================== -->
+<section>
+  <h2>1. 系统约束与假设</h2>
+
+  <p>以下约束是系统设计的硬边界。任一约束改变，需重新评估全部设计决策。</p>
+
+  <h3>1.1 运行环境</h3>
+  <table>
+    <tr><td style="width:180px;font-weight:600;">服务端操作系统</td><td>Windows 10/11（常开台式机，同时作为工作电脑使用）</td></tr>
+    <tr><td style="font-weight:600;">客户端操作系统</td><td>Windows 10/11（多台，轮换使用）；Android 10+</td></tr>
+    <tr><td style="font-weight:600;">网络拓扑</td><td>各设备不在同一局域网。所有通信经互联网通过中心节点中转</td></tr>
+    <tr><td style="font-weight:600;">公网可达性</td><td>家庭宽带有公网 IPv4 地址（基本固定）。路由器可配置端口转发</td></tr>
+    <tr><td style="font-weight:600;">域名</td><td>不使用。客户端通过公网 IP 直连</td></tr>
+  </table>
+
+  <h3>1.2 数据特征</h3>
+  <table>
+    <tr><td style="width:180px;font-weight:600;">文件类型</td><td>文档（Office / PDF / 纯文本）+ 图片。无代码仓库</td></tr>
+    <tr><td style="font-weight:600;">总量</td><td>数百 GB</td></tr>
+    <tr><td style="font-weight:600;">用户数</td><td>1-5 人（家庭成员）。无权限体系——所有人看到所有文件。共享一个家庭 Token</td></tr>
+    <tr><td style="font-weight:600;">设备数</td><td>多台 Windows + 多台 Android。常开台式机为同步中心</td></tr>
+  </table>
+
+  <h3>1.3 关键假设</h3>
+  <table>
+    <tr><td style="width:180px;font-weight:600;">设备使用模式</td><td>多设备轮换使用。多人可能同时编辑不同文件，同一文件的并发编辑概率中等</td></tr>
+    <tr><td style="font-weight:600;">时钟同步</td><td>所有 Windows 设备开启自动时间同步。设备间时钟偏差 &lt; 5 秒</td></tr>
+    <tr><td style="font-weight:600;">版本历史需求</td><td>低频（偶尔误改误删时找回）。非核心功能</td></tr>
+    <tr><td style="font-weight:600;">文件修改模式</td><td>Office 文档修改后整体重写（ZIP 结构）；图片仅新增不修改；PDF/文本局部修改</td></tr>
+  </table>
+</section>
+
+<!-- ==================== 2. 产品定义 ==================== -->
+<section>
+  <h2>2. 产品定义</h2>
+
+  <h3>2.1 产品描述</h3>
+  <p>CloudPan 是一个<strong>自托管、家庭共享、Windows 原生的文件同步系统</strong>。在一台常开 Windows 电脑上运行同步中心节点，家庭成员（1-5 人）的多台 Windows 设备和 Android 手机通过互联网自动同步文件。所有人共享同一文件空间，无权限隔离。</p>
+
+  <h3>2.2 核心价值</h3>
+  <table>
+    <tr><td style="width:140px;font-weight:600;">数据主权</td><td>所有文件存储在自有硬件上，零第三方接触</td></tr>
+    <tr><td style="font-weight:600;">跨设备同步</td><td>Windows 设备间文件自动双向同步；Android 照片自动备份</td></tr>
+    <tr><td style="font-weight:600;">零运维</td><td>SQLite 嵌入式数据库，无需独立数据库服务。安装即用</td></tr>
+    <tr><td style="font-weight:600;">原生体验</td><td>Windows 原生 UI，不依赖 Docker/WSL/虚拟机/浏览器</td></tr>
+  </table>
+
+  <h3>2.3 技术栈</h3>
+  <table>
+    <tr><th style="width:160px">组件</th><th>选型</th></tr>
+    <tr><td>服务端 + Windows 客户端语言</td><td>C# / .NET 8 LTS</td></tr>
+    <tr><td>Windows 桌面 UI</td><td>WinUI 3</td></tr>
+    <tr><td>服务端运行形态</td><td>Windows Service（后台）+ 托盘程序（管理界面）</td></tr>
+    <tr><td>服务端 HTTP</td><td>ASP.NET Core 8 (Kestrel)</td></tr>
+    <tr><td>Android 语言</td><td>Kotlin</td></tr>
+    <tr><td>Android 本地存储</td><td>Room (SQLite ORM)</td></tr>
+    <tr><td>Android 网络</td><td>OkHttp + Retrofit</td></tr>
+    <tr><td>数据库</td><td>SQLite + Entity Framework Core</td></tr>
+    <tr><td>通信协议</td><td>REST (HTTPS) + WebSocket</td></tr>
+    <tr><td>HTTPS 证书</td><td>首次启动自动生成自签证书，客户端 pin 指纹</td></tr>
+    <tr><td>文件监控</td><td>FileSystemWatcher + 定时扫描兜底</td></tr>
+    <tr><td>打包</td><td>MSIX (Windows) / APK (Android)</td></tr>
+  </table>
+</section>
+
+<!-- ==================== 3. 范围边界 ==================== -->
+<section>
+  <h2>3. 范围边界</h2>
+
+  <h3>3.1 明确排除</h3>
+  <table>
+    <tr><th style="width:240px">排除项</th><th>依据</th></tr>
+    <tr><td>macOS / Linux / iOS 客户端</td><td>约束 1.1：无对应设备</td></tr>
+    <tr><td>Docker / Linux 服务端部署</td><td>约束 1.1：服务端为 Windows</td></tr>
+    <tr><td>PostgreSQL 或其他外部数据库</td><td>家庭规模（1-5 人），SQLite 完全满足。不需要独立数据库服务</td></tr>
+    <tr><td>局域网直连 / P2P 同步</td><td>约束 1.1：设备不在同一局域网</td></tr>
+    <tr><td>权限体系 / 私有文件夹</td><td>约束 1.2：家庭共享，无隔离需求</td></tr>
+    <tr><td>实时协作编辑</td><td>不同时编辑同一文件。冲突靠副本机制解决</td></tr>
+    <tr><td>全文检索</td><td>仅支持文件名搜索</td></tr>
+    <tr><td>文件格式转换 / 文档预览生成</td><td>文件下载后本地程序打开。例外：服务端可为图片生成小尺寸缩略图（≤200px，.thumbnails/ 缓存目录），仅用于 Android 端快速浏览</td></tr>
+    <tr><td>第三方网盘迁移工具</td><td>手动放入同步文件夹即可</td></tr>
+    <tr><td>插件系统 / 开放 API</td><td>仅远期 WebDAV 作为外部接口</td></tr>
+    <tr><td>邮件 / 短信通知</td><td>仅系统通知 + Android 本地通知</td></tr>
+    <tr><td>跨平台 UI 框架</td><td>约束 1.1：仅 Windows + Android，各自原生</td></tr>
+    <tr><td>E2EE + 文件分享共存</td><td>互斥：加密后服务端无法提供分享下载</td></tr>
+  </table>
+</section>
+
+<!-- ==================== 4. 系统架构 ==================== -->
+<section>
+  <h2>4. 系统架构</h2>
+
+  <h3>4.1 拓扑</h3>
+  <div class="arch">
+┌──────────────────────────────────────────────────┐
+│                客  户  端  层                      │
+│                                                  │
+│  ┌──────────────────────┐  ┌──────────────────┐  │
+│  │  其他 Windows 设备   │  │   Android 手机   │  │
+│  │  · 文件双向同步       │  │  · 照片自动备份   │  │
+│  │  · 选择性同步        │  │  · 文件浏览下载   │  │
+│  │  · 冲突感知          │  │                  │  │
+│  └─────────┬────────────┘  └────────┬─────────┘  │
+│            │        HTTPS/WSS       │            │
+└────────────┼────────────────────────┼────────────┘
+             ▼                        ▼
+┌──────────────────────────────────────────────────┐
+│           常开台式机（中心节点）                    │
+│                                                  │
+│  ┌───────────────────────────────────────────┐   │
+│  │  Windows Service：同步服务核心              │   │
+│  │  · 文件上传/下载 API                       │   │
+│  │  · 文件索引 + 版本链                        │   │
+│  │  · WebSocket 变更推送                      │   │
+│  │  · 镜像模式文件存储                         │   │
+│  └───────────────────────────────────────────┘   │
+│  ┌───────────────────────────────────────────┐   │
+│  │  托盘程序：管理界面 + 本地同步客户端         │   │
+│  │  · 通过 localhost API 提交本地变更          │   │
+│  └───────────────────────────────────────────┘   │
+│                                                  │
+│  存储：SQLite + 本地文件系统（镜像模式）           │
+└──────────────────────────────────────────────────┘
+  </div>
+
+  <h3>4.2 设计原则</h3>
+  <table>
+    <tr><td style="width:160px;font-weight:600;">单中心</td><td>常开台式机为唯一权威节点。所有同步路径：客户端 ↔ 中心</td></tr>
+    <tr><td style="font-weight:600;">Windows 原生</td><td>无 Docker / WSL / 虚拟机依赖。安装包分发</td></tr>
+    <tr><td style="font-weight:600;">零运维</td><td>SQLite 嵌入式。文件以原始目录结构存储，资源管理器可直接访问</td></tr>
+    <tr><td style="font-weight:600;">传输透明</td><td>客户端仅需地址 + Token。底层网络方案可切换</td></tr>
+    <tr><td style="font-weight:600;">数据完整性优先</td><td>上传下载均 SHA-256 校验。崩溃后可自修复至一致状态</td></tr>
+    <tr><td style="font-weight:600;">冲突保守</td><td>自动判定优胜版本，旧版本保留副本。不自动合并文件内容</td></tr>
+  </table>
+
+  <h3>4.3 客户端能力矩阵</h3>
+  <table>
+    <thead><tr><th>能力</th><th>其他 Windows</th><th>常开台式机</th><th>Android</th></tr></thead>
+    <tr><td>文件双向同步</td><td>✓</td><td>✓ (via localhost)</td><td>—</td></tr>
+    <tr><td>选择性同步</td><td>✓</td><td>—（全量本地）</td><td>—</td></tr>
+    <tr><td>冲突处理</td><td>✓</td><td>✓</td><td>—</td></tr>
+    <tr><td>文件浏览 + 下载</td><td>✓</td><td>✓</td><td>✓</td></tr>
+    <tr><td>照片自动备份</td><td>—</td><td>—</td><td>✓</td></tr>
+    <tr><td>离线收藏</td><td>—</td><td>—</td><td>✓</td></tr>
+    <tr><td>版本历史查看</td><td>✓</td><td>✓</td><td>查看</td></tr>
+  </table>
+</section>
+
+<!-- ==================== 5. 功能规格 ==================== -->
+<section>
+  <h2>5. 功能规格</h2>
+
+  <h3>5.1 优先级定义</h3>
+  <table>
+    <tr><td><span class="pri p1">P1</span></td><td>必须。系统可用的最低门槛。缺一则系统无交付价值</td></tr>
+    <tr><td><span class="pri p2">P2</span></td><td>应该。显著提升体验，但不阻塞基本使用</td></tr>
+    <tr><td><span class="pri p3">P3</span></td><td>远期。锦上添花，可在系统稳定运行后逐步加入</td></tr>
+  </table>
+
+  <h3>5.2 功能清单</h3>
+  <table>
+    <thead><tr><th>ID</th><th>功能</th><th>优先级</th><th>规格摘要</th></tr></thead>
+    <tr><td>F01</td><td>文件双向同步</td><td><span class="pri p1">P1</span></td><td>监控同步根文件夹，新增/修改/删除自动同步至中心节点。其他在线设备接收 WebSocket 通知后拉取。离线期间变更在重连后自动追赶。支持 .syncignore 排除规则</td></tr>
+    <tr><td>F02</td><td>外网可达</td><td><span class="pri p1">P1</span></td><td>中心节点通过公网 IP + 端口转发可达。见第 10 章</td></tr>
+    <tr><td>F03</td><td>选择性同步</td><td><span class="pri p1">P1</span></td><td>每台 Windows 设备独立选择要同步的云端文件夹子集。未选中文件夹显示为「仅云端」，点击按需下载。各设备选择互不影响</td></tr>
+    <tr><td>F04</td><td>冲突处理</td><td><span class="pri p1">P1</span></td><td>冲突时按文件最后修改时间判定优胜版本，旧版本存为 <code>文件名_冲突_时间戳.ext</code>。通知用户。用户可手动恢复旧版本</td></tr>
+    <tr><td>F05</td><td>Android 照片备份</td><td><span class="pri p1">P1</span></td><td>自动上传照片/视频至服务端 <code>Photos/设备名/</code> 目录（多人手机照片自动区分）。选项：仅 Wi-Fi、充电时备份、备份后提示清理本地</td></tr>
+    <tr><td>F06</td><td>Android 文件浏览</td><td><span class="pri p1">P1</span></td><td>浏览云端文件树，图片缩略图预览（服务端 .thumbnails/ 缓存），原图按需下载至本地缓存。手动标记离线收藏</td></tr>
+    <tr><td>F07</td><td>忽略规则</td><td><span class="pri p1">P1</span></td><td>每设备独立的 <code>.syncignore</code> 文件（位于同步根目录），glob 模式。内置默认忽略：node_modules/、.git/、*.tmp、系统临时文件。各设备可自定义不同规则</td></tr>
+    <tr><td>F08</td><td>带宽限速</td><td><span class="pri p1">P1</span></td><td>可配置上传/下载速率上限</td></tr>
+    <tr><td>F09</td><td>系统通知</td><td><span class="pri p1">P1</span></td><td>Windows 系统通知：同步完成、冲突、错误；托盘图标颜色表示连接状态</td></tr>
+    <tr><td>F10</td><td>版本历史</td><td><span class="pri p2">P2</span></td><td>保留最近 5 个版本（完整文件副本，存于 .versions/ 目录）。浏览、预览、回滚</td></tr>
+    <tr><td>F11</td><td>Web 管理面板</td><td><span class="pri p2">P2</span></td><td>localhost 只读视图：文件列表、设备列表、同步日志。不暴露到公网</td></tr>
+    <tr><td>F12</td><td>文件分享链接</td><td><span class="pri p2">P2</span></td><td>生成有时效的只读下载链接（<code>https://公网IP:8443/share/{shareId}</code>）。支持：过期时间、可选访问密码、下载次数限制。分享对象用浏览器打开即可下载，无需客户端或 Token。服务端 <code>/share/*</code> 路径不校验 Token，以 shareId + 密码鉴权</td></tr>
+    <tr><td>F13</td><td>同步日志</td><td><span class="pri p2">P2</span></td><td>记录操作时间、路径、类型、结果。支持筛选和搜索</td></tr>
+    <tr><td>F14</td><td>自动更新</td><td><span class="pri p2">P2</span></td><td>检测新版本，提示升级</td></tr>
+    <tr><td>F15</td><td>端到端加密</td><td><span class="pri p3">P3</span></td><td>可选：AES-256-GCM 加密后上传。开启后 F12 文件分享失效</td></tr>
+    <tr><td>F16</td><td>WebDAV 接口</td><td><span class="pri p3">P3</span></td><td>标准 WebDAV 端点，供第三方应用挂载</td></tr>
+    <tr><td>F17</td><td>回收站</td><td><span class="pri p3">P3</span></td><td>删除文件保留 30 天可恢复</td></tr>
+    <tr><td>F18</td><td>备份模式</td><td><span class="pri p3">P3</span></td><td>指定文件夹仅上传不删除</td></tr>
+    <tr><td>F19</td><td>文件锁定</td><td><span class="pri p3">P3</span></td><td>手动锁定文件，锁定期间其他设备不可编辑</td></tr>
+  </table>
+
+  <h3>5.3 功能依赖</h3>
+  <table>
+    <thead><tr><th>功能</th><th>前置依赖</th></tr></thead>
+    <tr><td>F01 文件同步</td><td>F02 外网可达（网络不通则同步不可用）</td></tr>
+    <tr><td>F03 选择性同步</td><td>F01（需文件索引 API）</td></tr>
+    <tr><td>F04 冲突处理</td><td>F01（冲突是同步的子场景）</td></tr>
+    <tr><td>F15 端到端加密</td><td>与 F12 文件分享互斥。启用 E2EE 后分享链接不可用</td></tr>
+  </table>
+</section>
+
+<!-- ==================== 6. 同步模型 ==================== -->
+<section>
+  <h2>6. 同步模型</h2>
+
+  <h3>6.1 同步根</h3>
+  <p>每台设备指定<strong>一个文件夹作为同步根</strong>。该文件夹即用户的云盘。文件夹之外的文件不受同步系统影响。</p>
+
+  <h3>6.2 行为规则</h3>
+  <table>
+    <tr><td style="width:180px;font-weight:600;">放入</td><td>文件/文件夹放入同步根 → 自动上传至中心节点 → 推送通知至其他在线设备</td></tr>
+    <tr><td style="font-weight:600;">修改</td><td>文件内容变更被检测 → 自动上传新版本</td></tr>
+    <tr><td style="font-weight:600;">删除</td><td>同步根内删除 → 中心节点删除 → 其他设备同步删除（P3 回收站可拦截）</td></tr>
+    <tr><td style="font-weight:600;">移出</td><td>将文件移出同步根 = 删除。中心节点删除，其他设备同步删除</td></tr>
+    <tr><td style="font-weight:600;">重命名</td><td>文件/文件夹重命名 → 同步为 rename 操作（非 delete + create）</td></tr>
+    <tr><td style="font-weight:600;">路径独立</td><td>各设备同步根路径独立。台式机 <code>D:\Sync</code>，笔记本 <code>C:\Sync</code> 不要求一致</td></tr>
+  </table>
+
+  <h3>6.3 变更检测</h3>
+  <table>
+    <tr><td style="width:180px;font-weight:600;">主通道</td><td>FileSystemWatcher（ReadDirectoryChangesW 封装）。变更后 1-2 秒内捕获</td></tr>
+    <tr><td style="font-weight:600;">兜底通道</td><td>定时全量扫描（默认间隔 5 分钟）。扫描后本地文件树哈希与中心节点比对，不一致则触发同步。<strong>此为正确性保证</strong>——FSWatch 可能因缓冲区溢出丢失事件，定时扫描确保最终一致</td></tr>
+  </table>
+
+  <h3>6.4 传输策略</h3>
+  <table>
+    <tr><td style="width:180px;font-weight:600;">文件 &lt; 10MB</td><td>整文件传输。覆盖绝大多数文档和图片</td></tr>
+    <tr><td style="font-weight:600;">文件 ≥ 10MB</td><td>4MB 分块传输 + 断点续传。块哈希比对，仅传差异块</td></tr>
+    <tr><td style="font-weight:600;">变更检测</td><td>上传前 SHA-256 比对。哈希 + 文件大小均相同 → 跳过（文件未变更）</td></tr>
+    <tr><td style="font-weight:600;">下载校验</td><td>下载完成后 SHA-256 校验。不匹配则重传</td></tr>
+    <tr><td style="font-weight:600;">原子写入</td><td>服务端先写 .tmp 临时文件 → 校验 → 通过后原子 rename</td></tr>
+    <tr><td style="font-weight:600;">大文件哈希</td><td>后台线程计算 SHA-256，不阻塞扫描主循环</td></tr>
+  </table>
+
+  <h3>6.5 冲突处理</h3>
+  <p>多人共享同一文件空间，冲突概率高于单人场景。处理机制不变，但需更明确的通知。</p>
+  <table>
+    <tr><td style="width:180px;font-weight:600;">检测</td><td>客户端上传时携带基准版本号。服务端比对——基准版本 ≠ 当前版本 → 冲突</td></tr>
+    <tr><td style="font-weight:600;">判定</td><td>比较两版本的<strong>文件最后修改时间</strong>。较新者 → 当前版本；较旧者 → 冲突副本。同时间则保留两版都不覆盖</td></tr>
+    <tr><td style="font-weight:600;">副本命名</td><td><code>文件名_冲突_YYYYMMDD_HHMMSS.ext</code>。通知中说明冲突原因和处理结果</td></tr>
+    <tr><td style="font-weight:600;">通知</td><td>冲突涉及的文件所在路径的设备收到通知（含中心节点本地）。不广播给无关设备。通知中标注优胜方设备名和修改时间，用户可手动从副本恢复</td></tr>
+  </table>
+
+  <h3>6.6 崩溃恢复</h3>
+  <p>启动时执行一致性修复扫描：</p>
+  <table>
+    <tr><td style="width:220px;font-weight:600;">孤儿文件（磁盘有，DB 无）</td><td>重新索引。写入 DB 并标记为新增，同步至其他设备</td></tr>
+    <tr><td style="font-weight:600;">悬空引用（DB 有，磁盘无）</td><td>标记为「需重新下载」。不自动删除 DB 记录——等待下次同步时从中心节点拉取</td></tr>
+    <tr><td style="font-weight:600;">权威来源</td><td>冲突时<strong>文件系统为准</strong>。磁盘上实际存在的文件视为事实</td></tr>
+  </table>
+
+  <h3>6.7 客户端状态机</h3>
+  <div class="arch">
+空闲 ──→ 扫描变更 ──→ 比对哈希 ──→ 传输(上传/下载) ──→ 冲突检查 ──→ 应用变更 ──→ 空闲
+  ↑                                                                              │
+  └──────────────────── 等待下次事件/定时器 ──────────────────────────────────────┘
+
+错误分支：
+  网络断开 → 传输队列持久化(SQLite)，挂起等待。恢复后 FIFO 处理
+  磁盘满   → 暂停同步，通知用户
+  文件锁定 → 跳过，下轮重试。连续 10 次失败后通知
+  服务端错 → 指数退避重试(1s→2s→4s→...max 5min)。持续失败通知
+  外部删除 → 视为用户主动删除，同步至中心节点
+  </div>
+</section>
+
+<!-- ==================== 7. 数据模型 ==================== -->
+<section>
+  <h2>7. 数据模型</h2>
+
+  <h3>7.1 存储架构</h3>
+  <table>
+    <tr><th style="width:160px">数据类型</th><th>引擎</th><th>存储内容</th></tr>
+    <tr><td>元数据</td><td>SQLite</td><td>文件树、版本链（指向历史副本路径）、设备注册、操作日志</td></tr>
+    <tr><td>文件内容</td><td>本地文件系统（镜像模式）</td><td>文件以原始目录结构存储，与同步根内结构一致。历史版本存于 <code>.versions/</code> 隐藏目录</td></tr>
+    <tr><td>客户端本地状态</td><td>SQLite</td><td>远程文件树快照、同步游标、持久化待传输队列</td></tr>
+  </table>
+
+  <h3>7.2 核心实体</h3>
+
+  <h4>FileEntry（文件条目）</h4>
+  <table>
+    <tr><td style="width:140px;font-weight:600;">Path</td><td>相对同步根的路径（如 /docs/report.docx）</td></tr>
+    <tr><td style="font-weight:600;">Type</td><td>File | Directory</td></tr>
+    <tr><td style="font-weight:600;">CurrentHash</td><td>当前版本 SHA-256</td></tr>
+    <tr><td style="font-weight:600;">CurrentSize</td><td>当前版本字节数</td></tr>
+    <tr><td style="font-weight:600;">Version</td><td>单调递增版本号（每次变更 +1）</td></tr>
+    <tr><td style="font-weight:600;">LastModified</td><td>文件最后修改时间（UTC）</td></tr>
+    <tr><td style="font-weight:600;">State</td><td>Synced | Modified | Deleting | CloudOnly | Downloading | Uploading | Conflict</td></tr>
+  </table>
+
+  <h4>VersionRecord（版本记录）</h4>
+  <table>
+    <tr><td style="width:140px;font-weight:600;">FilePath</td><td>关联文件路径（外键 → FileEntry.Path）</td></tr>
+    <tr><td style="font-weight:600;">Version</td><td>版本号</td></tr>
+    <tr><td style="font-weight:600;">Hash</td><td>该版本 SHA-256</td></tr>
+    <tr><td style="font-weight:600;">Size</td><td>该版本字节数</td></tr>
+    <tr><td style="font-weight:600;">StoragePath</td><td>版本文件路径（镜像模式：.versions/xxx_v3_20260727.docx）</td></tr>
+    <tr><td style="font-weight:600;">Timestamp</td><td>创建时间（UTC）</td></tr>
+    <tr><td style="font-weight:600;">DeviceId</td><td>创建设备（外键 → Device.Id）</td></tr>
+  </table>
+
+  <h4>Device（设备）</h4>
+  <table>
+    <tr><td style="width:140px;font-weight:600;">Id</td><td>主键。唯一标识（首次连接时生成，GUID）</td></tr>
+    <tr><td style="font-weight:600;">Name</td><td>用户可读名称（如「张三的台式机」「小明的手机」）</td></tr>
+    <tr><td style="font-weight:600;">Person</td><td>可选。设备所属人（如「张三」）。仅用于展示，不参与权限</td></tr>
+    <tr><td style="font-weight:600;">LastSeen</td><td>最后在线时间（UTC）</td></tr>
+    <tr><td style="font-weight:600;">Online</td><td>是否在线（WebSocket 连接状态）</td></tr>
+  </table>
+  <p style="font-size:13px;color:var(--text-muted);">所有设备共享同一个家庭 Token，Token 哈希存储于服务端配置而非设备表。</p>
+
+  <h4>SyncQueueItem（传输队列）</h4>
+  <table>
+    <tr><td style="width:140px;font-weight:600;">Id</td><td>自增主键</td></tr>
+    <tr><td style="font-weight:600;">FilePath</td><td>文件路径</td></tr>
+    <tr><td style="font-weight:600;">Operation</td><td>Upload | Download | Delete</td></tr>
+    <tr><td style="font-weight:600;">Priority</td><td>Normal | High（小文件优先）</td></tr>
+    <tr><td style="font-weight:600;">BaseVersion</td><td>操作基于的版本号（冲突检测用）</td></tr>
+    <tr><td style="font-weight:600;">FileSize</td><td>文件大小（进度估算用）</td></tr>
+    <tr><td style="font-weight:600;">RetryCount</td><td>已重试次数</td></tr>
+    <tr><td style="font-weight:600;">LastError</td><td>最近错误信息</td></tr>
+    <tr><td style="font-weight:600;">CreatedAt</td><td>入队时间（FIFO 排序依据）</td></tr>
+  </table>
+</section>
+
+<!-- ==================== 8. 通信协议 ==================== -->
+<section>
+  <h2>8. 通信协议</h2>
+
+  <h3>8.1 协议栈</h3>
+  <table>
+    <tr><td style="width:160px;font-weight:600;">传输加密</td><td>TLS 1.3（自签证书，客户端 pin 指纹）</td></tr>
+    <tr><td style="font-weight:600;">应用认证</td><td>预置 Token（SHA-256 哈希存于服务端）</td></tr>
+    <tr><td style="font-weight:600;">文件传输</td><td>HTTPS REST（multipart upload / stream download）</td></tr>
+    <tr><td style="font-weight:600;">元数据操作</td><td>HTTPS REST（JSON）</td></tr>
+    <tr><td style="font-weight:600;">实时通知</td><td>WebSocket（仅推送变更事件，不含文件内容）</td></tr>
+    <tr><td style="font-weight:600;">Android 后台</td><td>定时 HTTPS 轮询（15 分钟间隔）</td></tr>
+  </table>
+
+  <h3>8.2 REST API 端点（概要）</h3>
+  <table>
+    <thead><tr><th>方法</th><th>路径</th><th>用途</th></tr></thead>
+    <tr><td>POST</td><td>/api/files/upload</td><td>上传文件（multipart: file + baseVersion + lastModified）</td></tr>
+    <tr><td>GET</td><td>/api/files/download?path=...</td><td>下载文件（stream）</td></tr>
+    <tr><td>GET</td><td>/api/files/tree</td><td>获取文件树（含哈希、版本、状态）</td></tr>
+    <tr><td>POST</td><td>/api/files/delete</td><td>删除文件（携带 baseVersion）</td></tr>
+    <tr><td>POST</td><td>/api/files/move</td><td>移动/重命名</td></tr>
+    <tr><td>GET</td><td>/api/versions?path=...</td><td>获取文件版本列表</td></tr>
+    <tr><td>POST</td><td>/api/versions/restore</td><td>回滚至指定版本</td></tr>
+    <tr><td>GET</td><td>/api/devices</td><td>已注册设备列表</td></tr>
+    <tr><td>GET</td><td>/api/health</td><td>服务端健康检查</td></tr>
+    <tr><td>POST</td><td>/api/shares</td><td>创建分享链接（需 Token：path, expireHours, password?, maxDownloads?）</td></tr>
+    <tr><td>GET</td><td>/share/{shareId}</td><td>分享下载页/下载流（无需 Token。有密码则先验证）</td></tr>
+  </table>
+
+  <h3>8.3 WebSocket 事件</h3>
+  <table>
+    <thead><tr><th>事件类型</th><th>载荷</th><th>触发条件</th></tr></thead>
+    <tr><td>file_changed</td><td>{ path, newVersion, deviceId }</td><td>文件内容变更已确认</td></tr>
+    <tr><td>file_deleted</td><td>{ path, deviceId }</td><td>文件删除已确认</td></tr>
+    <tr><td>file_renamed</td><td>{ oldPath, newPath, deviceId }</td><td>文件重命名/移动已确认</td></tr>
+    <tr><td>conflict</td><td>{ path, winnerVersion, winnerDeviceId, winnerModifiedAt, loserPath }</td><td>冲突已自动解决。载荷含优胜方设备 ID 和修改时间，客户端可展示「谁的修改被保留」</td></tr>
+  </table>
+
+  <h3>8.4 重连一致性</h3>
+  <p>WebSocket 断开重连流程：记录重连时间戳 → 执行全量文件树比对 → 比对完成后查询「比对期间产生的新变更」→ 如有则增量追赶。确保零时间窗口遗漏。</p>
+</section>
+
+<!-- ==================== 9. 安全模型 ==================== -->
+<section>
+  <h2>9. 安全模型</h2>
+
+  <h3>9.1 威胁模型</h3>
+  <p><strong>信任边界</strong>：中心节点 = 可信（自有硬件）。网络 = 不可信（公网）。客户端设备 = 可信（自用设备）。</p>
+
+  <h3>9.2 安全措施</h3>
+  <table>
+    <tr><th style="width:180px">层级</th><th>措施</th></tr>
+    <tr><td>传输</td><td>TLS 1.3，自签证书。客户端首次连接展示证书指纹，用户确认后 pin 住。后续指纹不匹配则拒绝连接</td></tr>
+    <tr><td>认证</td><td>一个家庭共享 Token。服务端存储 Token 的 SHA-256 哈希（不存明文）。所有客户端使用同一 Token。Token 泄露 → 重新生成并分发给全家人</td></tr>
+    <tr><td>攻击面</td><td>端口 8443 暴露两条路径：① <code>/api/*</code> 需 Token 认证（同步操作）② <code>/share/*</code> 无需 Token（分享下载，以分享 ID + 可选密码鉴权）。Web 管理面板绑定 localhost</td></tr>
+    <tr><td>Token 展示</td><td>托盘菜单默认遮罩 Token，点击「显示」后才可见。二维码和 Token 明文不同时展示</td></tr>
+    <tr><td>证书生成</td><td>首次启动自动生成 CA 根证书 + 服务端证书。用户零操作</td></tr>
+    <tr><td>分享链接证书</td><td>分享对象通过浏览器访问自签证书站点时，浏览器会显示安全警告。<strong>此为已知限制</strong>——家庭使用场景下分享对象通常是可信任的人，可手动跳过警告。远期可配合域名方案升级为正式证书</td></tr>
+  </table>
+
+  <h3>9.3 不在威胁模型内</h3>
+  <ul>
+    <li>物理接触攻击（攻击者坐在你的台式机前）</li>
+    <li>操作系统级漏洞（假设 Windows 和 Android 系统本身安全）</li>
+    <li>量子计算攻击（SHA-256 碰撞在经典计算下物理不可能）</li>
+  </ul>
+</section>
+
+<!-- ==================== 10. 外网访问 ==================== -->
+<section>
+  <h2>10. 外网访问</h2>
+
+  <h3>10.1 方案</h3>
+  <table>
+    <tr><td style="width:160px;font-weight:600;">拓扑</td><td>路由器端口转发（8443 → 台式机 8443）+ 客户端直连公网 IP</td></tr>
+    <tr><td style="font-weight:600;">前置条件</td><td>① 台式机固定局域网 IP ② 路由器添加端口转发规则 ③ 查询公网 IP 填入客户端</td></tr>
+    <tr><td style="font-weight:600;">IP 变动</td><td>基本固定，偶尔重启光猫变化。变动后手动更新客户端配置。接受此风险，不引入 DDNS/域名</td></tr>
+  </table>
+
+  <h3>10.2 初始化步骤</h3>
+  <table>
+    <tr><td style="width:40px;font-weight:600;">1</td><td>台式机设置固定局域网 IP（根据实际网段）</td></tr>
+    <tr><td style="font-weight:600;">2</td><td>路由器：外部端口 8443 → 台式机固定 IP:8443</td></tr>
+    <tr><td style="font-weight:600;">3</td><td>客户端填入当前公网 IP（IP 变动时重复此步）</td></tr>
+  </table>
+</section>
+
+<!-- ==================== 11. 部署与运维 ==================== -->
+<section>
+  <h2>11. 部署与运维</h2>
+
+  <h3>11.1 中心节点安装</h3>
+  <table>
+    <tr><td style="width:40px;font-weight:600;">1</td><td>下载 MSIX 安装包，以管理员身份运行（安装 Windows Service 需提权）</td></tr>
+    <tr><td style="font-weight:600;">2</td><td>选择同步文件夹位置</td></tr>
+    <tr><td style="font-weight:600;">3</td><td>安装完成，Service 开机自启。托盘图标出现</td></tr>
+    <tr><td style="font-weight:600;">4</td><td>首次启动自动生成 Token 和 HTTPS 证书</td></tr>
+  </table>
+
+  <h3>11.2 Windows 客户端安装</h3>
+  <table>
+    <tr><td style="width:40px;font-weight:600;">1</td><td>下载安装包，双击安装（无需管理员权限）</td></tr>
+    <tr><td style="font-weight:600;">2</td><td>输入中心节点地址（公网 IP:8443）和 Token</td></tr>
+    <tr><td style="font-weight:600;">3</td><td>选择要同步的云端文件夹（选择性同步）</td></tr>
+    <tr><td style="font-weight:600;">4</td><td>首次同步开始，之后自动增量</td></tr>
+  </table>
+
+  <h3>11.3 Android 安装</h3>
+  <table>
+    <tr><td style="width:40px;font-weight:600;">1</td><td>安装 APK</td></tr>
+    <tr><td style="font-weight:600;">2</td><td>扫描台式机托盘显示的二维码（自动填入地址 + Token），或手动输入</td></tr>
+    <tr><td style="font-weight:600;">3</td><td>授权照片访问权限 → 备份开始。文件浏览立即可用</td></tr>
+  </table>
+
+  <h3>11.4 首次同步时间估算</h3>
+  <table>
+    <tr><td style="width:160px;font-weight:600;">假设</td><td>500GB 数据 / 家庭上行 30Mbps（~3.75MB/s）</td></tr>
+    <tr><td style="font-weight:600;">理想</td><td>~38 小时</td></tr>
+    <tr><td style="font-weight:600;">实际</td><td>~2-3 天（协议开销 + 小文件停顿）</td></tr>
+    <tr><td style="font-weight:600;">措施</td><td>显示进度和预估时间。支持暂停。可先同步关键文件夹</td></tr>
+    <tr><td style="font-weight:600;">期间增量</td><td>首次上传过程中本地再次修改的文件标记为「待重传」，批量完成后重传</td></tr>
+  </table>
+
+  <h3>11.5 健康指标</h3>
+  <table>
+    <tr><th style="width:180px">指标</th><th>展示</th></tr>
+    <tr><td>连接状态</td><td>托盘图标：🟢 已连接 / 🟡 连接中 / 🔴 不可达</td></tr>
+    <tr><td>最后同步时间</td><td>托盘 tooltip。超过 30 分钟未同步 → 警告色</td></tr>
+    <tr><td>待同步队列</td><td>托盘菜单：「N 个文件待同步，共 X MB」</td></tr>
+    <tr><td>持续失败</td><td>系统通知推送</td></tr>
+  </table>
+</section>
+
+<!-- ==================== 12. 客户端规格 ==================== -->
+<section>
+  <h2>12. 客户端规格</h2>
+
+  <h3>12.1 Windows 桌面客户端</h3>
+  <table>
+    <tr><td style="width:160px;font-weight:600;">UI 框架</td><td>WinUI 3</td></tr>
+    <tr><td style="font-weight:600;">运行形态</td><td>托盘常驻 + 管理窗口。开机自启（非 Service）</td></tr>
+    <tr><td style="font-weight:600;">核心界面</td><td>① 系统托盘图标 + 右键菜单 ② 主窗口：同步状态、文件列表、设置</td></tr>
+    <tr><td style="font-weight:600;">通知方式</td><td>Windows 原生 Toast 通知</td></tr>
+  </table>
+
+  <h3>12.2 Android 客户端</h3>
+  <table>
+    <tr><td style="width:160px;font-weight:600;">语言</td><td>Kotlin</td></tr>
+    <tr><td style="font-weight:600;">最低版本</td><td>Android 10 (API 29)</td></tr>
+    <tr><td style="font-weight:600;">核心界面</td><td>① 文件浏览（树形目录 + 缩略图） ② 备份状态 ③ 离线收藏列表 ④ 设置</td></tr>
+    <tr><td style="font-weight:600;">后台任务</td><td>Foreground Service（照片备份）+ WorkManager（定时轮询）。引导用户关闭电池优化</td></tr>
+    <tr><td style="font-weight:600;">证书处理</td><td>OkHttp CertificatePinner，首次连接时用户确认指纹</td></tr>
+  </table>
+</section>
+
+<!-- ==================== 13. 开发阶段 ==================== -->
+<section>
+  <h2>13. 开发阶段</h2>
+
+  <table>
+    <thead><tr><th style="width:100px">阶段</th><th style="width:100px">目标</th><th>交付物</th></tr></thead>
+    <tr>
+      <td><span class="pri p1">Phase 0</span></td>
+      <td>原型验证</td>
+      <td>
+        中心节点：文件上传下载 API + SQLite 索引<br>
+        Windows 客户端：文件夹监控 + 基础上传下载<br>
+        先走 HTTP + localhost，不加安全层<br>
+        <strong>验收：台式机放文件 → 笔记本自动出现</strong>
+      </td>
+    </tr>
+    <tr>
+      <td><span class="pri p1">Phase 1a</span></td>
+      <td>Windows 可用</td>
+      <td>
+        HTTPS + Token 认证<br>
+        整文件传输 + ≥10MB 分块续传<br>
+        选择性同步 + 基础冲突处理<br>
+        忽略规则 + 带宽限速<br>
+        系统托盘 + 通知 + WebSocket 实时推送
+      </td>
+    </tr>
+    <tr>
+      <td><span class="pri p1">Phase 1b</span></td>
+      <td>Android 可用</td>
+      <td>
+        连接服务端 + 文件浏览下载<br>
+        照片/视频自动备份（仅 Wi-Fi + 充电时）<br>
+        <strong>Phase 1a + 1b 全部完成 = P1 达标</strong>
+      </td>
+    </tr>
+    <tr>
+      <td><span class="pri p2">Phase 2</span></td>
+      <td>体验增强</td>
+      <td>
+        版本历史（完整副本，5 个版本）<br>
+        Web 管理面板（只读）<br>
+        文件分享链接<br>
+        Android 离线收藏
+      </td>
+    </tr>
+    <tr>
+      <td><span class="pri p3">Phase 3</span></td>
+      <td>远期完善</td>
+      <td>
+        大文件 + 海量小文件性能优化<br>
+        长时间运行稳定性<br>
+        异常恢复与自愈<br>
+        安装包 + 自动更新<br>
+        端到端加密 / WebDAV / 回收站 / 备份模式
+      </td>
+    </tr>
+  </table>
+
+  <div class="constraint">
+    <strong>Phase 0 不做的</strong>：UI 美化、选择性同步、冲突处理、版本历史、Android、大文件续传、自动更新。原型只验证「同步环路」是否跑通。
+  </div>
+</section>
+
+<!-- ==================== 14. 风险登记 ==================== -->
+<section>
+  <h2>14. 风险登记</h2>
+
+  <table>
+    <thead><tr><th style="width:40px">ID</th><th>风险</th><th>影响</th><th>缓解</th></tr></thead>
+    <tr><td>R1</td><td>台式机关机</td><td>所有同步中断</td><td>客户端持久化待同步队列，恢复后自动追赶。BIOS 设置通电自启</td></tr>
+    <tr><td>R2</td><td>家庭上行带宽瓶颈</td><td>多设备同步慢</td><td>带宽限速 + 小文件优先。物理限制，软件无法根本解决</td></tr>
+    <tr><td>R3</td><td>Android 后台被杀</td><td>备份不及时</td><td>Foreground Service + 引导关闭电池优化 + 15 分钟轮询非实时</td></tr>
+    <tr><td>R4</td><td>台式机磁盘故障</td><td>数据丢失</td><td>超出本系统范围。建议用户使用 Windows 文件历史记录或定期手动备份</td></tr>
+    <tr><td>R5</td><td>外网端口暴露</td><td>被扫描/攻击</td><td>自签证书 pinning + Token 认证 + 最小化攻击面。不知 Token 者连上端口也无法操作</td></tr>
+    <tr><td>R6</td><td>文件路径兼容</td><td>Android 显示异常</td><td>服务端统一 Windows 兼容文件名规则。Android 端映射显示</td></tr>
+    <tr><td>R7</td><td>SQLite 文件损坏</td><td>元数据丢失</td><td>SQLite WAL 模式。启动时执行完整性检查。建议定期备份 SQLite 文件</td></tr>
+    <tr><td>R8</td><td>多用户并发冲突</td><td>同一文件被两人同时修改时，一人修改会进入冲突副本</td><td>冲突通知中标注最后修改人和时间。家庭成员沟通后手动恢复。远期可考虑自动合并纯文本文件</td></tr>
+    <tr><td>R9</td><td>Token 共享泄露</td><td>任何知道 Token 的人都能访问全部文件</td><td>Token 仅限家庭成员。托盘菜单默认遮罩。泄露后服务端重新生成 Token 并分发给所有人</td></tr>
+  </table>
+</section>
+
+<!-- ==================== 页脚 ==================== -->
+<div style="text-align:center;padding-top:40px;border-top:2px solid var(--border);color:var(--text-muted);font-size:13px;">
+  <p>CloudPan · 产品需求规格书 · v3.4 · 2026-07-28</p>
+  <p>本文档以结构化格式编写，面向开发者与自动化工具解析</p>
+</div>
+
+</div>
+</body>
+</html>
