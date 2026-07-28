@@ -26,10 +26,10 @@ public class SyncEngine
     public event Action<string>? StatusChanged;
     public event Action<int, int>? QueueProgressChanged; // (completed, total)
 
-    public SyncEngine(IApiClient api, string syncRoot, IDbContextFactory<ClientDbContext> dbFactory, ILogger<SyncEngine> logger)
+    public SyncEngine(IApiClient api, Models.SyncConfig config, IDbContextFactory<ClientDbContext> dbFactory, ILogger<SyncEngine> logger)
     {
         _api = api;
-        _syncRoot = syncRoot;
+        _syncRoot = config.SyncRoot;
         _dbFactory = dbFactory;
         _logger = logger;
     }
@@ -427,6 +427,93 @@ public class SyncEngine
     // ============================================================
     // 工具方法
     // ============================================================
+
+    /// <summary>
+    /// 全量扫描本地文件，与远端快照对比，入队差异项。
+    /// 作为 FileSystemWatcher 的兜底通道，每 5 分钟调用一次。
+    /// </summary>
+    public async Task FullScanAsync(CancellationToken ct = default)
+    {
+        _logger.LogInformation("定时全量扫描开始...");
+        NotifyStatus("全量扫描中...");
+
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        // 1. 枚举本地所有文件（忽略 .cloudpan 和临时文件）
+        var localFiles = new HashSet<string>();
+        var localDirs = new HashSet<string>();
+
+        if (Directory.Exists(_syncRoot))
+        {
+            foreach (var fullPath in Directory.EnumerateFiles(_syncRoot, "*", SearchOption.AllDirectories))
+            {
+                if (ShouldIgnoreScan(fullPath)) continue;
+                var rel = ToRelativePath(fullPath);
+                localFiles.Add(rel);
+            }
+
+            foreach (var fullPath in Directory.EnumerateDirectories(_syncRoot, "*", SearchOption.AllDirectories))
+            {
+                if (ShouldIgnoreScan(fullPath)) continue;
+                var rel = ToRelativePath(fullPath);
+                localDirs.Add(rel);
+            }
+        }
+
+        // 2. 加载远端快照
+        var snapshots = await db.RemoteSnapshots.ToListAsync(ct);
+        var snapshotPaths = new HashSet<string>(snapshots.Select(s => s.Path));
+
+        // 3. 比对：新文件/修改文件 → 入队上传
+        foreach (var path in localFiles)
+        {
+            var fullPath = ToLocalPath(path);
+            var snapshot = snapshots.FirstOrDefault(s => s.Path == path);
+
+            if (snapshot == null)
+            {
+                // 新文件
+                await EnqueueLocalChangeAsync(path, SyncOperation.Upload);
+                continue;
+            }
+
+            // 大小对比（Phase 0 简化策略，不计算哈希）
+            var localSize = (int)new FileInfo(fullPath).Length;
+            if (localSize != snapshot.Size)
+            {
+                _logger.LogInformation("全量扫描检测到变更: {Path} ({OldSize} → {NewSize})",
+                    path, snapshot.Size, localSize);
+                await EnqueueLocalChangeAsync(path, SyncOperation.Upload);
+            }
+        }
+
+        // 4. 比对：本地已删除 → 入队删除
+        foreach (var snapshot in snapshots)
+        {
+            if (snapshot.Type == (int)CloudPan.Shared.FileType.File && !localFiles.Contains(snapshot.Path))
+            {
+                _logger.LogInformation("全量扫描检测到本地删除: {Path}", snapshot.Path);
+                await EnqueueLocalChangeAsync(snapshot.Path, SyncOperation.Delete);
+            }
+        }
+
+        _logger.LogInformation("全量扫描完成（文件: {FileCount}, 快照: {SnapshotCount}）",
+            localFiles.Count, snapshots.Count);
+    }
+
+    private string ToRelativePath(string fullPath)
+    {
+        var relative = Path.GetRelativePath(_syncRoot, fullPath);
+        return "/" + relative.Replace('\\', '/');
+    }
+
+    private bool ShouldIgnoreScan(string fullPath)
+    {
+        var fileName = Path.GetFileName(fullPath);
+        return fileName.StartsWith('.')       // .cloudpan
+            || fileName.EndsWith(".tmp")       // 临时文件
+            || fullPath.Contains(".cloudpan"); // 内部元数据
+    }
 
     private string ToLocalPath(string relativePath)
     {

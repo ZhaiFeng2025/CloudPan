@@ -47,6 +47,9 @@ public static class Program
 
         services.AddLogging(b => b.AddSerilog(dispose: true));
 
+        // 配置
+        services.AddSingleton(new SyncConfig { SyncRoot = SyncRoot, ServerUrl = ServerUrl });
+
         // 数据库（DbContextFactory 确保并发安全）
         services.AddSingleton<IDbContextFactory<ClientDbContext>>(_ => new ClientDbFactory(dbPath));
         EnsureDbCreated(dbPath);

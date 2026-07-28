@@ -123,12 +123,17 @@ public class FileIndexService
     }
 
     /// <summary>
+    /// <summary>
     /// 物理删除文件条目及其子文件（递归删除文件夹）。
+    /// 先删除关联的 VersionRecord（满足 FK 约束），再删除 FileEntry。
     /// </summary>
     public async Task<List<string>> DeleteAsync(string path, bool isDirectory)
     {
         await using var db = await _dbFactory.CreateDbContextAsync();
         var deletedPaths = new List<string>();
+
+        // 收集所有待删除路径
+        var pathsToDelete = new List<string>();
 
         if (isDirectory)
         {
@@ -136,19 +141,37 @@ public class FileIndexService
             var children = await db.FileEntries
                 .Where(f => f.Path.StartsWith(prefix))
                 .ToListAsync();
-
-            deletedPaths.AddRange(children.Select(c => c.Path));
-            db.FileEntries.RemoveRange(children);
+            pathsToDelete.AddRange(children.Select(c => c.Path));
         }
 
         var entry = await db.FileEntries.FindAsync(path);
         if (entry != null)
+            pathsToDelete.Add(entry.Path);
+
+        // 先删除关联的版本历史（FK 约束要求）
+        if (pathsToDelete.Count > 0)
         {
-            deletedPaths.Add(entry.Path);
-            db.FileEntries.Remove(entry);
+            var versions = await db.VersionRecords
+                .Where(v => pathsToDelete.Contains(v.FilePath))
+                .ToListAsync();
+            db.VersionRecords.RemoveRange(versions);
         }
 
+        // 再删除文件条目
+        if (isDirectory)
+        {
+            var prefix = path.TrimEnd('/') + "/";
+            var children = await db.FileEntries
+                .Where(f => f.Path.StartsWith(prefix))
+                .ToListAsync();
+            db.FileEntries.RemoveRange(children);
+        }
+
+        if (entry != null)
+            db.FileEntries.Remove(entry);
+
         await db.SaveChangesAsync();
+        deletedPaths.AddRange(pathsToDelete);
         return deletedPaths;
     }
 

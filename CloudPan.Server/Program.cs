@@ -81,9 +81,10 @@ using (var scope = app.Services.CreateScope())
     // 确保数据库已创建
     await db.Database.EnsureCreatedAsync();
 
-    // 设置 WAL 模式（Phase 0 不启用 FK 约束——VersionRecord 归档与 FileEntry 删除存在冲突）
+    // 设置 WAL 模式 + 启用外键约束（VersionRecord 在 FileEntry 之前删除）
     await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;");
     await db.Database.ExecuteSqlRawAsync("PRAGMA synchronous=NORMAL;");
+    await db.Database.ExecuteSqlRawAsync("PRAGMA foreign_keys=ON;");
 
     // 种子："server" 设备（用于 VersionRecord.DeviceId FK）
     if (!await db.Devices.AnyAsync(d => d.Id == "server"))

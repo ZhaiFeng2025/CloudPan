@@ -1,3 +1,4 @@
+using CloudPan.Client.Models;
 using CloudPan.Shared;
 using Microsoft.Extensions.Logging;
 
@@ -15,9 +16,9 @@ public class FileWatcherService : IDisposable
     private FileSystemWatcher? _watcher;
     private System.Threading.Timer? _scanTimer;
 
-    public FileWatcherService(string syncRoot, SyncEngine engine, ILogger<FileWatcherService> logger)
+    public FileWatcherService(SyncConfig config, SyncEngine engine, ILogger<FileWatcherService> logger)
     {
-        _syncRoot = syncRoot;
+        _syncRoot = config.SyncRoot;
         _engine = engine;
         _logger = logger;
     }
@@ -142,8 +143,14 @@ public class FileWatcherService : IDisposable
 
     private async Task FullScanAsync()
     {
-        _logger.LogInformation("定时全量扫描...");
-        await Task.CompletedTask; // Phase 0：简化实现，依赖增量同步
+        try
+        {
+            await _engine.FullScanAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "全量扫描异常");
+        }
     }
 
     private string ToRelativePath(string fullPath)
