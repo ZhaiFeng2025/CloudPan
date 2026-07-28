@@ -14,9 +14,10 @@ public class FileStorageService
 
     public FileStorageService(string syncRoot)
     {
-        _syncRoot = syncRoot;
-        _versionsDir = Path.Combine(syncRoot, ".cloudpan", ".versions");
-        _thumbnailsDir = Path.Combine(syncRoot, ".cloudpan", ".thumbnails");
+        // 规范化路径：消除短文件名、正斜杠、末尾分隔符等差异
+        _syncRoot = Path.GetFullPath(syncRoot).TrimEnd(Path.DirectorySeparatorChar);
+        _versionsDir = Path.Combine(_syncRoot, ".cloudpan", ".versions");
+        _thumbnailsDir = Path.Combine(_syncRoot, ".cloudpan", ".thumbnails");
         Directory.CreateDirectory(_versionsDir);
         Directory.CreateDirectory(_thumbnailsDir);
     }
@@ -44,8 +45,12 @@ public class FileStorageService
         if (relativePath.Contains('\0'))
             return "路径包含空字符";
 
+        // Path.GetFullPath 同时应用于 rootPath 和 absolutePath，
+        // 保证短文件名/正斜杠/大小写规范化后前缀一致
         var absolutePath = Path.GetFullPath(GetAbsolutePath(relativePath));
         var rootPath = Path.GetFullPath(_syncRoot);
+        if (!rootPath.EndsWith(Path.DirectorySeparatorChar))
+            rootPath += Path.DirectorySeparatorChar;
 
         if (!absolutePath.StartsWith(rootPath, StringComparison.OrdinalIgnoreCase))
             return "路径越界";
