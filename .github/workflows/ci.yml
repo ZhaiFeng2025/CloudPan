@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: 还原依赖
+        run: dotnet restore
+
+      - name: 编译
+        run: dotnet build --no-restore --configuration Release
+
+      - name: 运行测试
+        run: dotnet test --no-build --configuration Release --verbosity normal
+
+      - name: 校验代码生成
+        run: dotnet run --project CloudPan.CodeGen -- --verify
