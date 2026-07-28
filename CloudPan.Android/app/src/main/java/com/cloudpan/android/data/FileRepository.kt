@@ -3,9 +3,13 @@ package com.cloudpan.android.data
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.ResponseBody
 import java.io.File
 import java.io.FileOutputStream
+import java.time.Instant
 
 /**
  * 文件操作仓库——封装 API 调用和错误处理。
@@ -72,12 +76,44 @@ class FileRepository(private val settings: SettingsStore) {
         return safeCall { api().createShare(body) }
     }
 
+    suspend fun uploadFile(localFile: File, remotePath: String): Result<UploadResponse> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val mimeType = "application/octet-stream".toMediaTypeOrNull()!!
+                val requestBody = localFile.asRequestBody(mimeType)
+                val filePart = MultipartBody.Part.createFormData(
+                    "file", localFile.name, requestBody
+                )
+                val pathPart = remotePath.toRequestBody(MultipartBody.FORM)
+                val versionPart = "0".toRequestBody(MultipartBody.FORM)
+                val modifiedPart = Instant.ofEpochMilli(localFile.lastModified())
+                    .toString().toRequestBody(MultipartBody.FORM)
+
+                val response = api().uploadFile(filePart, pathPart, versionPart, modifiedPart)
+                if (!response.isSuccessful) {
+                    return@withContext Result.failure(
+                        Exception("上传失败: ${response.code()} ${response.message()}")
+                    )
+                }
+                val body = response.body()
+                    ?: return@withContext Result.failure(Exception("空响应"))
+                Result.success(body)
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
     suspend fun healthCheck(): Result<Boolean> {
         return safeCall {
             val r = api().healthCheck()
             if (r.isSuccessful) Unit else throw Exception("健康检查失败: ${r.code()}")
             true
         }
+    }
+
+    private fun String.toRequestBody(mediaType: okhttp3.MediaType?): okhttp3.RequestBody {
+        return okhttp3.RequestBody.create(mediaType, this)
     }
 
     private suspend fun <T> safeCall(block: suspend () -> T): Result<T> {

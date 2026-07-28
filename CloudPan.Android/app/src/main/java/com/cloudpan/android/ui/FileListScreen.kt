@@ -18,15 +18,24 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
+/** 文件大小格式化。 */
+private fun formatSize(bytes: Long): String = when {
+    bytes >= 1_048_576 -> "${"%.1f".format(bytes / 1_048_576.0f)} MB"
+    bytes >= 1024 -> "${bytes / 1024} KB"
+    else -> "$bytes B"
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FileListScreen(
     repository: FileRepository,
-    onBackToSettings: () -> Unit
+    onBackToSettings: () -> Unit,
+    onPickFileForUpload: (() -> Unit)? = null
 ) {
     var files by remember { mutableStateOf<List<FileEntryDto>>(emptyList()) }
     var status by remember { mutableStateOf("加载中...") }
     var selectedFile by remember { mutableStateOf<FileEntryDto?>(null) }
+    var isDownloading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     fun loadFiles() {
@@ -44,32 +53,56 @@ fun FileListScreen(
 
     LaunchedEffect(Unit) { loadFiles() }
 
-    // 下载对话框
+    // 下载对话框（含进度指示器）
     if (selectedFile != null) {
+        val file = selectedFile!!
         AlertDialog(
-            onDismissRequest = { selectedFile = null },
-            title = { Text("下载文件") },
-            text = { Text("下载 ${selectedFile!!.path} 到 Downloads 目录？") },
-            confirmButton = {
-                TextButton(onClick = {
-                    val file = selectedFile!!
-                    selectedFile = null
-                    scope.launch {
-                        status = "下载中: ${file.path}"
-                        val downloadsDir = Environment.getExternalStoragePublicDirectory(
-                            Environment.DIRECTORY_DOWNLOADS
-                        )
-                        val result = repository.downloadFile(file.path, downloadsDir)
-                        status = if (result.isSuccess) {
-                            "✅ 已下载: ${result.getOrNull()?.name}"
-                        } else {
-                            "❌ ${result.exceptionOrNull()?.message}"
-                        }
+            onDismissRequest = {
+                if (!isDownloading) selectedFile = null
+            },
+            title = { Text(if (isDownloading) "下载中..." else "下载文件") },
+            text = {
+                Column {
+                    Text("${file.path}")
+                    Text(
+                        "${formatSize(file.size)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (isDownloading) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(status, style = MaterialTheme.typography.bodySmall)
                     }
-                }) { Text("确认下载") }
+                }
+            },
+            confirmButton = {
+                if (!isDownloading) {
+                    TextButton(onClick = {
+                        isDownloading = true
+                        status = "准备下载..."
+                        scope.launch {
+                            val downloadsDir = Environment.getExternalStoragePublicDirectory(
+                                Environment.DIRECTORY_DOWNLOADS
+                            )
+                            status = "下载中..."
+                            val result = repository.downloadFile(file.path, downloadsDir)
+                            isDownloading = false
+                            selectedFile = null
+                            status = if (result.isSuccess) {
+                                "✅ 已下载: ${result.getOrNull()?.name}"
+                            } else {
+                                "❌ ${result.exceptionOrNull()?.message}"
+                            }
+                        }
+                    }) { Text("确认下载") }
+                }
             },
             dismissButton = {
-                TextButton(onClick = { selectedFile = null }) { Text("取消") }
+                if (!isDownloading) {
+                    TextButton(onClick = { selectedFile = null }) { Text("取消") }
+                }
             }
         )
     }
@@ -87,6 +120,15 @@ fun FileListScreen(
                     }
                 }
             )
+        },
+        floatingActionButton = {
+            if (onPickFileForUpload != null) {
+                FloatingActionButton(
+                    onClick = onPickFileForUpload
+                ) {
+                    Text("＋")
+                }
+            }
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding)) {
