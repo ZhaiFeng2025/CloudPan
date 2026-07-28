@@ -16,5 +16,6 @@ public interface IFileStorageService
     void DeleteDirectory(string relativePath);
     void Move(string oldRelativePath, string newRelativePath);
     void CreateDirectory(string relativePath);
+    Task<string> StoreVersionAsync(string relativePath, int version, CancellationToken ct = default);
     void EnsureSyncRootExists();
 }

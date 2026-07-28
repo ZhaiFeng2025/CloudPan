@@ -143,7 +143,9 @@ using (var scope = app.Services.CreateScope())
 // 中间件管道
 // ============================================================
 
-// Token 认证中间件（/api/health 和 /share/ 公开，其余需要 Bearer token）
+// 中间件管道（从外到内：异常 → 速率 → 认证）
+app.UseGlobalExceptionHandler();
+app.UseRateLimit();
 app.UseTokenAuth();
 
 app.MapControllers();

@@ -1,22 +1,19 @@
 package com.cloudpan.android.ui
 
 import android.os.Environment
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cloudpan.android.data.FileEntryDto
 import com.cloudpan.android.data.FileRepository
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.io.File
 
 /** 文件大小格式化。 */
 private fun formatSize(bytes: Long): String = when {
@@ -25,18 +22,23 @@ private fun formatSize(bytes: Long): String = when {
     else -> "$bytes B"
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun FileListScreen(
     repository: FileRepository,
     onBackToSettings: () -> Unit,
-    onPickFileForUpload: (() -> Unit)? = null
+    onPickFileForUpload: (() -> Unit)? = null,
+    refreshTrigger: Int = 0
 ) {
     var files by remember { mutableStateOf<List<FileEntryDto>>(emptyList()) }
     var status by remember { mutableStateOf("加载中...") }
     var selectedFile by remember { mutableStateOf<FileEntryDto?>(null) }
     var isDownloading by remember { mutableStateOf(false) }
+    var deleteTarget by remember { mutableStateOf<FileEntryDto?>(null) }
+    var showNewFolderDialog by remember { mutableStateOf(false) }
+    var newFolderName by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     fun loadFiles() {
         scope.launch {
@@ -47,28 +49,87 @@ fun FileListScreen(
                 status = "${files.size} 个文件"
             }.onFailure { e ->
                 status = "❌ ${e.message}"
+                snackbarHostState.showSnackbar("加载失败: ${e.message}")
             }
         }
     }
 
     LaunchedEffect(Unit) { loadFiles() }
+    LaunchedEffect(refreshTrigger) { if (refreshTrigger > 0) loadFiles() }
+
+    // 删除确认对话框
+    if (deleteTarget != null) {
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("删除文件") },
+            text = { Text("确定要删除 ${deleteTarget!!.path} 吗？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    val file = deleteTarget!!
+                    deleteTarget = null
+                    scope.launch {
+                        val result = repository.deleteFile(file.path)
+                        if (result.isSuccess) {
+                            snackbarHostState.showSnackbar("已删除: ${file.path}")
+                            loadFiles()
+                        } else {
+                            snackbarHostState.showSnackbar("删除失败: ${result.exceptionOrNull()?.message}")
+                        }
+                    }
+                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) { Text("取消") }
+            }
+        )
+    }
+
+    // 新建文件夹对话框
+    if (showNewFolderDialog) {
+        AlertDialog(
+            onDismissRequest = { showNewFolderDialog = false },
+            title = { Text("新建文件夹") },
+            text = {
+                OutlinedTextField(
+                    value = newFolderName,
+                    onValueChange = { newFolderName = it },
+                    label = { Text("文件夹名称") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val name = newFolderName
+                    showNewFolderDialog = false
+                    newFolderName = ""
+                    scope.launch {
+                        val path = if (name.endsWith("/")) "/$name" else "/$name/"
+                        val result = repository.createFolder(path)
+                        if (result.isSuccess) {
+                            snackbarHostState.showSnackbar("已创建: $path")
+                            loadFiles()
+                        } else {
+                            snackbarHostState.showSnackbar("创建失败: ${result.exceptionOrNull()?.message}")
+                        }
+                    }
+                }) { Text("创建") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNewFolderDialog = false }) { Text("取消") }
+            }
+        )
+    }
 
     // 下载对话框（含进度指示器）
     if (selectedFile != null) {
         val file = selectedFile!!
         AlertDialog(
-            onDismissRequest = {
-                if (!isDownloading) selectedFile = null
-            },
+            onDismissRequest = { if (!isDownloading) selectedFile = null },
             title = { Text(if (isDownloading) "下载中..." else "下载文件") },
             text = {
                 Column {
                     Text("${file.path}")
-                    Text(
-                        "${formatSize(file.size)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text(formatSize(file.size), style = MaterialTheme.typography.bodySmall)
                     if (isDownloading) {
                         Spacer(modifier = Modifier.height(12.dp))
                         LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
@@ -81,7 +142,6 @@ fun FileListScreen(
                 if (!isDownloading) {
                     TextButton(onClick = {
                         isDownloading = true
-                        status = "准备下载..."
                         scope.launch {
                             val downloadsDir = Environment.getExternalStoragePublicDirectory(
                                 Environment.DIRECTORY_DOWNLOADS
@@ -90,10 +150,10 @@ fun FileListScreen(
                             val result = repository.downloadFile(file.path, downloadsDir)
                             isDownloading = false
                             selectedFile = null
-                            status = if (result.isSuccess) {
-                                "✅ 已下载: ${result.getOrNull()?.name}"
+                            if (result.isSuccess) {
+                                snackbarHostState.showSnackbar("已下载: ${result.getOrNull()?.name}")
                             } else {
-                                "❌ ${result.exceptionOrNull()?.message}"
+                                snackbarHostState.showSnackbar("下载失败: ${result.exceptionOrNull()?.message}")
                             }
                         }
                     }) { Text("确认下载") }
@@ -112,6 +172,9 @@ fun FileListScreen(
             TopAppBar(
                 title = { Text("CloudPan 文件") },
                 actions = {
+                    IconButton(onClick = { showNewFolderDialog = true }) {
+                        Text("📁+")
+                    }
                     IconButton(onClick = { loadFiles() }) {
                         Text("🔄")
                     }
@@ -123,16 +186,14 @@ fun FileListScreen(
         },
         floatingActionButton = {
             if (onPickFileForUpload != null) {
-                FloatingActionButton(
-                    onClick = onPickFileForUpload
-                ) {
+                FloatingActionButton(onClick = onPickFileForUpload) {
                     Text("＋")
                 }
             }
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         Column(modifier = Modifier.padding(padding)) {
-            // 状态栏
             Text(
                 text = status,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
@@ -140,31 +201,25 @@ fun FileListScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            // 文件列表
             LazyColumn {
                 items(files) { file ->
                     val icon = if (file.type == 1) "📁" else "📄"
-                    val sizeStr = when {
-                        file.size >= 1_048_576 -> "${file.size / 1_048_576.0f} MB"
-                        file.size >= 1024 -> "${file.size / 1024.0f} KB"
-                        else -> "${file.size} B"
-                    }
 
                     ListItem(
                         headlineContent = {
-                            Text(
-                                "$icon ${file.path}",
-                                fontWeight = FontWeight.Normal
-                            )
+                            Text("$icon ${file.path}", fontWeight = FontWeight.Normal)
                         },
                         supportingContent = {
-                            Text("v${file.version} · $sizeStr")
+                            Text("v${file.version} · ${formatSize(file.size)}")
                         },
-                        modifier = Modifier.clickable {
-                            if (file.type == 0) { // 文件类型
-                                selectedFile = file
+                        modifier = Modifier.combinedClickable(
+                            onClick = {
+                                if (file.type == 0) selectedFile = file
+                            },
+                            onLongClick = {
+                                if (file.type == 0) deleteTarget = file
                             }
-                        }
+                        )
                     )
                 }
             }

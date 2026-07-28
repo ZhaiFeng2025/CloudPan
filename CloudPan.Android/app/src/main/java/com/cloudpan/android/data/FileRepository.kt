@@ -70,6 +70,13 @@ class FileRepository(private val settings: SettingsStore) {
         }
     }
 
+    suspend fun deleteFile(path: String): Result<Unit> {
+        return safeCall {
+            api().deleteFile(mapOf("path" to path, "baseVersion" to 0))
+            Unit
+        }
+    }
+
     suspend fun createShare(filePath: String, password: String? = null): Result<ShareResponse> {
         val body = mutableMapOf<String, Any>("filePath" to filePath)
         if (password != null) body["password"] = password

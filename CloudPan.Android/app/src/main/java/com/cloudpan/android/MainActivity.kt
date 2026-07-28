@@ -36,6 +36,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             var showFileList by remember { mutableStateOf(false) }
+            var refreshTrigger by remember { mutableIntStateOf(0) }
             val scope = rememberCoroutineScope()
 
             // 文件选择器 launcher
@@ -60,6 +61,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                             repository.uploadFile(tmpFile, "/Uploads/$fileName")
+                            refreshTrigger++
                         }
                     }
                 }
@@ -69,7 +71,8 @@ class MainActivity : ComponentActivity() {
                 FileListScreen(
                     repository = repository,
                     onBackToSettings = { showFileList = false },
-                    onPickFileForUpload = { filePickerLauncher.launch("application/*,image/*,video/*") }
+                    onPickFileForUpload = { filePickerLauncher.launch("application/*,image/*,video/*") },
+                    refreshTrigger = refreshTrigger
                 )
             } else {
                 SettingsScreen(

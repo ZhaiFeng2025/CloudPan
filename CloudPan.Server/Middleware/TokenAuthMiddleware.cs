@@ -84,8 +84,9 @@ public class TokenAuthMiddleware
         {
             context.Items["DeviceId"] = deviceId;
 
-            // 自动注册未知设备
-            if (!await db.Devices.AnyAsync(d => d.Id == deviceId))
+            // 自动注册未知设备 + 更新在线状态
+            var device = await db.Devices.FindAsync(deviceId);
+            if (device == null)
             {
                 db.Devices.Add(new Models.Device
                 {
@@ -96,8 +97,13 @@ public class TokenAuthMiddleware
                     Online = 1,
                     RegisteredAt = DateTime.UtcNow.ToString("O")
                 });
-                await db.SaveChangesAsync();
             }
+            else
+            {
+                device.LastSeen = DateTime.UtcNow.ToString("O");
+                device.Online = 1;
+            }
+            await db.SaveChangesAsync();
         }
 
         await _next(context);

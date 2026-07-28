@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using CloudPan.Shared;
+using CloudPan.Server.Data;
 using CloudPan.Server.Models;
 using CloudPan.Server.Services;
 
@@ -7,7 +9,7 @@ namespace CloudPan.Server.Controllers;
 
 /// <summary>
 /// 文件操作 API：上传、下载、文件树、删除、移动、创建文件夹、搜索。
-/// Phase 0：无 Token 认证，无冲突检测，无版本历史。
+/// Phase 1b：上传前自动存档旧版本（版本历史）。
 /// </summary>
 [ApiController]
 [Route("api/files")]
@@ -16,12 +18,18 @@ public class FilesController : ControllerBase
     private readonly IFileStorageService _storage;
     private readonly IFileIndexService _index;
     private readonly IVersionService _version;
+    private readonly IDbContextFactory<CloudPanDbContext> _dbFactory;
 
-    public FilesController(IFileStorageService storage, IFileIndexService index, IVersionService version)
+    public FilesController(
+        IFileStorageService storage,
+        IFileIndexService index,
+        IVersionService version,
+        IDbContextFactory<CloudPanDbContext> dbFactory)
     {
         _storage = storage;
         _index = index;
         _version = version;
+        _dbFactory = dbFactory;
     }
 
     /// <summary>
@@ -77,6 +85,34 @@ public class FilesController : ControllerBase
             {
                 return await HandleUploadConflictAsync(file, path, existing, lastModified, baseVersion);
             }
+        }
+
+        // 存档旧版本（如果文件已存在）
+        var existingForArchive = await _index.GetByPathAsync(path);
+        if (existingForArchive != null && existingForArchive.CurrentHash != null)
+        {
+            var deviceId = HttpContext.Items["DeviceId"] as string ?? "unknown";
+            var storagePath = await _storage.StoreVersionAsync(path, existingForArchive.Version);
+            await using var archiveDb = await _dbFactory.CreateDbContextAsync();
+            archiveDb.VersionRecords.Add(new VersionRecord
+            {
+                FilePath = path,
+                Version = existingForArchive.Version,
+                Hash = existingForArchive.CurrentHash!,
+                Size = existingForArchive.CurrentSize,
+                StoragePath = storagePath,
+                Timestamp = DateTime.UtcNow.ToString("O"),
+                DeviceId = deviceId
+            });
+
+            // 保留最近 5 个版本
+            var oldVersions = await archiveDb.VersionRecords
+                .Where(v => v.FilePath == path)
+                .OrderByDescending(v => v.Version)
+                .Skip(5)
+                .ToListAsync();
+            archiveDb.VersionRecords.RemoveRange(oldVersions);
+            await archiveDb.SaveChangesAsync();
         }
 
         // 先分配版本号，再写文件，避免孤儿文件
