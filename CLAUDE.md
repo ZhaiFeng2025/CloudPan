@@ -67,7 +67,7 @@ Phase 0 明确不做：
 CloudPan.sln
 ├── CloudPan.Shared/          # 共享类型（从 spec 生成的枚举 + DTO）
 ├── CloudPan.Server/          # ASP.NET Core 服务端（Windows Service + 托盘）
-├── CloudPan.Client/          # WinUI 3 桌面客户端（托盘常驻 + 管理窗口）
+├── CloudPan.Client/          # Windows Forms 桌面客户端（托盘常驻 + 管理窗口，Phase 0）
 ├── CloudPan.CodeGen/         # 契约代码生成器（读 shared-spec.json → 生成代码）
 └── CloudPan.Android/         # Kotlin Android 客户端（Phase 1b）
 ```
