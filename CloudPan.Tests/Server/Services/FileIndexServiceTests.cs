@@ -145,7 +145,7 @@ public class FileIndexServiceTests : Infrastructure.TestBase
 
         // 最后一页
         var page3 = await index.GetFileTreeAsync(sinceVersion: null, subPath: null, limit: 2, cursor: page2.NextCursor);
-        Assert.Equal(1, page3.Data.Count);
+        Assert.Single(page3.Data);
         Assert.False(page3.HasMore);
     }
 
