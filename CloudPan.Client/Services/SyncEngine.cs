@@ -81,25 +81,37 @@ public class SyncEngine
             db.SyncQueue.RemoveRange(pending);
         }
 
+        // 去重：相同操作已在队列中
         var existing = await db.SyncQueue
             .FirstOrDefaultAsync(q => q.FilePath == relativePath && q.Operation == (int)operation);
+        if (existing != null) return;
 
-        if (existing == null)
+        // 上传去重：文件大小与快照一致 → 大概率未变，跳过（Phase 0 简化策略）
+        int fileSize = 0;
+        if (operation == SyncOperation.Upload)
         {
-            var fileSize = 0;
             var fullPath = Path.Combine(_syncRoot, relativePath.TrimStart('/'));
-            if (File.Exists(fullPath)) fileSize = (int)new FileInfo(fullPath).Length;
+            if (!File.Exists(fullPath)) return;
 
-            db.SyncQueue.Add(new SyncQueueItem
+            var snapshot = await db.RemoteSnapshots.FindAsync(relativePath);
+            var localSize = (int)new FileInfo(fullPath).Length;
+            if (snapshot != null && localSize == snapshot.Size)
             {
-                FilePath = relativePath,
-                Operation = (int)operation,
-                Priority = fileSize < QueuePriorityThreshold ? (int)QueuePriority.High : (int)QueuePriority.Normal,
-                FileSize = fileSize
-            });
-            await db.SaveChangesAsync();
-            _logger.Info($"入队: {operation} {relativePath}");
+                _logger.Info($"跳过上传（大小未变）: {relativePath}");
+                return;
+            }
+            fileSize = localSize;
         }
+
+        db.SyncQueue.Add(new SyncQueueItem
+        {
+            FilePath = relativePath,
+            Operation = (int)operation,
+            Priority = fileSize < QueuePriorityThreshold ? (int)QueuePriority.High : (int)QueuePriority.Normal,
+            FileSize = fileSize
+        });
+        await db.SaveChangesAsync();
+        _logger.Info($"入队: {operation} {relativePath}");
     }
 
     // ============================================================
