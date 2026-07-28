@@ -308,6 +308,11 @@ public class SyncEngine
                 item.RetryCount++;
                 item.LastError = ex.Message;
                 _logger.LogError($"传输异常 [{item.RetryCount}/10]: {item.FilePath} — {ex.Message}");
+
+                // 指数退避：按 retryBackoffMs 序列延迟后重试
+                var backoffMs = GetBackoffDelay(item.RetryCount);
+                if (backoffMs > 0)
+                    await Task.Delay(backoffMs, ct);
             }
 
             if (success || item.RetryCount >= 10)
@@ -517,6 +522,26 @@ public class SyncEngine
     private string ToLocalPath(string relativePath)
     {
         return Path.Combine(_syncRoot, relativePath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+    }
+
+    /// <summary>
+    /// 指数退避延迟（毫秒）。与 shared-spec.json config.retryBackoffMs 对齐。
+    /// </summary>
+    private static int GetBackoffDelay(int retryCount)
+    {
+        return retryCount switch
+        {
+            1 => 1_000,
+            2 => 2_000,
+            3 => 4_000,
+            4 => 8_000,
+            5 => 16_000,
+            6 => 32_000,
+            7 => 60_000,
+            8 => 120_000,
+            9 => 240_000,
+            _ => 300_000
+        };
     }
 
     private static void SafeDelete(string path)

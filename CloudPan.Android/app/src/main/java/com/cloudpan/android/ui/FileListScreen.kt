@@ -51,7 +51,10 @@ fun FileListScreen(
                 repository.getFileTreeInFolder(currentPath)
             }
             result.onSuccess { response ->
-                files = response.data.filter { it.path != currentPath }.sortedBy { it.path }
+                files = response.data
+                    .filter { it.path != currentPath }           // 排除自身
+                    .filter { isDirectChild(currentPath, it.path) } // 只显示直接子级
+                    .sortedBy { it.path }
                 status = "${files.size} 个项目"
             }.onFailure { e ->
                 status = "❌ ${e.message}"
@@ -187,7 +190,13 @@ fun FileListScreen(
 
             LazyColumn {
                 items(files) { file ->
-                    val icon = if (file.type == 1) "📁" else "📄"
+                    val isImage = !file.path.endsWith("/") && file.path.matches(
+                        Regex(".*\\.(jpg|jpeg|png|gif|bmp|webp|heic|heif)\$", RegexOption.IGNORE_CASE))
+                    val icon = when {
+                        file.type == 1 -> "📁"
+                        isImage -> "🖼️"
+                        else -> "📄"
+                    }
                     ListItem(
                         headlineContent = { Text("$icon ${file.path}") },
                         supportingContent = { Text("v${file.version} · ${formatSize(file.size)}") },
@@ -232,4 +241,15 @@ private fun getPathAtOffset(path: String, offset: Int): String? {
     val str = buildBreadcrumb(path)
     return str.getStringAnnotations("path", offset, offset)
         .firstOrNull()?.item
+}
+
+/** 判断 filePath 是否为 folderPath 的直接子级（不包含更深层文件）。 */
+private fun isDirectChild(folderPath: String, filePath: String): Boolean {
+    val relative = if (filePath.startsWith(folderPath)) {
+        filePath.removePrefix(folderPath)
+    } else {
+        return false
+    }
+    // 直接子级：除去前缀后，剩余部分不含 '/'
+    return !relative.trimEnd('/').contains("/")
 }
