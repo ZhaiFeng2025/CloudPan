@@ -33,3 +33,7 @@ $RECYCLE.BIN/
 # CloudPan runtime
 .cloudpan/
 .tmp
+
+# CloudPan 运行时目录（本地开发数据）
+CloudPan_Client/
+CloudPanSync/
