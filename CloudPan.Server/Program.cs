@@ -145,6 +145,7 @@ using (var scope = app.Services.CreateScope())
 // ============================================================
 
 // 中间件管道（从外到内：异常 → 速率 → 认证）
+app.UseRequestId();
 app.UseGlobalExceptionHandler();
 app.UseRateLimit();
 app.UseTokenAuth();
