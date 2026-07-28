@@ -55,7 +55,7 @@ public class SyncQueueItem
     public int Operation { get; set; } // 0=Upload, 1=Download, 2=Delete
     public int Priority { get; set; }
     public int? BaseVersion { get; set; }
-    public int? FileSize { get; set; }
+    public long? FileSize { get; set; }
     public int RetryCount { get; set; }
     public string? LastError { get; set; }
     public string CreatedAt { get; set; } = DateTime.UtcNow.ToString("O");
@@ -67,7 +67,7 @@ public class RemoteSnapshot
     public string Path { get; set; } = "";
     public int Type { get; set; }
     public string? Hash { get; set; }
-    public int Size { get; set; }
+    public long Size { get; set; }
     public int Version { get; set; }
     public int State { get; set; }
 }

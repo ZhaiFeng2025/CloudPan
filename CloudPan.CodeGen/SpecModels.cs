@@ -111,7 +111,8 @@ public record FieldDef(
     string Type,
     bool Nullable,
     string Role,
-    string? Description
+    string? Description,
+    string? CsharpType = null  // 可选：覆盖 C# 类型映射（如 "long" 替代 "int"）
 );
 
 // ---- API ----

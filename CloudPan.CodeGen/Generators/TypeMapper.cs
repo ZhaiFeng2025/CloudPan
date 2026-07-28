@@ -7,6 +7,10 @@ public static class TypeMapper
 {
     public static string MapToCSharp(FieldDef field)
     {
+        // csharpType 覆盖优先（如 long 替代 int）
+        if (!string.IsNullOrEmpty(field.CsharpType))
+            return field.CsharpType;
+
         return field.Type switch
         {
             "TEXT" => "string",

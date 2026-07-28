@@ -3,9 +3,10 @@
   "$id": "cloudpan-shared-spec",
   "title": "CloudPan 共享定义",
   "description": "所有枚举、实体、端点、字段名的唯一事实来源。三份文档引用本文件，禁止各自重复定义。",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "date": "2026-07-28",
   "_changelog": [
+    { "version": "1.3.0", "date": "2026-07-28", "changes": ["所有文件大小字段 csharpType: long，防止 >2GB 截断"] },
     { "version": "1.0.0", "date": "2026-07-28", "changes": ["初始版本"] },
     { "version": "1.1.0", "date": "2026-07-28", "changes": [
       "FileState: 标注值 6 为 P3 文件锁定保留位",
@@ -115,7 +116,7 @@
         { "name": "Path",          "type": "TEXT",    "nullable": false, "role": "PK",   "description": "相对同步根的路径，以 / 开头。目录以 / 结尾" },
         { "name": "Type",          "type": "INTEGER", "nullable": false, "role": "",     "description": "FileType 枚举" },
         { "name": "CurrentHash",   "type": "TEXT",    "nullable": true,  "role": "",     "description": "当前版本 SHA-256 (64 hex)。目录为 NULL" },
-        { "name": "CurrentSize",   "type": "INTEGER", "nullable": false, "role": "",     "description": "当前版本字节数。目录为 0。默认 0" },
+        { "name": "CurrentSize",   "type": "INTEGER", "nullable": false, "role": "",     "csharpType": "long", "description": "当前版本字节数。目录为 0。默认 0" },
         { "name": "Version",       "type": "INTEGER", "nullable": false, "role": "IDX",  "description": "当前版本号。全局单调递增。默认 1" },
         { "name": "LastModified",  "type": "TEXT",    "nullable": false, "role": "IDX",  "description": "ISO 8601 UTC 时间戳" },
         { "name": "State",         "type": "INTEGER", "nullable": false, "role": "IDX",  "description": "FileState 枚举。默认 0 (Synced)" },
@@ -145,7 +146,7 @@
         { "name": "FilePath",    "type": "TEXT",    "nullable": false, "role": "FK→FileEntry(Path) IDX", "description": "关联文件路径" },
         { "name": "Version",     "type": "INTEGER", "nullable": false, "role": "IDX", "description": "该记录对应的版本号" },
         { "name": "Hash",        "type": "TEXT",    "nullable": false, "role": "",    "description": "该版本 SHA-256" },
-        { "name": "Size",        "type": "INTEGER", "nullable": false, "role": "",    "description": "该版本字节数" },
+        { "name": "Size",        "type": "INTEGER", "nullable": false, "role": "",    "csharpType": "long", "description": "该版本字节数" },
         { "name": "StoragePath", "type": "TEXT",    "nullable": false, "role": "",    "description": "版本文件在 .versions/ 中的路径" },
         { "name": "Timestamp",   "type": "TEXT",    "nullable": false, "role": "IDX", "description": "版本创建时间 (UTC)" },
         { "name": "DeviceId",    "type": "TEXT",    "nullable": false, "role": "FK→Device(Id)", "description": "创建设备" },
@@ -250,7 +251,7 @@
         { "name": "Operation",   "type": "INTEGER", "nullable": false, "role": "",    "description": "SyncOperation 枚举" },
         { "name": "Priority",    "type": "INTEGER", "nullable": false, "role": "",    "description": "QueuePriority 枚举。默认 0" },
         { "name": "BaseVersion", "type": "INTEGER", "nullable": true,  "role": "",    "description": "冲突检测用" },
-        { "name": "FileSize",    "type": "INTEGER", "nullable": true,  "role": "",    "description": "进度估算用" },
+        { "name": "FileSize",    "type": "INTEGER", "nullable": true,  "role": "",    "csharpType": "long", "description": "进度估算用" },
         { "name": "RetryCount",  "type": "INTEGER", "nullable": false, "role": "",    "description": "默认 0" },
         { "name": "LastError",   "type": "TEXT",    "nullable": true,  "role": "" },
         { "name": "CreatedAt",   "type": "TEXT",    "nullable": false, "role": "IDX", "description": "FIFO 排序依据" }
@@ -267,7 +268,7 @@
         { "name": "Path",    "type": "TEXT",    "nullable": false, "role": "PK" },
         { "name": "Type",    "type": "INTEGER", "nullable": false, "role": "",   "description": "FileType 枚举" },
         { "name": "Hash",    "type": "TEXT",    "nullable": true  },
-        { "name": "Size",    "type": "INTEGER", "nullable": false, "role": "",   "description": "默认 0" },
+        { "name": "Size",    "type": "INTEGER", "nullable": false, "role": "",   "csharpType": "long", "description": "默认 0" },
         { "name": "Version", "type": "INTEGER", "nullable": false, "role": "",   "description": "默认 0" },
         { "name": "State",   "type": "INTEGER", "nullable": false, "role": "",   "description": "FileState 枚举。默认 0" }
       ]
@@ -291,7 +292,7 @@
         { "name": "LocalUri",   "type": "TEXT",    "nullable": false, "role": "IDX", "description": "本地 MediaStore URI" },
         { "name": "RemotePath", "type": "TEXT",    "nullable": false, "role": "",    "description": "上传后的服务端路径" },
         { "name": "FileHash",   "type": "TEXT",    "nullable": false, "role": "",    "description": "SHA-256（去重依据）" },
-        { "name": "FileSize",   "type": "INTEGER", "nullable": false, "role": "" },
+        { "name": "FileSize",   "type": "INTEGER", "nullable": false, "csharpType": "long", "role": "" },
         { "name": "Status",     "type": "INTEGER", "nullable": false, "role": "",    "description": "BackupStatus 枚举。默认 0 (Pending)" },
         { "name": "CreatedAt",  "type": "TEXT",    "nullable": false, "role": "" }
       ]
@@ -304,7 +305,7 @@
         { "name": "Path",      "type": "TEXT",    "nullable": false, "role": "PK" },
         { "name": "LocalPath", "type": "TEXT",    "nullable": false, "role": "",   "description": "本地缓存文件绝对路径" },
         { "name": "FileHash",  "type": "TEXT",    "nullable": false, "role": "",   "description": "缓存版本哈希（判断是否过期）" },
-        { "name": "FileSize",  "type": "INTEGER", "nullable": false, "role": "" },
+        { "name": "FileSize",  "type": "INTEGER", "nullable": false, "csharpType": "long", "role": "" },
         { "name": "CachedAt",  "type": "TEXT",    "nullable": false, "role": "" }
       ]
     },

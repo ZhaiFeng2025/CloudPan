@@ -82,7 +82,7 @@ public class FileIndexService
         if (existing != null)
         {
             existing.CurrentHash = hash;
-            existing.CurrentSize = (int)size;
+            existing.CurrentSize = size;
             existing.Version = newVersion;
             existing.LastModified = lastModified;
             existing.State = (int)state;
@@ -94,7 +94,7 @@ public class FileIndexService
                 Path = path,
                 Type = (int)type,
                 CurrentHash = hash,
-                CurrentSize = (int)size,
+                CurrentSize = size,
                 Version = newVersion,
                 LastModified = lastModified,
                 State = (int)state,
