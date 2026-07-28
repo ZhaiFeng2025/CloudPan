@@ -1,0 +1,153 @@
+using System.Text.Json;
+using CloudPan.CodeGen.Generators;
+
+namespace CloudPan.CodeGen;
+
+/// <summary>
+/// CloudPan 契约代码生成器。
+/// 读取 shared-spec.json，生成 C# 枚举、DTO、实体、Controller 骨架。
+///
+/// 用法：
+///   dotnet run --project CloudPan.CodeGen              # 生成所有代码
+///   dotnet run --project CloudPan.CodeGen -- --verify  # 校验模式：比对生成输出与现有文件
+/// </summary>
+public static class Program
+{
+    // 输出目录（相对于解决方案根目录）
+    private const string SharedOutputDir = "CloudPan.Shared/Generated";
+    private const string ServerOutputDir = "CloudPan.Server/Generated";
+
+    public static int Main(string[] args)
+    {
+        var verifyMode = args.Contains("--verify");
+
+        try
+        {
+            // 1. 定位 shared-spec.json
+            var solutionRoot = FindSolutionRoot();
+            var specPath = Path.Combine(solutionRoot, "shared-spec.json");
+            if (!File.Exists(specPath))
+            {
+                Console.Error.WriteLine($"❌ 找不到 shared-spec.json: {specPath}");
+                return 1;
+            }
+
+            Console.WriteLine($"📄 读取契约: {specPath}");
+            var json = File.ReadAllText(specPath);
+            var spec = JsonSerializer.Deserialize<SpecDocument>(json, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+            if (spec == null)
+            {
+                Console.Error.WriteLine("❌ 无法解析 shared-spec.json");
+                return 1;
+            }
+
+            Console.WriteLine($"📋 契约版本: {spec.Version}");
+
+            // 2. 生成代码
+            var generators = new Dictionary<string, (string Dir, string File, string Content)>
+            {
+                ["枚举"] = (SharedOutputDir, "Enums.g.cs", EnumGenerator.Generate(spec)),
+                ["DTO"]  = (SharedOutputDir, "Dtos.g.cs",   DtoGenerator.Generate(spec)),
+                ["实体"] = (ServerOutputDir, "Entities.g.cs", EntityGenerator.Generate(spec)),
+                ["Controller"] = (ServerOutputDir, "Controllers.g.cs", ControllerStubGenerator.Generate(spec)),
+            };
+
+            var hasChanges = false;
+
+            foreach (var (label, (dir, filename, content)) in generators)
+            {
+                var outputDir = Path.Combine(solutionRoot, dir);
+                Directory.CreateDirectory(outputDir);
+                var outputPath = Path.Combine(outputDir, filename);
+
+                if (verifyMode)
+                {
+                    // 校验模式：比对生成内容与现有文件
+                    if (!File.Exists(outputPath))
+                    {
+                        Console.WriteLine($"❌ {label}: 文件不存在 — {outputPath}");
+                        hasChanges = true;
+                        continue;
+                    }
+
+                    var existing = File.ReadAllText(outputPath);
+                    if (existing != content)
+                    {
+                        Console.WriteLine($"❌ {label}: 生成内容与现有文件不一致 — {outputPath}");
+                        Console.WriteLine($"   提示: 运行 'dotnet run --project CloudPan.CodeGen' 重新生成");
+                        hasChanges = true;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"✅ {label}: 一致");
+                    }
+                }
+                else
+                {
+                    // 生成模式
+                    var previousContent = File.Exists(outputPath) ? File.ReadAllText(outputPath) : null;
+                    if (previousContent == content)
+                    {
+                        Console.WriteLine($"⏭️  {label}: 无变更 — {outputPath}");
+                    }
+                    else
+                    {
+                        File.WriteAllText(outputPath, content);
+                        Console.WriteLine($"✅ {label}: 已生成 — {outputPath}");
+                        hasChanges = true;
+                    }
+                }
+            }
+
+            // 3. 如果 Server 项目还不存在，提示
+            var serverDir = Path.Combine(solutionRoot, "CloudPan.Server");
+            if (!Directory.Exists(serverDir))
+            {
+                Console.WriteLine();
+                Console.WriteLine("⚠️  CloudPan.Server 项目尚未创建。实体和 Controller 已生成到:");
+                Console.WriteLine($"   {Path.Combine(solutionRoot, ServerOutputDir)}");
+                Console.WriteLine("   创建 Server 项目后，将文件移动到项目内即可。");
+            }
+
+            if (verifyMode && hasChanges)
+            {
+                Console.WriteLine();
+                Console.WriteLine("❌ 校验失败：生成代码与契约不一致。请重新生成。");
+                return 1;
+            }
+
+            Console.WriteLine();
+            Console.WriteLine(verifyMode ? "✅ 校验通过" : "✅ 代码生成完成");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"❌ 错误: {ex.Message}");
+            Console.Error.WriteLine(ex.StackTrace);
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// 向上查找包含 shared-spec.json 的解决方案根目录。
+    /// </summary>
+    private static string FindSolutionRoot()
+    {
+        // 从程序运行目录开始向上搜索
+        var dir = Environment.CurrentDirectory;
+        while (dir != null)
+        {
+            if (File.Exists(Path.Combine(dir, "shared-spec.json")))
+                return dir;
+            var parent = Directory.GetParent(dir);
+            if (parent == null) break;
+            dir = parent.FullName;
+        }
+        throw new InvalidOperationException(
+            "无法定位解决方案根目录（未找到 shared-spec.json）。" +
+            "请从解决方案根目录或其子目录运行此工具。");
+    }
+}
