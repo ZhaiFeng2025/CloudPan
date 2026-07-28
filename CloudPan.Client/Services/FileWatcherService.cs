@@ -63,9 +63,13 @@ public class FileWatcherService : IDisposable
 
             if (File.Exists(e.FullPath))
             {
-                // 文件哈希去重 —— 如果哈希未变则跳过
-                _logger.Info($"检测到变更: {relativePath}");
+                _logger.Info($"检测到文件变更: {relativePath}");
                 await _engine.EnqueueLocalChangeAsync(relativePath, SyncOperation.Upload);
+            }
+            else if (Directory.Exists(e.FullPath))
+            {
+                _logger.Info($"检测到目录创建: {relativePath}");
+                await _engine.EnqueueLocalChangeAsync(relativePath, SyncOperation.Upload); // 目录通过 mkdir 同步
             }
         }
         catch (Exception ex)
@@ -96,9 +100,26 @@ public class FileWatcherService : IDisposable
             if (ShouldIgnore(e.FullPath)) return;
             var oldPath = ToRelativePath(e.OldFullPath);
             var newPath = ToRelativePath(e.FullPath);
-            _logger.Info($"检测到重命名: {oldPath} → {newPath}");
-            await _engine.EnqueueLocalChangeAsync(oldPath, SyncOperation.Delete);
-            await _engine.EnqueueLocalChangeAsync(newPath, SyncOperation.Upload);
+
+            if (Directory.Exists(e.FullPath))
+            {
+                // 目录重命名：递归枚举所有子文件，入队上传
+                _logger.Info($"检测到目录重命名: {oldPath} → {newPath}");
+                await _engine.EnqueueLocalChangeAsync(oldPath, SyncOperation.Delete);
+
+                foreach (var file in Directory.GetFiles(e.FullPath, "*", SearchOption.AllDirectories))
+                {
+                    var relPath = "/" + Path.GetRelativePath(_syncRoot, file).Replace('\\', '/');
+                    await _engine.EnqueueLocalChangeAsync(relPath, SyncOperation.Upload);
+                }
+                // 创建新目录结构（通过上传文件时自动创建父目录）
+            }
+            else
+            {
+                _logger.Info($"检测到文件重命名: {oldPath} → {newPath}");
+                await _engine.EnqueueLocalChangeAsync(oldPath, SyncOperation.Delete);
+                await _engine.EnqueueLocalChangeAsync(newPath, SyncOperation.Upload);
+            }
         }
         catch (Exception ex)
         {

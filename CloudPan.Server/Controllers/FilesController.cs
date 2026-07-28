@@ -62,8 +62,14 @@ public class FilesController : ControllerBase
         if (string.IsNullOrWhiteSpace(path))
             return BadRequest(new { error = new { code = "BAD_REQUEST", message = "path 参数缺失" } });
 
-        // 确保路径以 / 开头
         if (!path.StartsWith('/')) path = "/" + path;
+
+        var pathErr = _storage.ValidatePath(path);
+        if (pathErr != null)
+            return BadRequest(new { error = new { code = "BAD_REQUEST", message = pathErr } });
+
+        // 先分配版本号，再写文件，避免孤儿文件
+        var newVersion = await _version.NextVersionAsync();
 
         // 写入文件
         await using var stream = file.OpenReadStream();
@@ -73,9 +79,6 @@ public class FilesController : ControllerBase
 
         // 计算哈希和大小
         var hash = await _storage.ComputeHashAsync(_storage.GetAbsolutePath(path));
-
-        // 分配版本号
-        var newVersion = await _version.NextVersionAsync();
 
         // 更新索引
         var entry = await _index.UpsertFileAsync(
@@ -104,10 +107,14 @@ public class FilesController : ControllerBase
         if (string.IsNullOrWhiteSpace(path))
             return BadRequest(new { error = new { code = "BAD_REQUEST", message = "path 参数缺失" } });
 
+        var entry = await _index.GetByPathAsync(path);
+        if (entry == null)
+            return NotFound(new { error = new { code = "NOT_FOUND", message = $"文件不存在: {path}" } });
+        if (entry.Type == (int)FileType.Directory)
+            return BadRequest(new { error = new { code = "BAD_REQUEST", message = "不能下载目录" } });
+
         if (!_storage.Exists(path))
             return NotFound(new { error = new { code = "NOT_FOUND", message = $"文件不存在: {path}" } });
-
-        var entry = await _index.GetByPathAsync(path);
         var absolutePath = _storage.GetAbsolutePath(path);
         var stream = _storage.OpenRead(path);
         var fileName = Path.GetFileName(path);
@@ -129,49 +136,28 @@ public class FilesController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Path))
             return BadRequest(new { error = new { code = "BAD_REQUEST", message = "path 参数缺失" } });
 
+        var pathErr = _storage.ValidatePath(request.Path);
+        if (pathErr != null)
+            return BadRequest(new { error = new { code = "BAD_REQUEST", message = pathErr } });
+
         var entry = await _index.GetByPathAsync(request.Path);
         if (entry == null)
             return NotFound(new { error = new { code = "NOT_FOUND", message = $"文件不存在: {request.Path}" } });
 
         var isDirectory = entry.Type == (int)FileType.Directory;
 
-        // 递归收集子文件信息（在 DB 删除之前）
-        var toDelete = new List<(string Path, bool IsDir)>();
+        // 先删除物理文件，再删除 DB（物理操作失败不阻塞 DB）
         if (isDirectory)
         {
-            // 用存储层枚举子文件
-            var dirAbsPath = _storage.GetAbsolutePath(request.Path);
-            if (Directory.Exists(dirAbsPath))
-            {
-                foreach (var file in Directory.GetFiles(dirAbsPath, "*", SearchOption.AllDirectories))
-                {
-                    var relPath = "/" + Path.GetRelativePath(_storage.GetAbsolutePath("/").TrimEnd(Path.DirectorySeparatorChar), file).Replace('\\', '/');
-                    toDelete.Add((relPath, false));
-                }
-                foreach (var dir in Directory.GetDirectories(dirAbsPath, "*", SearchOption.AllDirectories))
-                {
-                    var relPath = "/" + Path.GetRelativePath(_storage.GetAbsolutePath("/").TrimEnd(Path.DirectorySeparatorChar), dir).Replace('\\', '/') + "/";
-                    toDelete.Add((relPath, true));
-                }
-            }
+            try { _storage.DeleteDirectory(request.Path); } catch { }
         }
-        toDelete.Add((request.Path, isDirectory));
+        else
+        {
+            try { _storage.Delete(request.Path); } catch { }
+        }
 
         // 删除 DB 条目
-        var deletedPaths = await _index.DeleteAsync(request.Path, isDirectory);
-
-        // 删除物理文件（从内向外：先文件后目录）
-        foreach (var (path, isDir) in toDelete.OrderByDescending(d => d.Path.Length))
-        {
-            try
-            {
-                if (isDir)
-                    _storage.DeleteDirectory(path);
-                else
-                    _storage.Delete(path);
-            }
-            catch { /* 磁盘操作失败不阻塞 */ }
-        }
+        await _index.DeleteAsync(request.Path, isDirectory);
 
         var newVersion = await _version.NextVersionAsync();
 
@@ -190,20 +176,20 @@ public class FilesController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.OldPath) || string.IsNullOrWhiteSpace(request.NewPath))
             return BadRequest(new { error = new { code = "BAD_REQUEST", message = "oldPath 和 newPath 参数缺失" } });
 
+        var err1 = _storage.ValidatePath(request.OldPath);
+        var err2 = _storage.ValidatePath(request.NewPath);
+        if (err1 != null || err2 != null)
+            return BadRequest(new { error = new { code = "BAD_REQUEST", message = err1 ?? err2 } });
+
         var entry = await _index.GetByPathAsync(request.OldPath);
         if (entry == null)
             return NotFound(new { error = new { code = "NOT_FOUND", message = $"文件不存在: {request.OldPath}" } });
 
         var isDirectory = entry.Type == (int)FileType.Directory;
-        var newVersion = await _version.NextVersionAsync();
 
-        // 更新索引
-        await _index.MoveAsync(request.OldPath, request.NewPath, newVersion, isDirectory);
-
-        // 移动物理文件
+        // 先移动物理文件（失败则不更新索引）
         if (isDirectory)
         {
-            // 目录移动：需要用 Directory.Move
             var src = _storage.GetAbsolutePath(request.OldPath);
             var dst = _storage.GetAbsolutePath(request.NewPath);
             if (Directory.Exists(src))
@@ -213,6 +199,11 @@ public class FilesController : ControllerBase
         {
             _storage.Move(request.OldPath, request.NewPath);
         }
+
+        var newVersion = await _version.NextVersionAsync();
+
+        // 更新索引
+        await _index.MoveAsync(request.OldPath, request.NewPath, newVersion, isDirectory);
 
         return Ok(new
         {
@@ -230,6 +221,9 @@ public class FilesController : ControllerBase
             return BadRequest(new { error = new { code = "BAD_REQUEST", message = "path 参数缺失" } });
 
         var dirPath = request.Path;
+        var pathErr = _storage.ValidatePath(dirPath);
+        if (pathErr != null)
+            return BadRequest(new { error = new { code = "BAD_REQUEST", message = pathErr } });
         if (!dirPath.StartsWith('/'))
             dirPath = "/" + dirPath;
 
@@ -239,8 +233,9 @@ public class FilesController : ControllerBase
 
         try
         {
-            await _index.CreateDirectoryAsync(dirPath);
             _storage.CreateDirectory(dirPath);
+            var dirVersion = await _version.NextVersionAsync();
+            await _index.CreateDirectoryAsync(dirPath, dirVersion);
             return Ok(new { data = new { path = dirPath } });
         }
         catch (InvalidOperationException)

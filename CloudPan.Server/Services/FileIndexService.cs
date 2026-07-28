@@ -137,24 +137,7 @@ public class FileIndexService
                 .Where(f => f.Path.StartsWith(prefix))
                 .ToListAsync();
 
-            foreach (var child in children)
-            {
-                deletedPaths.Add(child.Path);
-
-                // 记录版本
-                db.VersionRecords.Add(new VersionRecord
-                {
-                    FilePath = child.Path,
-                    Version = child.Version,
-                    Hash = child.CurrentHash ?? "",
-                    Size = child.CurrentSize,
-                    StoragePath = "",
-                    Timestamp = DateTime.UtcNow.ToString("O"),
-                    DeviceId = "server",
-                    RestoredFromVersion = null
-                });
-            }
-
+            deletedPaths.AddRange(children.Select(c => c.Path));
             db.FileEntries.RemoveRange(children);
         }
 
@@ -162,20 +145,6 @@ public class FileIndexService
         if (entry != null)
         {
             deletedPaths.Add(entry.Path);
-
-            // 主条目也记录版本历史
-            db.VersionRecords.Add(new VersionRecord
-            {
-                FilePath = entry.Path,
-                Version = entry.Version,
-                Hash = entry.CurrentHash ?? "",
-                Size = entry.CurrentSize,
-                StoragePath = "",
-                Timestamp = DateTime.UtcNow.ToString("O"),
-                DeviceId = "server",
-                RestoredFromVersion = null
-            });
-
             db.FileEntries.Remove(entry);
         }
 
@@ -224,7 +193,7 @@ public class FileIndexService
     /// <summary>
     /// 创建文件夹条目。
     /// </summary>
-    public async Task CreateDirectoryAsync(string path)
+    public async Task CreateDirectoryAsync(string path, int version)
     {
         await using var db = await _dbFactory.CreateDbContextAsync();
 
@@ -237,7 +206,7 @@ public class FileIndexService
             Type = (int)FileType.Directory,
             CurrentHash = null,
             CurrentSize = 0,
-            Version = 0,
+            Version = version,
             LastModified = DateTime.UtcNow.ToString("O"),
             State = (int)FileState.Synced,
             CreatedAt = DateTime.UtcNow.ToString("O")

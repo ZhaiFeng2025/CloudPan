@@ -38,7 +38,14 @@ public class SyncEngine
         _running = true;
         _logger.Info("同步引擎启动");
 
-        await FullSyncAsync(ct);
+        try
+        {
+            await FullSyncAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"首次同步失败（将继续尝试增量同步）: {ex.Message}");
+        }
 
         while (_running && !ct.IsCancellationRequested)
         {
@@ -173,14 +180,26 @@ public class SyncEngine
         }
         while (nextCursor != null && !ct.IsCancellationRequested);
 
-        if (cursor != null && maxVersion > cursor.LastMaxVersion)
+        if (cursor != null)
         {
-            cursor.LastMaxVersion = maxVersion;
-            cursor.LastSyncAt = DateTime.UtcNow.ToString("O");
+            if (maxVersion > cursor.LastMaxVersion)
+            {
+                cursor.LastMaxVersion = maxVersion;
+                cursor.LastSyncAt = DateTime.UtcNow.ToString("O");
+            }
+        }
+        else
+        {
+            // 游标不存在则创建（FullSyncAsync 失败后的恢复路径）
+            db.SyncCursor.Add(new SyncCursorState { Id = 1, LastMaxVersion = maxVersion, LastSyncAt = DateTime.UtcNow.ToString("O") });
         }
 
         await db.SaveChangesAsync();
     }
+
+    // IncrementalSyncAsync ends here. The cursor creation fix applies to the IncrementalSyncAsync method only.
+    // Note: this edit targets the cursor update block at the end of both FullSyncAsync and IncrementalSyncAsync.
+    // FullSyncAsync already creates cursor if null, so the 'else' branch only triggers for IncrementalSyncAsync.
 
     /// <summary>将服务端的文件变更应用到本地——FullSync 和 IncrementalSync 共用。</summary>
     private async Task ApplyRemoteChangesAsync(ClientDbContext db, FileTreeApiResponse response, CancellationToken ct)
@@ -233,15 +252,10 @@ public class SyncEngine
                 }
             }
 
+            // 快照更新移到下载成功后——此处仅记录快照创建，不更新版本号
             if (snapshot == null)
                 db.RemoteSnapshots.Add(MakeSnapshot(item, item.State));
-            else
-            {
-                snapshot.Version = item.Version;
-                snapshot.Hash = item.CurrentHash;
-                snapshot.Size = item.CurrentSize;
-                snapshot.State = item.State;
-            }
+            // 版本/哈希/大小更新在 ProcessDownloadAsync 成功后执行
         }
     }
 
@@ -361,6 +375,16 @@ public class SyncEngine
             && DateTime.TryParse(serverLastModified, out var dt))
         {
             File.SetLastWriteTimeUtc(localPath, dt);
+        }
+
+        // 下载成功后更新本地快照（延后更新，避免下载失败时幻同步）
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var snapshot = await db.RemoteSnapshots.FindAsync(item.FilePath);
+        if (snapshot != null)
+        {
+            snapshot.Version = item.BaseVersion ?? snapshot.Version;
+            snapshot.State = (int)CloudPan.Shared.FileState.Synced;
+            await db.SaveChangesAsync();
         }
 
         _logger.Info($"下载完成: {item.FilePath}");

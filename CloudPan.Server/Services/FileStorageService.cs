@@ -32,6 +32,28 @@ public class FileStorageService
     }
 
     /// <summary>
+    /// 验证路径在同步根内，防止目录遍历攻击。
+    /// 返回 null 表示合法，否则返回错误信息。
+    /// </summary>
+    public string? ValidatePath(string relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath))
+            return "路径不能为空";
+        if (relativePath.Contains(".."))
+            return "路径包含非法字符 (..)";
+        if (relativePath.Contains('\0'))
+            return "路径包含空字符";
+
+        var absolutePath = Path.GetFullPath(GetAbsolutePath(relativePath));
+        var rootPath = Path.GetFullPath(_syncRoot);
+
+        if (!absolutePath.StartsWith(rootPath, StringComparison.OrdinalIgnoreCase))
+            return "路径越界";
+
+        return null; // 合法
+    }
+
+    /// <summary>
     /// 计算文件的 SHA-256 哈希（64 字符十六进制）。
     /// </summary>
     public async Task<string> ComputeHashAsync(string absolutePath, CancellationToken ct = default)

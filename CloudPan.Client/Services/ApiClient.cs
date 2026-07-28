@@ -86,9 +86,8 @@ public class ApiClient : IDisposable
             await stream.CopyToAsync(fileStream);
         }
 
-        // 原子替换
-        if (File.Exists(localPath)) File.Delete(localPath);
-        File.Move(tmpPath, localPath);
+        // 原子替换（同卷 Move+overwrite 是原子的）
+        File.Move(tmpPath, localPath, overwrite: true);
 
         return lastModified;
     }
