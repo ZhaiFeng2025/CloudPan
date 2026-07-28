@@ -52,7 +52,7 @@ public static class Program
                 ["枚举"] = (SharedOutputDir, "Enums.g.cs", EnumGenerator.Generate(spec)),
                 ["DTO"]  = (SharedOutputDir, "Dtos.g.cs",   DtoGenerator.Generate(spec)),
                 ["实体"] = (ServerOutputDir, "Entities.g.cs", EntityGenerator.Generate(spec)),
-                ["Controller"] = (ServerOutputDir, "Controllers.g.cs", ControllerStubGenerator.Generate(spec)),
+                // Controller 骨架仅作参考，实际业务逻辑需手写，不再自动生成
             };
 
             var hasChanges = false;
