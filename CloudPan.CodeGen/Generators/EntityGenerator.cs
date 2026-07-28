@@ -60,10 +60,11 @@ public static class EntityGenerator
 
             foreach (var field in entity.Fields)
             {
-                var csType = MapToCSharpType(field);
-                var nullable = field.Nullable && csType != "string" ? "?" : "";
+                var csType = TypeMapper.MapToCSharp(field);
+                var nullable = field.Nullable ? "?" : "";
                 var isPk = field.Role.Contains("PK");
                 var isAutoIncrement = field.Role.Contains("AUTOINCREMENT");
+                var isFk = field.Role.Contains("FK");
 
                 sb.AppendLine($"    /// <summary>{field.Description ?? field.Name}</summary>");
 
@@ -72,6 +73,14 @@ public static class EntityGenerator
                     sb.AppendLine($"    [Key]");
                     if (isAutoIncrement)
                         sb.AppendLine($"    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]");
+                }
+
+                if (isFk)
+                {
+                    // 从 FK→Entity(Col) 中提取目标类型
+                    var fkTarget = ParseForeignKeyType(field.Role);
+                    if (fkTarget != null)
+                        sb.AppendLine($"    [ForeignKey(nameof({fkTarget}))]");
                 }
 
                 if (!field.Nullable && csType == "string")
@@ -86,9 +95,32 @@ public static class EntityGenerator
 
             sb.AppendLine("}");
             sb.AppendLine();
+
+            // 为 AppConfig 生成预定义键常量
+            if (entityName == "AppConfig" && entity.PredefinedKeys != null && entity.PredefinedKeys.Count > 0)
+            {
+                sb.AppendLine($"/// <summary>");
+                sb.AppendLine($"/// AppConfig 预定义键名常量。");
+                sb.AppendLine($"/// </summary>");
+                sb.AppendLine($"public static class AppConfigKeys");
+                sb.AppendLine("{");
+                foreach (var (key, description) in entity.PredefinedKeys)
+                {
+                    sb.AppendLine($"    /// <summary>{description}</summary>");
+                    sb.AppendLine($"    public const string {ToPascalCase(key)} = \"{key}\";");
+                }
+                sb.AppendLine("}");
+                sb.AppendLine();
+            }
         }
 
         return sb.ToString();
+    }
+
+    private static string ToPascalCase(string key)
+    {
+        return string.Concat(key.Split('_')
+            .Select(p => p.Length > 0 ? char.ToUpper(p[0]) + p[1..] : ""));
     }
 
     /// <summary>
@@ -123,16 +155,18 @@ public static class EntityGenerator
         return $"    [Index({string.Join(", ", columns)}, {uniqueFlag}Name = \"{indexSql.Split(' ')[0]}\")]";
     }
 
-    private static string MapToCSharpType(FieldDef field)
+    /// <summary>
+    /// 从 FK→Entity(Col) 格式中提取目标实体类型名。
+    /// </summary>
+    private static string? ParseForeignKeyType(string role)
     {
-        return field.Type switch
-        {
-            "TEXT" => "string",
-            "INTEGER" => "int",
-            "REAL" => "double",
-            "BLOB" => "byte[]",
-            _ => "string"
-        };
+        var fkMarker = "FK→";
+        var idx = role.IndexOf(fkMarker);
+        if (idx < 0) return null;
+        var start = idx + fkMarker.Length;
+        var parenIdx = role.IndexOf('(', start);
+        if (parenIdx < 0) return role[start..].Trim();
+        return role[start..parenIdx].Trim();
     }
 
     private static string? GetDefaultValue(FieldDef field)

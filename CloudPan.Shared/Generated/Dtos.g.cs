@@ -18,7 +18,7 @@ public record FileEntryDto(
     [property: JsonPropertyName("type")]
     int Type,
     [property: JsonPropertyName("hash")]
-    string CurrentHash,
+    string? CurrentHash,
     [property: JsonPropertyName("size")]
     int CurrentSize,
     [property: JsonPropertyName("version")]
@@ -56,7 +56,7 @@ public record DeviceDto(
     [property: JsonPropertyName("name")]
     string Name,
     [property: JsonPropertyName("person")]
-    string Person,
+    string? Person,
     [property: JsonPropertyName("lastSeen")]
     string LastSeen,
     [property: JsonPropertyName("online")]
@@ -72,7 +72,7 @@ public record ShareDto(
     [property: JsonPropertyName("filePath")]
     string FilePath,
     [property: JsonPropertyName("expiresAt")]
-    string ExpiresAt,
+    string? ExpiresAt,
     [property: JsonPropertyName("maxDownloads")]
     int? MaxDownloads,
     [property: JsonPropertyName("usedDownloads")]
@@ -96,7 +96,7 @@ public record SyncLogDto(
     [property: JsonPropertyName("result")]
     int Result,
     [property: JsonPropertyName("details")]
-    string Details,
+    string? Details,
     [property: JsonPropertyName("createdAt")]
     string CreatedAt
 );

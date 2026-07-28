@@ -29,7 +29,7 @@ public class FileEntry
     public int Type { get; set; }
 
     /// <summary>当前版本 SHA-256 (64 hex)。目录为 NULL</summary>
-    public string CurrentHash { get; set; }
+    public string? CurrentHash { get; set; }
 
     /// <summary>当前版本字节数。目录为 0。默认 0</summary>
     public int CurrentSize { get; set; } = 0;
@@ -65,6 +65,7 @@ public class VersionRecord
     public int Id { get; set; }
 
     /// <summary>关联文件路径</summary>
+    [ForeignKey(nameof(FileEntry))]
     [Required]
     public string FilePath { get; set; }
 
@@ -87,6 +88,7 @@ public class VersionRecord
     public string Timestamp { get; set; }
 
     /// <summary>创建设备</summary>
+    [ForeignKey(nameof(Device))]
     [Required]
     public string DeviceId { get; set; }
 
@@ -111,7 +113,7 @@ public class Device
     public string Name { get; set; }
 
     /// <summary>设备所属人。仅展示，不参与权限</summary>
-    public string Person { get; set; }
+    public string? Person { get; set; }
 
     /// <summary>最后在线时间 (UTC)</summary>
     [Required]
@@ -145,10 +147,10 @@ public class Share
     public string FilePath { get; set; }
 
     /// <summary>密码 SHA-256。NULL=无密码</summary>
-    public string PasswordHash { get; set; }
+    public string? PasswordHash { get; set; }
 
     /// <summary>过期时间 (UTC)。NULL=永不过期</summary>
-    public string ExpiresAt { get; set; }
+    public string? ExpiresAt { get; set; }
 
     /// <summary>最大下载次数。NULL=不限</summary>
     public int? MaxDownloads { get; set; }
@@ -194,7 +196,7 @@ public class SyncLog
     public int Result { get; set; }
 
     /// <summary>附加信息</summary>
-    public string Details { get; set; }
+    public string? Details { get; set; }
 
     /// <summary>操作时间</summary>
     [Required]
@@ -262,5 +264,24 @@ public class AppConfig
     [Required]
     public string Value { get; set; }
 
+}
+
+/// <summary>
+/// AppConfig 预定义键名常量。
+/// </summary>
+public static class AppConfigKeys
+{
+    /// <summary>SHA-256(家庭Token)</summary>
+    public const string TokenHash = "token_hash";
+    /// <summary>自签证书 SHA-256 指纹</summary>
+    public const string CertFingerprint = "cert_fingerprint";
+    /// <summary>保留版本数。默认 '5'</summary>
+    public const string MaxVersions = "max_versions";
+    /// <summary>定时扫描间隔。默认 '5'</summary>
+    public const string ScanIntervalMinutes = "scan_interval_minutes";
+    /// <summary>服务端版本号</summary>
+    public const string ServerVersion = "server_version";
+    /// <summary>全局单调版本号计数器</summary>
+    public const string GlobalVersion = "global_version";
 }
 

@@ -51,8 +51,8 @@ public static class DtoGenerator
             {
                 var (field, jsonName) = mappedFields[i];
                 var comma = i < mappedFields.Count - 1 ? "," : "";
-                var csType = MapToCSharpType(field);
-                var nullable = field.Nullable && csType != "string" ? "?" : "";
+                var csType = TypeMapper.MapToCSharp(field);
+                var nullable = field.Nullable ? "?" : "";
 
                 sb.AppendLine($"    [property: JsonPropertyName(\"{jsonName}\")]");
                 sb.AppendLine($"    {csType}{nullable} {field.Name}{comma}");
@@ -65,15 +65,4 @@ public static class DtoGenerator
         return sb.ToString();
     }
 
-    private static string MapToCSharpType(FieldDef field)
-    {
-        return field.Type switch
-        {
-            "TEXT" => "string",
-            "INTEGER" => "int",
-            "REAL" => "double",
-            "BLOB" => "byte[]",
-            _ => "string"
-        };
-    }
 }

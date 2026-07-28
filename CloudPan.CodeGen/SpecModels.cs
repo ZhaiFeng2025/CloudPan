@@ -35,6 +35,9 @@ public record EnumDef(
     {
         if (Values.ValueKind == JsonValueKind.Array)
         {
+            if (Values.GetArrayLength() == 0)
+                return new List<EnumValue>();
+
             var first = Values[0];
             if (first.ValueKind == JsonValueKind.String)
             {
