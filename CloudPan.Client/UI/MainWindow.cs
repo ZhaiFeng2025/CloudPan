@@ -66,7 +66,7 @@ public class MainWindow : Form
                 _queueLabel.Text = $"队列: {completed}/{total}";
         };
 
-        FormClosing += (_, _) => { Hide(); };
+        FormClosing += (_, e) => { e.Cancel = true; Hide(); };
     }
 
     private void TogglePause()

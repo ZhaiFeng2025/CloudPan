@@ -162,6 +162,20 @@ public class FileIndexService
         if (entry != null)
         {
             deletedPaths.Add(entry.Path);
+
+            // 主条目也记录版本历史
+            db.VersionRecords.Add(new VersionRecord
+            {
+                FilePath = entry.Path,
+                Version = entry.Version,
+                Hash = entry.CurrentHash ?? "",
+                Size = entry.CurrentSize,
+                StoragePath = "",
+                Timestamp = DateTime.UtcNow.ToString("O"),
+                DeviceId = "server",
+                RestoredFromVersion = null
+            });
+
             db.FileEntries.Remove(entry);
         }
 
@@ -171,36 +185,40 @@ public class FileIndexService
 
     /// <summary>
     /// 移动/重命名文件条目（递归处理子文件）。
+    /// 使用 SQLite 原生 UPDATE 直接修改主键（SQLite 允许），避免两步提交的数据丢失风险。
     /// </summary>
     public async Task MoveAsync(string oldPath, string newPath, int newVersion, bool isDirectory)
     {
         await using var db = await _dbFactory.CreateDbContextAsync();
+        await using var tx = await db.Database.BeginTransactionAsync();
 
-        var entry = await db.FileEntries.FindAsync(oldPath);
-        if (entry == null) throw new KeyNotFoundException($"文件不存在: {oldPath}");
+        var timestamp = DateTime.UtcNow.ToString("O");
 
-        // 更新主条目
-        entry.Path = newPath;
-        entry.Version = newVersion;
-        entry.LastModified = DateTime.UtcNow.ToString("O");
-
-        // 如果是目录，递归更新所有子文件路径
-        if (isDirectory)
+        try
         {
-            var oldPrefix = oldPath.TrimEnd('/') + "/";
-            var newPrefix = newPath.TrimEnd('/') + "/";
-            var children = await db.FileEntries
-                .Where(f => f.Path.StartsWith(oldPrefix))
-                .ToListAsync();
+            // 原子更新主条目路径
+            await db.Database.ExecuteSqlRawAsync(
+                "UPDATE FileEntry SET Path = {0}, Version = {1}, LastModified = {2} WHERE Path = {3}",
+                newPath, newVersion, timestamp, oldPath);
 
-            foreach (var child in children)
+            if (isDirectory)
             {
-                child.Path = newPrefix + child.Path[oldPrefix.Length..];
-                child.Version = newVersion;
-            }
-        }
+                var oldPrefix = oldPath.TrimEnd('/') + "/";
+                var newPrefix = newPath.TrimEnd('/') + "/";
 
-        await db.SaveChangesAsync();
+                // SQLite 的 REPLACE 函数做前缀替换
+                await db.Database.ExecuteSqlRawAsync(
+                    "UPDATE FileEntry SET Path = REPLACE(Path, {0}, {1}), Version = {2} WHERE Path LIKE {3}",
+                    oldPrefix, newPrefix, newVersion, oldPrefix + "%");
+            }
+
+            await tx.CommitAsync();
+        }
+        catch
+        {
+            await tx.RollbackAsync();
+            throw;
+        }
     }
 
     /// <summary>

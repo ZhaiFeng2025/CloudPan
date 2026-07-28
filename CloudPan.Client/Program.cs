@@ -25,7 +25,7 @@ public static class Program
 
         // 初始化
         var dbFactory = CreateDbFactory(dbPath);
-        var logger = new ConsoleLogger();
+        var logger = new ClientLogger();
         var apiClient = new ApiClient(ServerUrl);
 
         ApplicationConfiguration.Initialize();

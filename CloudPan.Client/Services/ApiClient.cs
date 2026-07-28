@@ -35,9 +35,13 @@ public class ApiClient : IDisposable
     }
 
     /// <summary>获取文件树（增量）。</summary>
-    public async Task<FileTreeApiResponse?> GetFileTreeAsync(int sinceVersion, int limit = 5000)
+    public async Task<FileTreeApiResponse?> GetFileTreeAsync(int sinceVersion, int limit = 5000, string? subPath = null, string? cursor = null)
     {
         var url = $"/api/files/tree?sinceVersion={sinceVersion}&limit={limit}";
+        if (!string.IsNullOrEmpty(subPath))
+            url += $"&path={Uri.EscapeDataString(subPath)}";
+        if (!string.IsNullOrEmpty(cursor))
+            url += $"&cursor={Uri.EscapeDataString(cursor)}";
         var response = await _http.GetAsync(url);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<FileTreeApiResponse>(JsonOptions);
@@ -49,8 +53,8 @@ public class ApiClient : IDisposable
         IProgress<long>? progress = null)
     {
         using var form = new MultipartFormDataContent();
-        using var fileStream = File.OpenRead(localPath);
-        using var fileContent = new StreamContent(fileStream);
+        var fileStream = File.OpenRead(localPath);
+        var fileContent = new StreamContent(fileStream); // form 释放时自动释放 fileContent → fileStream
 
         form.Add(fileContent, "file", Path.GetFileName(remotePath));
         form.Add(new StringContent(remotePath), "path");
@@ -62,12 +66,15 @@ public class ApiClient : IDisposable
         return await response.Content.ReadFromJsonAsync<UploadApiResponse>(JsonOptions);
     }
 
-    /// <summary>下载文件。</summary>
-    public async Task DownloadAsync(string remotePath, string localPath, IProgress<long>? progress = null)
+    /// <summary>下载文件。返回服务端文件最后修改时间。</summary>
+    public async Task<string?> DownloadAsync(string remotePath, string localPath, IProgress<long>? progress = null)
     {
         var url = $"/api/files/download?path={Uri.EscapeDataString(remotePath)}";
         var response = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
         response.EnsureSuccessStatusCode();
+
+        var lastModified = response.Headers.TryGetValues("X-File-Modified", out var values)
+            ? values.FirstOrDefault() : null;
 
         var dir = Path.GetDirectoryName(localPath);
         if (dir != null) Directory.CreateDirectory(dir);
@@ -82,6 +89,8 @@ public class ApiClient : IDisposable
         // 原子替换
         if (File.Exists(localPath)) File.Delete(localPath);
         File.Move(tmpPath, localPath);
+
+        return lastModified;
     }
 
     /// <summary>删除文件。</summary>

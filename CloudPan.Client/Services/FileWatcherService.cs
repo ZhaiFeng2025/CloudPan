@@ -10,11 +10,11 @@ public class FileWatcherService : IDisposable
 {
     private readonly string _syncRoot;
     private readonly SyncEngine _engine;
-    private readonly ILogger _logger;
+    private readonly ClientLogger _logger;
     private FileSystemWatcher? _watcher;
     private System.Threading.Timer? _scanTimer;
 
-    public FileWatcherService(string syncRoot, SyncEngine engine, ILogger logger)
+    public FileWatcherService(string syncRoot, SyncEngine engine, ClientLogger logger)
     {
         _syncRoot = syncRoot;
         _engine = engine;

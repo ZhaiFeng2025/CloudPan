@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using CloudPan.Shared;
 using CloudPan.Client.Models;
 using Microsoft.EntityFrameworkCore;
@@ -14,15 +13,19 @@ public class SyncEngine
     private readonly ApiClient _api;
     private readonly string _syncRoot;
     private readonly IDbContextFactory<ClientDbContext> _dbFactory;
-    private readonly ILogger _logger;
+    private readonly ClientLogger _logger;
+
+    // 队列优先级阈值（与 shared-spec.json config.queuePriorityThreshold 对齐）
+    private const int QueuePriorityThreshold = 1_048_576; // 1MB
 
     private volatile bool _running;
     private volatile bool _paused;
+    private int _queueCompleted;
 
     public event Action<string>? StatusChanged;
     public event Action<int, int>? QueueProgressChanged; // (completed, total)
 
-    public SyncEngine(ApiClient api, string syncRoot, IDbContextFactory<ClientDbContext> dbFactory, ILogger logger)
+    public SyncEngine(ApiClient api, string syncRoot, IDbContextFactory<ClientDbContext> dbFactory, ClientLogger logger)
     {
         _api = api;
         _syncRoot = syncRoot;
@@ -30,16 +33,13 @@ public class SyncEngine
         _logger = logger;
     }
 
-    /// <summary>启动同步引擎。</summary>
     public async Task StartAsync(CancellationToken ct = default)
     {
         _running = true;
         _logger.Info("同步引擎启动");
 
-        // 首次启动：拉取全量文件树
         await FullSyncAsync(ct);
 
-        // 主循环
         while (_running && !ct.IsCancellationRequested)
         {
             if (!_paused)
@@ -54,11 +54,10 @@ public class SyncEngine
                     _logger.Error($"同步周期异常: {ex.Message}");
                 }
             }
-            await Task.Delay(3000, ct); // 3 秒轮询间隔
+            await Task.Delay(3000, ct);
         }
     }
 
-    /// <summary>暂停/恢复。</summary>
     public void SetPaused(bool paused)
     {
         _paused = paused;
@@ -71,6 +70,17 @@ public class SyncEngine
     public async Task EnqueueLocalChangeAsync(string relativePath, SyncOperation operation)
     {
         await using var db = await _dbFactory.CreateDbContextAsync();
+
+        // 如果是删除操作，取消同一文件待处理的上传/下载
+        if (operation == SyncOperation.Delete)
+        {
+            var pending = await db.SyncQueue
+                .Where(q => q.FilePath == relativePath
+                    && (q.Operation == (int)SyncOperation.Upload || q.Operation == (int)SyncOperation.Download))
+                .ToListAsync();
+            db.SyncQueue.RemoveRange(pending);
+        }
+
         var existing = await db.SyncQueue
             .FirstOrDefaultAsync(q => q.FilePath == relativePath && q.Operation == (int)operation);
 
@@ -84,7 +94,7 @@ public class SyncEngine
             {
                 FilePath = relativePath,
                 Operation = (int)operation,
-                Priority = fileSize < 1_048_576 ? (int)QueuePriority.High : (int)QueuePriority.Normal,
+                Priority = fileSize < QueuePriorityThreshold ? (int)QueuePriority.High : (int)QueuePriority.Normal,
                 FileSize = fileSize
             });
             await db.SaveChangesAsync();
@@ -93,7 +103,7 @@ public class SyncEngine
     }
 
     // ============================================================
-    // 私有方法
+    // 同步核心
     // ============================================================
 
     private async Task FullSyncAsync(CancellationToken ct)
@@ -103,60 +113,28 @@ public class SyncEngine
 
         await using var db = await _dbFactory.CreateDbContextAsync();
         var cursor = await db.SyncCursor.FindAsync(1);
+        var sinceVersion = cursor?.LastMaxVersion ?? 0;
+        var maxVersion = sinceVersion;
 
-        var response = await _api.GetFileTreeAsync(cursor?.LastMaxVersion ?? 0);
-        if (response == null) return;
-
-        foreach (var item in response.Data)
+        // 分页循环拉取全量文件树
+        string? nextCursor = null;
+        do
         {
-            var localPath = ToLocalPath(item.Path);
-            var snapshot = await db.RemoteSnapshots.FindAsync(item.Path);
+            var response = await _api.GetFileTreeAsync(sinceVersion, cursor: nextCursor);
+            if (response == null) break;
 
-            if (snapshot == null || snapshot.Version < item.Version)
-            {
-                // 需要下载
-                if (item.Path.Contains('/')) // is file (simplified: check for extension later)
-                {
-                    db.SyncQueue.Add(new SyncQueueItem
-                    {
-                        FilePath = item.Path,
-                        Operation = (int)SyncOperation.Download,
-                        Priority = (int)QueuePriority.Normal,
-                        BaseVersion = item.Version
-                    });
-                }
-            }
-
-            // 更新快照
-            if (snapshot == null)
-            {
-                db.RemoteSnapshots.Add(new RemoteSnapshot
-                {
-                    Path = item.Path,
-                    Type = item.Type,
-                    Hash = item.CurrentHash,
-                    Size = item.CurrentSize,
-                    Version = item.Version,
-                    State = item.State
-                });
-            }
-            else
-            {
-                snapshot.Hash = item.CurrentHash;
-                snapshot.Size = item.CurrentSize;
-                snapshot.Version = item.Version;
-                snapshot.State = item.State;
-            }
+            await ApplyRemoteChangesAsync(db, response, ct);
+            nextCursor = response.HasMore ? response.NextCursor : null;
+            if (response.MaxVersion > maxVersion) maxVersion = response.MaxVersion;
         }
+        while (nextCursor != null && !ct.IsCancellationRequested);
 
-        // 更新游标
+        // 更新游标（使用拉取开始前的版本号，确保正确性）
         if (cursor == null)
-        {
-            db.SyncCursor.Add(new SyncCursorState { Id = 1, LastMaxVersion = response.MaxVersion, LastSyncAt = DateTime.UtcNow.ToString("O") });
-        }
+            db.SyncCursor.Add(new SyncCursorState { Id = 1, LastMaxVersion = maxVersion, LastSyncAt = DateTime.UtcNow.ToString("O") });
         else
         {
-            cursor.LastMaxVersion = response.MaxVersion;
+            cursor.LastMaxVersion = maxVersion;
             cursor.LastSyncAt = DateTime.UtcNow.ToString("O");
         }
 
@@ -169,10 +147,32 @@ public class SyncEngine
         await using var db = await _dbFactory.CreateDbContextAsync();
         var cursor = await db.SyncCursor.FindAsync(1);
         var sinceVersion = cursor?.LastMaxVersion ?? 0;
+        var maxVersion = sinceVersion;
 
-        var response = await _api.GetFileTreeAsync(sinceVersion);
-        if (response == null || response.Data.Count == 0) return;
+        string? nextCursor = null;
+        do
+        {
+            var response = await _api.GetFileTreeAsync(sinceVersion, cursor: nextCursor);
+            if (response == null || response.Data.Count == 0) break;
 
+            await ApplyRemoteChangesAsync(db, response, ct);
+            nextCursor = response.HasMore ? response.NextCursor : null;
+            if (response.MaxVersion > maxVersion) maxVersion = response.MaxVersion;
+        }
+        while (nextCursor != null && !ct.IsCancellationRequested);
+
+        if (cursor != null && maxVersion > cursor.LastMaxVersion)
+        {
+            cursor.LastMaxVersion = maxVersion;
+            cursor.LastSyncAt = DateTime.UtcNow.ToString("O");
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>将服务端的文件变更应用到本地——FullSync 和 IncrementalSync 共用。</summary>
+    private async Task ApplyRemoteChangesAsync(ClientDbContext db, FileTreeApiResponse response, CancellationToken ct)
+    {
         foreach (var item in response.Data)
         {
             var localPath = ToLocalPath(item.Path);
@@ -180,15 +180,36 @@ public class SyncEngine
 
             if (item.State == (int)FileState.Deleting)
             {
-                // 远程已删除 → 删除本地文件
-                if (File.Exists(localPath)) File.Delete(localPath);
-                db.RemoteSnapshots.Remove(snapshot!);
+                if (File.Exists(localPath)) SafeDelete(localPath);
+                if (snapshot != null) db.RemoteSnapshots.Remove(snapshot);
                 _logger.Info($"同步删除: {item.Path}");
+                continue;
             }
-            else if (snapshot == null || snapshot.Version < item.Version)
+
+            if (item.Type == (int)FileType.Directory)
             {
-                // 新增或更新 → 入队下载
-                if (item.Type == (int)FileType.File)
+                // 目录：只更新快照，不下载
+                if (snapshot == null)
+                    db.RemoteSnapshots.Add(MakeSnapshot(item, item.State));
+                else
+                {
+                    snapshot.Version = item.Version;
+                    snapshot.State = item.State;
+                }
+                continue;
+            }
+
+            // 文件：版本落后则入队下载（哈希相同则跳过下载只更新版本号）
+            if (snapshot == null || snapshot.Version < item.Version)
+            {
+                if (snapshot != null && snapshot.Hash == item.CurrentHash)
+                {
+                    // 哈希相同 → 内容未变，直接更新版本号
+                    snapshot.Version = item.Version;
+                    snapshot.State = item.State;
+                    _logger.Info($"跳过下载（哈希未变）: {item.Path}");
+                }
+                else
                 {
                     db.SyncQueue.Add(new SyncQueueItem
                     {
@@ -200,36 +221,31 @@ public class SyncEngine
                 }
             }
 
-            // 更新快照
-            if (snapshot != null)
+            if (snapshot == null)
+                db.RemoteSnapshots.Add(MakeSnapshot(item, item.State));
+            else
             {
                 snapshot.Version = item.Version;
                 snapshot.Hash = item.CurrentHash;
                 snapshot.Size = item.CurrentSize;
                 snapshot.State = item.State;
             }
-            else if (item.Type == (int)FileType.File)
-            {
-                db.RemoteSnapshots.Add(new RemoteSnapshot
-                {
-                    Path = item.Path,
-                    Type = item.Type,
-                    Hash = item.CurrentHash,
-                    Size = item.CurrentSize,
-                    Version = item.Version,
-                    State = item.State
-                });
-            }
         }
-
-        if (cursor != null && response.MaxVersion > cursor.LastMaxVersion)
-        {
-            cursor.LastMaxVersion = response.MaxVersion;
-            cursor.LastSyncAt = DateTime.UtcNow.ToString("O");
-        }
-
-        await db.SaveChangesAsync();
     }
+
+    private static RemoteSnapshot MakeSnapshot(FileEntryDto item, int state) => new()
+    {
+        Path = item.Path,
+        Type = item.Type,
+        Hash = item.CurrentHash,
+        Size = item.CurrentSize,
+        Version = item.Version,
+        State = state
+    };
+
+    // ============================================================
+    // 传输队列处理
+    // ============================================================
 
     private async Task ProcessQueueAsync(CancellationToken ct)
     {
@@ -242,52 +258,51 @@ public class SyncEngine
 
         if (items.Count == 0) return;
 
-        var total = await db.SyncQueue.CountAsync();
-        QueueProgressChanged?.Invoke(0, total);
+        var remaining = await db.SyncQueue.CountAsync();
+        QueueProgressChanged?.Invoke(_queueCompleted, remaining + _queueCompleted);
 
         foreach (var item in items)
         {
             if (ct.IsCancellationRequested) break;
+            bool success = false;
 
             try
             {
-                if (item.Operation == (int)SyncOperation.Upload)
+                success = item.Operation switch
                 {
-                    await ProcessUploadAsync(item, ct);
-                }
-                else if (item.Operation == (int)SyncOperation.Download)
-                {
-                    await ProcessDownloadAsync(item, ct);
-                }
-                else if (item.Operation == (int)SyncOperation.Delete)
-                {
-                    await ProcessDeleteAsync(item, ct);
-                }
-
-                db.SyncQueue.Remove(item);
-                await db.SaveChangesAsync();
+                    (int)SyncOperation.Upload => await ProcessUploadAsync(item, ct),
+                    (int)SyncOperation.Download => await ProcessDownloadAsync(item, ct),
+                    (int)SyncOperation.Delete => await ProcessDeleteAsync(item, ct),
+                    _ => false
+                };
             }
             catch (Exception ex)
             {
                 item.RetryCount++;
                 item.LastError = ex.Message;
-                if (item.RetryCount >= 10)
-                {
-                    _logger.Error($"传输失败（已达最大重试）: {item.FilePath} — {ex.Message}");
-                    db.SyncQueue.Remove(item);
-                }
-                await db.SaveChangesAsync();
+                _logger.Error($"传输异常 [{item.RetryCount}/10]: {item.FilePath} — {ex.Message}");
             }
+
+            if (success || item.RetryCount >= 10)
+            {
+                db.SyncQueue.Remove(item);
+                _queueCompleted++;
+                if (item.RetryCount >= 10)
+                    _logger.Error($"传输放弃（已达最大重试）: {item.FilePath}");
+            }
+
+            await db.SaveChangesAsync();
         }
     }
 
-    private async Task ProcessUploadAsync(SyncQueueItem item, CancellationToken ct)
+    /// <returns>true = 成功，应从队列移除</returns>
+    private async Task<bool> ProcessUploadAsync(SyncQueueItem item, CancellationToken ct)
     {
         var localPath = ToLocalPath(item.FilePath);
         if (!File.Exists(localPath))
         {
-            _logger.Warn($"上传跳过——文件不存在: {localPath}");
-            return;
+            _logger.Warn($"上传跳过——文件不存在，移除队列项: {item.FilePath}");
+            return true; // 文件已不存在，从队列移除
         }
 
         var lastModified = File.GetLastWriteTimeUtc(localPath).ToString("O");
@@ -295,44 +310,95 @@ public class SyncEngine
 
         var result = await _api.UploadAsync(localPath, item.FilePath, item.BaseVersion ?? 0, lastModified);
         _logger.Info($"上传完成: {item.FilePath} → v{result?.Data.Version}");
+
+        // 上传成功后更新本地快照，避免下次增量同步认为需要重新下载
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var snapshot = await db.RemoteSnapshots.FindAsync(item.FilePath);
+        if (snapshot != null)
+        {
+            snapshot.Version = result?.Data.Version ?? snapshot.Version;
+            snapshot.Hash = result?.Data.Hash ?? snapshot.Hash;
+            snapshot.State = (int)CloudPan.Shared.FileState.Synced;
+        }
+        else if (result != null)
+        {
+            db.RemoteSnapshots.Add(new RemoteSnapshot
+            {
+                Path = item.FilePath,
+                Type = (int)CloudPan.Shared.FileType.File,
+                Hash = result.Data.Hash,
+                Size = result.Data.Size,
+                Version = result.Data.Version,
+                State = (int)CloudPan.Shared.FileState.Synced
+            });
+        }
+        await db.SaveChangesAsync();
+
+        return true;
     }
 
-    private async Task ProcessDownloadAsync(SyncQueueItem item, CancellationToken ct)
+    /// <returns>true = 成功，应从队列移除</returns>
+    private async Task<bool> ProcessDownloadAsync(SyncQueueItem item, CancellationToken ct)
     {
         var localPath = ToLocalPath(item.FilePath);
         NotifyStatus($"下载: {item.FilePath}");
 
-        await _api.DownloadAsync(item.FilePath, localPath);
+        var serverLastModified = await _api.DownloadAsync(item.FilePath, localPath);
 
-        // 设置文件时间为服务端时间（避免触发二次上传）
-        if (File.Exists(localPath))
-            File.SetLastWriteTimeUtc(localPath, DateTime.UtcNow);
-
-        _logger.Info($"下载完成: {item.FilePath}");
-    }
-
-    private async Task ProcessDeleteAsync(SyncQueueItem item, CancellationToken ct)
-    {
-        var localPath = ToLocalPath(item.FilePath);
-        if (File.Exists(localPath))
+        if (File.Exists(localPath) && serverLastModified != null
+            && DateTime.TryParse(serverLastModified, out var dt))
         {
-            File.Delete(localPath);
-            _logger.Info($"本地删除: {item.FilePath}");
+            File.SetLastWriteTimeUtc(localPath, dt);
         }
 
+        _logger.Info($"下载完成: {item.FilePath}");
+        return true;
+    }
+
+    /// <returns>true = 成功，应从队列移除</returns>
+    private async Task<bool> ProcessDeleteAsync(SyncQueueItem item, CancellationToken ct)
+    {
+        // 先调 API 删除服务端，成功后再删本地
+        // 如果服务端返回 404（已删除），视为成功继续删本地
         try
         {
             await _api.DeleteAsync(item.FilePath, item.BaseVersion ?? 0);
         }
         catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
-            // 服务端已删除，忽略
+            // 服务端已不存在，继续删除本地即可
         }
+
+        var localPath = ToLocalPath(item.FilePath);
+        if (File.Exists(localPath))
+        {
+            SafeDelete(localPath);
+            _logger.Info($"本地删除: {item.FilePath}");
+        }
+
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var snapshot = await db.RemoteSnapshots.FindAsync(item.FilePath);
+        if (snapshot != null)
+        {
+            db.RemoteSnapshots.Remove(snapshot);
+            await db.SaveChangesAsync();
+        }
+
+        return true;
     }
+
+    // ============================================================
+    // 工具方法
+    // ============================================================
 
     private string ToLocalPath(string relativePath)
     {
         return Path.Combine(_syncRoot, relativePath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+    }
+
+    private static void SafeDelete(string path)
+    {
+        try { File.Delete(path); } catch { }
     }
 
     private void NotifyStatus(string status)
@@ -341,15 +407,8 @@ public class SyncEngine
     }
 }
 
-/// <summary>简易日志接口。</summary>
-public interface ILogger
-{
-    void Info(string msg);
-    void Warn(string msg);
-    void Error(string msg);
-}
-
-public class ConsoleLogger : ILogger
+/// <summary>客户端日志。避开 Microsoft.Extensions.Logging.ClientLogger 命名冲突。</summary>
+public class ClientLogger
 {
     public void Info(string msg) => Console.WriteLine($"[INFO] {DateTime.Now:HH:mm:ss} {msg}");
     public void Warn(string msg) => Console.WriteLine($"[WARN] {DateTime.Now:HH:mm:ss} {msg}");

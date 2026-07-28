@@ -25,20 +25,17 @@ public class VersionService
     {
         await using var db = await _dbFactory.CreateDbContextAsync();
 
-        // 使用 SQLite 行锁保证原子性
-        var config = await db.AppConfigs.FindAsync("global_version");
-        if (config == null)
-        {
-            config = new AppConfig { Key = "global_version", Value = "1" };
-            db.AppConfigs.Add(config);
-            await db.SaveChangesAsync();
-            return 1;
-        }
+        // 原子递增：SQLite WAL 模式下写操作串行，UPDATE+SELECT 在单事务内保证原子
+        // 如果 global_version 行不存在则先创建
+        await db.Database.ExecuteSqlRawAsync(
+            "INSERT OR IGNORE INTO AppConfig(Key, Value) VALUES('global_version', '0')");
 
-        var next = int.Parse(config.Value) + 1;
-        config.Value = next.ToString();
-        await db.SaveChangesAsync();
-        return next;
+        await db.Database.ExecuteSqlRawAsync(
+            "UPDATE AppConfig SET Value = CAST(Value AS INTEGER) + 1 WHERE Key = 'global_version'");
+
+        // 在同一连接上读取（SQLite 连接是串行的）
+        var config = await db.AppConfigs.FindAsync("global_version");
+        return config != null ? int.Parse(config.Value) : 1;
     }
 
     /// <summary>

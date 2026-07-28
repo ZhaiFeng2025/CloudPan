@@ -32,7 +32,7 @@ public class ClientDbContext : DbContext
         model.Entity<SyncQueueItem>(e =>
         {
             e.HasKey(q => q.Id);
-            e.HasIndex(q => new { q.Priority, q.CreatedAt });
+            e.HasIndex(q => new { q.Priority, q.CreatedAt }).IsDescending(true, false);
         });
 
         model.Entity<RemoteSnapshot>(e =>

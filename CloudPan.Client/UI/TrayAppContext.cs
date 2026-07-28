@@ -30,8 +30,13 @@ public class TrayAppContext : ApplicationContext
 
         _trayIcon.DoubleClick += (_, _) => ShowWindow();
 
-        // 启动同步引擎（后台运行）
+        // 启动同步引擎（后台运行），观察异常防止进程崩溃
         _syncTask = Task.Run(() => engine.StartAsync(_cts.Token));
+        _syncTask.ContinueWith(t =>
+        {
+            if (t.IsFaulted)
+                Console.Error.WriteLine($"同步引擎异常终止: {t.Exception}");
+        }, TaskContinuationOptions.OnlyOnFaulted);
 
         // 状态更新 → 托盘提示
         engine.StatusChanged += (status) =>
@@ -69,6 +74,7 @@ public class TrayAppContext : ApplicationContext
     {
         _cts.Cancel();
         _trayIcon.Visible = false;
+        try { _syncTask.Wait(TimeSpan.FromSeconds(3)); } catch { }
         Application.Exit();
     }
 }

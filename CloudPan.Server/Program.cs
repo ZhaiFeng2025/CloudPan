@@ -65,12 +65,27 @@ using (var scope = app.Services.CreateScope())
     await db.Database.ExecuteSqlRawAsync("PRAGMA foreign_keys=ON;");
     await db.Database.ExecuteSqlRawAsync("PRAGMA synchronous=NORMAL;");
 
+    // 种子："server" 设备（用于 VersionRecord.DeviceId FK）
+    if (!await db.Devices.AnyAsync(d => d.Id == "server"))
+    {
+        db.Devices.Add(new Device
+        {
+            Id = "server",
+            Name = "服务端",
+            Person = null,
+            LastSeen = DateTime.UtcNow.ToString("O"),
+            Online = 1,
+            RegisteredAt = DateTime.UtcNow.ToString("O")
+        });
+    }
+
     // 初始化预定义配置（如果不存在）
     if (!await db.AppConfigs.AnyAsync(c => c.Key == "global_version"))
     {
         db.AppConfigs.Add(new AppConfig { Key = "global_version", Value = "0" });
-        await db.SaveChangesAsync();
     }
+
+    await db.SaveChangesAsync();
 }
 
 // ============================================================

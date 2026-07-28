@@ -134,20 +134,43 @@ public class FilesController : ControllerBase
             return NotFound(new { error = new { code = "NOT_FOUND", message = $"文件不存在: {request.Path}" } });
 
         var isDirectory = entry.Type == (int)FileType.Directory;
+
+        // 递归收集子文件信息（在 DB 删除之前）
+        var toDelete = new List<(string Path, bool IsDir)>();
+        if (isDirectory)
+        {
+            // 用存储层枚举子文件
+            var dirAbsPath = _storage.GetAbsolutePath(request.Path);
+            if (Directory.Exists(dirAbsPath))
+            {
+                foreach (var file in Directory.GetFiles(dirAbsPath, "*", SearchOption.AllDirectories))
+                {
+                    var relPath = "/" + Path.GetRelativePath(_storage.GetAbsolutePath("/").TrimEnd(Path.DirectorySeparatorChar), file).Replace('\\', '/');
+                    toDelete.Add((relPath, false));
+                }
+                foreach (var dir in Directory.GetDirectories(dirAbsPath, "*", SearchOption.AllDirectories))
+                {
+                    var relPath = "/" + Path.GetRelativePath(_storage.GetAbsolutePath("/").TrimEnd(Path.DirectorySeparatorChar), dir).Replace('\\', '/') + "/";
+                    toDelete.Add((relPath, true));
+                }
+            }
+        }
+        toDelete.Add((request.Path, isDirectory));
+
+        // 删除 DB 条目
         var deletedPaths = await _index.DeleteAsync(request.Path, isDirectory);
 
-        // 删除物理文件
-        foreach (var deletedPath in deletedPaths)
+        // 删除物理文件（从内向外：先文件后目录）
+        foreach (var (path, isDir) in toDelete.OrderByDescending(d => d.Path.Length))
         {
             try
             {
-                var subEntry = await _index.GetByPathAsync(deletedPath);
-                if (subEntry?.Type == (int)FileType.Directory)
-                    _storage.DeleteDirectory(deletedPath);
+                if (isDir)
+                    _storage.DeleteDirectory(path);
                 else
-                    _storage.Delete(deletedPath);
+                    _storage.Delete(path);
             }
-            catch { /* 磁盘操作失败不阻塞 DB 操作 */ }
+            catch { /* 磁盘操作失败不阻塞 */ }
         }
 
         var newVersion = await _version.NextVersionAsync();
