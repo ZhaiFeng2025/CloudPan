@@ -25,7 +25,7 @@
     <PackageReference Include="coverlet.msbuild" Version="6.0.2">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.22" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.18" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.22" />
     <!-- 性能基准：dotnet run -c Release 运行（Benchmarks/ 目录） -->
     <PackageReference Include="BenchmarkDotNet" Version="0.14.0" />
