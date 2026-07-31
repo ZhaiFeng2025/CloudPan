@@ -120,6 +120,30 @@ using (var scope = app.Services.CreateScope())
     // 注: 当前使用 EnsureCreated()。后续版本考虑迁移至 EF Core Migrations
     await db.Database.EnsureCreatedAsync();
 
+    // EnsureCreated 只在 DB 文件不存在时建表。如果 DB 已存在但是旧版本创建的
+    // （缺少后续新增的表），需要手动补建。这是一个轻量的"schema 兼容层"。
+    // 后续切换到 EF Core Migrations 后此段可删除。
+    try
+    {
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS Devices (
+                Id      TEXT NOT NULL PRIMARY KEY,
+                Name    TEXT NOT NULL DEFAULT '',
+                Person  TEXT,
+                LastSeen TEXT NOT NULL DEFAULT '',
+                Online  INTEGER NOT NULL DEFAULT 0,
+                RegisteredAt TEXT NOT NULL DEFAULT ''
+            );
+            """);
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE INDEX IF NOT EXISTS idx_devices_lastseen ON Devices (LastSeen);
+            """);
+    }
+    catch (Exception ex)
+    {
+        Log.Warning(ex, "schema 兼容补建失败（非致命，后续 EnsureCreated 可恢复）");
+    }
+
     // 启动时 DB 完整性检查
     try
     {

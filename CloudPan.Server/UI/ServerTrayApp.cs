@@ -69,7 +69,16 @@ public class ServerTrayApp : ApplicationContext
         _trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
         _trayIcon.ContextMenuStrip.Items.Add("停止服务", null, (_, _) => Shutdown());
 
-        _trayIcon.DoubleClick += (_, _) => ShowWindow();
+        // 左键单击/双击 → 显示管理窗口
+        // 注：当 ContextMenuStrip 不为 null 时，Click/DoubleClick 可能不触发，
+        // 改用 MouseClick 根据按钮判断。
+        _trayIcon.MouseClick += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                ShowWindow();
+            }
+        };
 
         // 定时更新托盘文字
         System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer { Interval = 5000 };

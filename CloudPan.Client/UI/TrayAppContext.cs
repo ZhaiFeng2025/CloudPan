@@ -119,7 +119,15 @@ public class TrayAppContext : ApplicationContext
         _trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
         _trayIcon.ContextMenuStrip.Items.Add("退出", null, (_, _) => Exit());
 
-        _trayIcon.DoubleClick += (_, _) => ShowWindow();
+        // 左键单击/双击 → 显示管理窗口
+        // 注：当 ContextMenuStrip 不为 null 时，Click/DoubleClick 可能不触发
+        _trayIcon.MouseClick += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                ShowWindow();
+            }
+        };
 
         // 捕获 UI 线程同步上下文，用于后续封送到 UI 线程
         var syncCtx = System.Threading.SynchronizationContext.Current;
