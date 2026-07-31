@@ -3,10 +3,10 @@
   "$id": "cloudpan-shared-spec",
   "title": "CloudPan 共享定义",
   "description": "所有枚举、实体、端点、字段名、错误码、配置值的唯一事实来源。所有代码和文档引用本文件，禁止各自重复定义。",
-  "version": "1.5.0",
+  "version": "1.0.0",
   "date": "2026-07-31",
   "_changelog": [
-    { "version": "1.5.0", "date": "2026-07-31", "changes": [
+    { "version": "1.0.0", "date": "2026-07-31", "changes": [
       "v1.0 正式发布——版本号统一为 1.0.0",
       "运行时崩溃级 Bug 修复：FileWatcherService NRE、SyncIgnoreParser 未处理异常、GlobalExceptionMiddleware 运算符优先级、RateLimitMiddleware 锁内 await、ServerInstaller 命令注入",
       "CLAuDE.md 更新为发布状态",
