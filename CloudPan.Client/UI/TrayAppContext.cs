@@ -7,7 +7,6 @@ namespace CloudPan.Client.UI;
 /// </summary>
 public class TrayAppContext : ApplicationContext
 {
-    /// <summary>静态引用，供 MainWindow 关闭时弹出托盘气泡。</summary>
     public static NotifyIcon? TrayIcon { get; private set; }
 
     private readonly NotifyIcon _trayIcon;
@@ -18,8 +17,6 @@ public class TrayAppContext : ApplicationContext
     private readonly CancellationTokenSource _cts = new();
     private readonly Services.SyncEngine _engine;
     private readonly Services.WebSocketClient _wsClient;
-    private readonly ToolStripMenuItem _viewConflictsItem;
-    private readonly ToolStripMenuItem _pauseResumeItem;
     private readonly System.Collections.Concurrent.ConcurrentQueue<string> _conflictPaths = new();
     private volatile bool _isPaused;
 
@@ -29,109 +26,34 @@ public class TrayAppContext : ApplicationContext
         _wsClient = wsClient;
         _mainWindow = new MainWindow(engine);
 
-        // 托盘图标（使用自绘 CloudPan 图标）
+        // ===== 托盘图标 =====
+        // 不设 ContextMenuStrip，避免拦截鼠标事件。
+        // 左键→窗口 / 右键→动态构建菜单
         _trayIcon = new NotifyIcon
         {
             Icon = CloudPanIcon.Create(),
             Text = "CloudPan — 文件同步",
-            Visible = true,
-            ContextMenuStrip = new ContextMenuStrip()
+            Visible = true
         };
-        TrayIcon = _trayIcon; // 供 MainWindow 关闭时弹出气泡
+        TrayIcon = _trayIcon;
         _normalIcon = CloudPanIcon.Create();
 
-        _trayIcon.ContextMenuStrip.Items.Add("显示主窗口", null, (_, _) => ShowWindow());
-        _trayIcon.ContextMenuStrip.Items.Add("打开同步文件夹", null, (_, _) => OpenFolder());
-        _trayIcon.ContextMenuStrip.Items.Add("打开日志目录", null, (_, _) => OpenLogDir());
-        _trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
-        // 暂停/继续同步切换
-        _pauseResumeItem = new ToolStripMenuItem("暂停同步");
-        _pauseResumeItem.Click += (_, _) =>
-        {
-            _isPaused = !_isPaused;
-            engine.SetPaused(_isPaused);
-            _pauseResumeItem.Text = _isPaused ? "继续同步" : "暂停同步";
-            _trayIcon.ShowBalloonTip(3000, "CloudPan",
-                _isPaused ? "同步已暂停" : "同步已恢复",
-                _isPaused ? ToolTipIcon.Warning : ToolTipIcon.Info);
-        };
-        _trayIcon.ContextMenuStrip.Items.Add(_pauseResumeItem);
-        _trayIcon.ContextMenuStrip.Items.Add("立即同步", null, async (_, _) =>
-        {
-            // 清除错误状态：重置图标和文字
-            _trayIcon.Icon = _normalIcon;
-            _trayIcon.Text = "CloudPan — 正在同步";
-
-            if (_isPaused)
-            {
-                _isPaused = false;
-                engine.SetPaused(false);
-                _pauseResumeItem.Text = "暂停同步";
-                _trayIcon.ShowBalloonTip(3000, "CloudPan", "同步已恢复，正在重新扫描变更...", ToolTipIcon.Info);
-            }
-            else
-            {
-                _trayIcon.ShowBalloonTip(3000, "CloudPan", "正在重新扫描变更...", ToolTipIcon.Info);
-            }
-            try
-            {
-                // 全量扫描会重新发现本地变更（包括之前因错误放弃的文件），将其重新入队
-                await engine.FullScanAsync(_cts.Token);
-            }
-            catch (OperationCanceledException) { }
-        });
-        _trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
-        _viewConflictsItem = new ToolStripMenuItem("查看冲突") { Visible = false };
-        _viewConflictsItem.Click += (_, _) =>
-        {
-            _mainWindow.Show();
-            _mainWindow.WindowState = FormWindowState.Normal;
-            _mainWindow.Activate();
-            if (_conflictPaths.TryDequeue(out string? lastPath))
-            {
-                _mainWindow.ShowConflictWarning(lastPath);
-            }
-        };
-        _trayIcon.ContextMenuStrip.Items.Add(_viewConflictsItem);
-        _trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
-        // 开机自启开关
-        ToolStripMenuItem autoStartItem = new ToolStripMenuItem("开机自动启动") { CheckOnClick = true };
-        autoStartItem.Checked = IsAutoStartEnabled();
-        autoStartItem.CheckState = autoStartItem.Checked ? CheckState.Checked : CheckState.Unchecked;
-        autoStartItem.Click += (_, _) =>
-        {
-            bool newState = !IsAutoStartEnabled();
-            SetAutoStart(newState);
-            autoStartItem.Checked = newState;
-            autoStartItem.CheckState = newState ? CheckState.Checked : CheckState.Unchecked;
-        };
-        _trayIcon.ContextMenuStrip.Items.Add(autoStartItem);
-        _trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
-        _trayIcon.ContextMenuStrip.Items.Add("设置", null, (_, _) => OpenSettings());
-        _trayIcon.ContextMenuStrip.Items.Add("关于", null, (_, _) =>
-        {
-            var ver = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version;
-            string verStr = ver != null ? $"{ver.Major}.{ver.Minor}.{ver.Build}" : "1.0.0";
-            MessageBox.Show(
-                $"CloudPan 文件同步系统\n版本 {verStr}\n\n自托管家庭文件同步\n数据完全保存在您的设备上\n\n同步目录: {Program.SyncRoot}\n服务端: {Program.ServerUrl}",
-                "关于 CloudPan", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        });
-        _trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
-        _trayIcon.ContextMenuStrip.Items.Add("退出", null, (_, _) => Exit());
-
-        // 左键单击/双击 → 显示管理窗口
-        // 注：当 ContextMenuStrip 不为 null 时，Click/DoubleClick 可能不触发
-        _trayIcon.MouseClick += (_, e) =>
+        _trayIcon.MouseUp += (_, e) =>
         {
             if (e.Button == MouseButtons.Left)
             {
                 ShowWindow();
             }
+            else if (e.Button == MouseButtons.Right)
+            {
+                ShowTrayMenu();
+            }
         };
 
-        // 捕获 UI 线程同步上下文，用于后续封送到 UI 线程
+        // 捕获 UI 线程同步上下文
         var syncCtx = System.Threading.SynchronizationContext.Current;
-        // 启动同步引擎（后台运行），异常时通知用户
+
+        // 启动同步引擎
         _syncTask = Task.Run(() => engine.StartAsync(_cts.Token));
         _syncTask.ContinueWith(t =>
         {
@@ -143,14 +65,13 @@ public class TrayAppContext : ApplicationContext
                 {
                     _trayIcon.ShowBalloonTip(10000, "CloudPan — 同步异常",
                         $"同步引擎已停止: {msg}\n请检查网络或重新启动客户端。", ToolTipIcon.Error);
-                    // 将托盘图标切换为错误图标
                     _trayIcon.Icon = SystemIcons.Error;
                     _trayIcon.Text = "CloudPan — 同步异常";
                 }, null);
             }
         }, TaskContinuationOptions.OnlyOnFaulted);
 
-        // 启动 WebSocket 客户端（后台运行）
+        // 启动 WebSocket 客户端
         _wsTask = Task.Run(() => wsClient.StartAsync(_cts.Token));
         _wsTask.ContinueWith(t =>
         {
@@ -166,8 +87,7 @@ public class TrayAppContext : ApplicationContext
             }
         }, TaskContinuationOptions.OnlyOnFaulted);
 
-        // 冲突检测 → 托盘气泡（含"点击查看详情"） + 警告图标 + 菜单项显示冲突数量
-
+        // 冲突检测 → 托盘气泡 + 警告图标
         engine.ConflictDetected += (conflictInfo) =>
         {
             string path = conflictInfo.RelativePath;
@@ -181,37 +101,23 @@ public class TrayAppContext : ApplicationContext
                 _trayIcon.ShowBalloonTip(5000, "CloudPan — 文件冲突",
                     $"检测到文件冲突: {path}\n点击查看详情", ToolTipIcon.Warning);
 
-                int count = _conflictPaths.Count;
-                _viewConflictsItem.Text = $"查看冲突 ({count})";
-                _viewConflictsItem.Visible = true;
-
                 _mainWindow.ShowConflictWarning(path);
             }, null);
         };
 
-        // 冲突解决后从队列和菜单中清除
+        // 冲突解决
         engine.ConflictResolved += (path) =>
         {
             syncCtx?.Post(_ =>
             {
-                // 从 ConcurrentQueue 中移除已解决的冲突
-                List<string> remaining = new System.Collections.Generic.List<string>();
+                List<string> remaining = new List<string>();
                 while (_conflictPaths.TryDequeue(out string? p))
                 {
-                    if (p != path)
-                    {
-                        remaining.Add(p);
-                    }
+                    if (p != path) remaining.Add(p);
                 }
-                foreach (string p in remaining)
-                {
-                    _conflictPaths.Enqueue(p);
-                }
+                foreach (string p in remaining) _conflictPaths.Enqueue(p);
 
-                int count = _conflictPaths.Count;
-                _viewConflictsItem.Text = count > 0 ? "查看冲突 (" + count + ")" : "查看冲突";
-                _viewConflictsItem.Visible = count > 0;
-                if (count == 0 && !Program.IsOffline)
+                if (_conflictPaths.Count == 0 && !Program.IsOffline)
                 {
                     _trayIcon.Icon = _normalIcon;
                     _trayIcon.Text = "CloudPan — 已连接";
@@ -219,7 +125,7 @@ public class TrayAppContext : ApplicationContext
             }, null);
         };
 
-        // 断连通知 → 托盘气泡 + 离线图标
+        // 断连通知
         wsClient.OnDisconnected += () =>
         {
             syncCtx?.Post(_ =>
@@ -239,7 +145,7 @@ public class TrayAppContext : ApplicationContext
             }, null);
         };
 
-        // 认证永久失败（Token 无效等）——通知用户重新配置
+        // 认证失败
         wsClient.OnPermanentFailure += () =>
         {
             syncCtx?.Post(_ =>
@@ -252,19 +158,15 @@ public class TrayAppContext : ApplicationContext
             }, null);
         };
 
-        // 状态更新 → 图标颜色 + 日志 + 托盘文字
-        System.Collections.Concurrent.ConcurrentQueue<string> recentActivity = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        // 状态更新
+        System.Collections.Concurrent.ConcurrentQueue<string> recentActivity = new();
         engine.StatusChanged += (status) =>
         {
             if (status.Contains("上传") || status.Contains("下载") || status.Contains("同步"))
             {
                 recentActivity.Enqueue(status);
             }
-
-            if (recentActivity.Count > 20)
-            {
-                recentActivity.TryDequeue(out _);
-            }
+            if (recentActivity.Count > 20) { recentActivity.TryDequeue(out _); }
 
             syncCtx?.Post(_ =>
             {
@@ -273,7 +175,6 @@ public class TrayAppContext : ApplicationContext
                 {
                     baseText += $"\n{string.Join("\n", recentActivity.TakeLast(2))}";
                 }
-
                 _trayIcon.Text = baseText;
                 _trayIcon.Icon = status switch
                 {
@@ -282,9 +183,97 @@ public class TrayAppContext : ApplicationContext
                     _ => _normalIcon
                 };
             }, null);
-            // 通过 UI 同步上下文封送——AddLog 内部也做 InvokeRequired 检查，双重保险
             syncCtx?.Post(_ => _mainWindow.AddLog(status), null);
         };
+    }
+
+    // ===== 右键菜单（运行时动态构建） =====
+
+    private void ShowTrayMenu()
+    {
+        var menu = new ContextMenuStrip();
+
+        menu.Items.Add("显示主窗口", null, (_, _) => ShowWindow());
+        menu.Items.Add("打开同步文件夹", null, (_, _) => OpenFolder());
+        menu.Items.Add("打开日志目录", null, (_, _) => OpenLogDir());
+        menu.Items.Add(new ToolStripSeparator());
+
+        // 暂停/继续
+        var pauseItem = new ToolStripMenuItem(_isPaused ? "继续同步" : "暂停同步");
+        pauseItem.Click += (_, _) =>
+        {
+            _isPaused = !_isPaused;
+            _engine.SetPaused(_isPaused);
+            _trayIcon.ShowBalloonTip(3000, "CloudPan",
+                _isPaused ? "同步已暂停" : "同步已恢复",
+                _isPaused ? ToolTipIcon.Warning : ToolTipIcon.Info);
+        };
+        menu.Items.Add(pauseItem);
+
+        menu.Items.Add("立即同步", null, async (_, _) =>
+        {
+            _trayIcon.Icon = _normalIcon;
+            _trayIcon.Text = "CloudPan — 正在同步";
+            if (_isPaused)
+            {
+                _isPaused = false;
+                _engine.SetPaused(false);
+                _trayIcon.ShowBalloonTip(3000, "CloudPan", "同步已恢复，正在重新扫描变更...", ToolTipIcon.Info);
+            }
+            else
+            {
+                _trayIcon.ShowBalloonTip(3000, "CloudPan", "正在重新扫描变更...", ToolTipIcon.Info);
+            }
+            try { await _engine.FullScanAsync(_cts.Token); }
+            catch (OperationCanceledException) { }
+        });
+        menu.Items.Add(new ToolStripSeparator());
+
+        // 查看冲突
+        int conflictCount = _conflictPaths.Count;
+        var conflictItem = new ToolStripMenuItem(conflictCount > 0 ? $"查看冲突 ({conflictCount})" : "查看冲突")
+        {
+            Enabled = conflictCount > 0
+        };
+        conflictItem.Click += (_, _) =>
+        {
+            ShowWindow();
+            if (_conflictPaths.TryDequeue(out string? lastPath))
+            {
+                _mainWindow.ShowConflictWarning(lastPath);
+            }
+        };
+        menu.Items.Add(conflictItem);
+        menu.Items.Add(new ToolStripSeparator());
+
+        // 开机自启
+        var autoStartItem = new ToolStripMenuItem("开机自动启动")
+        {
+            CheckOnClick = true,
+            Checked = IsAutoStartEnabled()
+        };
+        autoStartItem.Click += (_, _) =>
+        {
+            bool newState = !IsAutoStartEnabled();
+            SetAutoStart(newState);
+            autoStartItem.Checked = newState;
+        };
+        menu.Items.Add(autoStartItem);
+        menu.Items.Add(new ToolStripSeparator());
+
+        menu.Items.Add("设置", null, (_, _) => OpenSettings());
+        menu.Items.Add("关于", null, (_, _) =>
+        {
+            var ver = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version;
+            string verStr = ver != null ? $"{ver.Major}.{ver.Minor}.{ver.Build}" : "1.0.0";
+            MessageBox.Show(
+                $"CloudPan 文件同步系统\n版本 {verStr}\n\n自托管家庭文件同步\n数据完全保存在您的设备上\n\n同步目录: {Program.SyncRoot}\n服务端: {Program.ServerUrl}",
+                "关于 CloudPan", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        });
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("退出", null, (_, _) => Exit());
+
+        menu.Show(Cursor.Position);
     }
 
     protected override void Dispose(bool disposing)
@@ -338,7 +327,7 @@ public class TrayAppContext : ApplicationContext
             using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", false);
             return key?.GetValue("CloudPan") != null;
         }
-        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"检查开机自启注册表失败: {ex.Message}"); return false; }
+        catch { return false; }
     }
 
     private static void SetAutoStart(bool enable)
@@ -346,11 +335,7 @@ public class TrayAppContext : ApplicationContext
         try
         {
             using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true);
-            if (key == null)
-            {
-                return;
-            }
-
+            if (key == null) return;
             if (enable)
             {
                 key.SetValue("CloudPan", $"\"{Application.ExecutablePath}\"");
@@ -360,7 +345,7 @@ public class TrayAppContext : ApplicationContext
                 key.DeleteValue("CloudPan", false);
             }
         }
-        catch (Exception ex) { Console.Error.WriteLine($"设置开机自启失败: {ex.Message}"); }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"设置开机自启失败: {ex.Message}"); }
     }
 
     private void OpenSettings()
@@ -398,17 +383,11 @@ public class TrayAppContext : ApplicationContext
         }
     }
 
-    private async void Exit()
+    private void Exit()
     {
+        Program.IsOffline = true;
         _cts.Cancel();
-        _engine.Stop();
-        _wsClient.Stop();
         _trayIcon.Visible = false;
-        try { await Task.WhenAny(_syncTask, Task.Delay(10000)); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"等待同步任务停止超时: {ex.Message}"); }
-        try { await Task.WhenAny(_wsTask, Task.Delay(5000)); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"等待 WebSocket 任务停止超时: {ex.Message}"); }
-        // 释放资源（WebSocketClient CTS、FileWatcherService Timer 等）
-        _wsClient.Dispose();
-        _engine.Dispose();
         Application.Exit();
     }
 }

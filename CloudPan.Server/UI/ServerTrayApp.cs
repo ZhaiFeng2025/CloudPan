@@ -15,6 +15,7 @@ public class ServerTrayApp : ApplicationContext
     private readonly ServerWindow _window;
     private readonly WebApplication _app;
     private readonly string _serverUrl;
+    private ToolStripMenuItem? _autoStartItem;
 
     /// <summary>服务端 Token（供托盘菜单复制）。</summary>
     public static string? Token { get; set; }
@@ -33,50 +34,29 @@ public class ServerTrayApp : ApplicationContext
                 .FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork)?.ToString() ?? host;
         }
         catch { ip = host; }
-        // 从配置读取协议：Phase 0 用 HTTP，后续启用 HTTPS 时配置 Kestrel:Endpoints:Https:Enabled
         bool useHttps = _app.Configuration.GetValue<bool>("Kestrel:Endpoints:Https:Enabled");
         string scheme = useHttps ? "https" : "http";
         _serverUrl = $"{scheme}://{ip}:{SpecPorts.HttpPort}";
 
+        // ===== 托盘图标 =====
+        // 不设 ContextMenuStrip，因为它会拦截鼠标事件，导致 Click/DoubleClick 不触发。
+        // 所有交互通过 MouseUp 手动分发：左键→窗口 / 右键→菜单。
         _trayIcon = new NotifyIcon
         {
             Icon = CloudPan.Shared.UI.ServerIcons.CreateServer(),
             Text = $"CloudPan Server — {_serverUrl}",
-            Visible = true,
-            ContextMenuStrip = new ContextMenuStrip()
+            Visible = true
         };
 
-        // 菜单项
-        _trayIcon.ContextMenuStrip.Items.Add("复制服务端地址", null, (_, _) => CopyToClipboard(_serverUrl));
-        _trayIcon.ContextMenuStrip.Items.Add("复制 Token", null, (_, _) => CopyToClipboard(Token ?? "未生成"));
-        _trayIcon.ContextMenuStrip.Items.Add("显示 Token", null, (_, _) => ShowToken());
-        _trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
-        // 开机自启开关
-        ToolStripMenuItem autoStartItem = new ToolStripMenuItem("开机自动启动") { CheckOnClick = true };
-        autoStartItem.Checked = IsAutoStartEnabled();
-        autoStartItem.CheckState = autoStartItem.Checked ? CheckState.Checked : CheckState.Unchecked;
-        autoStartItem.Click += (_, _) =>
-        {
-            bool newState = !IsAutoStartEnabled();
-            SetAutoStart(newState);
-            autoStartItem.Checked = newState;
-            autoStartItem.CheckState = newState ? CheckState.Checked : CheckState.Unchecked;
-        };
-        _trayIcon.ContextMenuStrip.Items.Add(autoStartItem);
-        _trayIcon.ContextMenuStrip.Items.Add("显示管理窗口", null, (_, _) => ShowWindow());
-        _trayIcon.ContextMenuStrip.Items.Add("打开同步文件夹", null, (_, _) => OpenFolder());
-        _trayIcon.ContextMenuStrip.Items.Add("打开日志目录", null, (_, _) => OpenLogDir());
-        _trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
-        _trayIcon.ContextMenuStrip.Items.Add("停止服务", null, (_, _) => Shutdown());
-
-        // 左键单击/双击 → 显示管理窗口
-        // 注：当 ContextMenuStrip 不为 null 时，Click/DoubleClick 可能不触发，
-        // 改用 MouseClick 根据按钮判断。
-        _trayIcon.MouseClick += (_, e) =>
+        _trayIcon.MouseUp += (_, e) =>
         {
             if (e.Button == MouseButtons.Left)
             {
                 ShowWindow();
+            }
+            else if (e.Button == MouseButtons.Right)
+            {
+                ShowTrayMenu();
             }
         };
 
@@ -90,8 +70,43 @@ public class ServerTrayApp : ApplicationContext
 
         // 启动气泡提示
         _trayIcon.ShowBalloonTip(5000, "CloudPan 服务已启动",
-            $"地址: {_serverUrl}\n右键托盘图标管理", ToolTipIcon.Info);
+            $"地址: {_serverUrl}\n左键打开管理窗口 | 右键显示菜单", ToolTipIcon.Info);
     }
+
+    // ===== 右键菜单（运行时动态构建，避免 ContextMenuStrip 属性拦截鼠标） =====
+
+    private void ShowTrayMenu()
+    {
+        var menu = new ContextMenuStrip();
+
+        menu.Items.Add("复制服务端地址", null, (_, _) => CopyToClipboard(_serverUrl));
+        menu.Items.Add("复制 Token", null, (_, _) => CopyToClipboard(Token ?? "未生成"));
+        menu.Items.Add("显示 Token", null, (_, _) => ShowToken());
+        menu.Items.Add(new ToolStripSeparator());
+
+        _autoStartItem = new ToolStripMenuItem("开机自动启动")
+        {
+            CheckOnClick = true,
+            Checked = IsAutoStartEnabled()
+        };
+        _autoStartItem.Click += (_, _) =>
+        {
+            bool newState = !IsAutoStartEnabled();
+            SetAutoStart(newState);
+            if (_autoStartItem != null) _autoStartItem.Checked = newState;
+        };
+        menu.Items.Add(_autoStartItem);
+
+        menu.Items.Add("显示管理窗口", null, (_, _) => ShowWindow());
+        menu.Items.Add("打开同步文件夹", null, (_, _) => OpenFolder());
+        menu.Items.Add("打开日志目录", null, (_, _) => OpenLogDir());
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("停止服务", null, (_, _) => Shutdown());
+
+        menu.Show(Cursor.Position);
+    }
+
+    // ===== 动作方法 =====
 
     private static void CopyToClipboard(string text)
     {
@@ -166,10 +181,7 @@ public class ServerTrayApp : ApplicationContext
         {
             using var key = Registry.CurrentUser.OpenSubKey(
                 @"Software\Microsoft\Windows\CurrentVersion\Run", true);
-            if (key == null)
-            {
-                return;
-            }
+            if (key == null) return;
 
             if (enable)
             {
@@ -187,10 +199,7 @@ public class ServerTrayApp : ApplicationContext
     {
         var result = MessageBox.Show("确定要停止 CloudPan 服务吗？\n所有客户端将断开连接。",
             "确认停止", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-        if (result != DialogResult.Yes)
-        {
-            return;
-        }
+        if (result != DialogResult.Yes) return;
 
         _trayIcon.Visible = false;
         _window.AddLog("正在关闭服务...");
