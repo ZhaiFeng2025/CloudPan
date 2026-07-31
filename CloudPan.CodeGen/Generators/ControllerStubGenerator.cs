@@ -10,12 +10,12 @@ public static class ControllerStubGenerator
     public static string Generate(SpecDocument spec)
     {
         // 按第一段路径分组：/api/files/* → FilesController
-        var groups = spec.Api.Endpoints
+        List<IGrouping<string, EndpointDef>> groups = spec.Api.Endpoints
             .Where(e => e.Path.StartsWith("/api/"))
             .GroupBy(e => GetControllerGroup(e.Path))
             .ToList();
 
-        var sb = new StringBuilder();
+        StringBuilder sb = new StringBuilder();
         sb.AppendLine("// AUTO-GENERATED from shared-spec.json")
           .AppendLine($"// 版本: {spec.Version}  日期: {spec.Date}")
           .AppendLine("// 源: shared-spec.json → api.endpoints")
@@ -32,8 +32,8 @@ public static class ControllerStubGenerator
 
         foreach (var group in groups)
         {
-            var controllerName = group.Key;
-            var endpoints = group.ToList();
+            string controllerName = group.Key;
+            List<EndpointDef> endpoints = group.ToList();
 
             sb.AppendLine($"/// <summary>");
             sb.AppendLine($"/// {controllerName} 相关 API");
@@ -45,17 +45,17 @@ public static class ControllerStubGenerator
 
             foreach (var ep in endpoints)
             {
-                var actionName = GetActionName(ep);
-                var httpMethod = GetHttpMethodAttribute(ep.Method);
-                var route = ep.Path.Replace($"/api/{controllerName.ToLower()}", "").Trim('/');
-                var routeAttr = string.IsNullOrEmpty(route) ? "" : $"(\"{route}\")";
+                string actionName = GetActionName(ep);
+                string httpMethod = GetHttpMethodAttribute(ep.Method);
+                string route = ep.Path.Replace($"/api/{controllerName.ToLower()}", "").Trim('/');
+                string routeAttr = string.IsNullOrEmpty(route) ? "" : $"(\"{route}\")";
 
                 sb.AppendLine($"    /// <summary>{ep.Description}</summary>");
                 sb.AppendLine($"    [{httpMethod}{routeAttr}]");
 
                 // 生成方法签名
-                var returnType = "Task<IActionResult>";
-                var parameters = GetDefaultParameters(ep);
+                string returnType = "Task<IActionResult>";
+                string parameters = GetDefaultParameters(ep);
 
                 sb.AppendLine($"    public async {returnType} {actionName}({parameters})");
                 sb.AppendLine($"    {{");
@@ -70,7 +70,7 @@ public static class ControllerStubGenerator
         }
 
         // /share/* 路径单独生成（无需 Token 认证）
-        var shareEndpoints = spec.Api.Endpoints
+        List<EndpointDef> shareEndpoints = spec.Api.Endpoints
             .Where(e => e.Path.StartsWith("/share/"))
             .ToList();
 
@@ -85,9 +85,9 @@ public static class ControllerStubGenerator
 
             foreach (var ep in shareEndpoints)
             {
-                var actionName = GetActionName(ep);
-                var httpMethod = GetHttpMethodAttribute(ep.Method);
-                var routeTemplate = ep.Path.Replace("/share/", "");
+                string actionName = GetActionName(ep);
+                string httpMethod = GetHttpMethodAttribute(ep.Method);
+                string routeTemplate = ep.Path.Replace("/share/", "");
 
                 sb.AppendLine($"    /// <summary>{ep.Description}</summary>");
                 sb.AppendLine($"    [{httpMethod}(\"{routeTemplate}\")]");
@@ -112,24 +112,29 @@ public static class ControllerStubGenerator
         // /api/files/upload → Files
         // /api/versions → Versions
         // /api/devices → Devices
-        var parts = path.Split('/');
+        string[] parts = path.Split('/');
         if (parts.Length >= 3)
+        {
             return char.ToUpper(parts[2][0]) + parts[2][1..];
+        }
+
         return "Home";
     }
 
     private static string GetActionName(EndpointDef ep)
     {
         // /api/files/upload → Upload, /api/files/tree → GetTree
-        var methodPrefix = ep.Method == "GET" ? "Get" : "";
-        var path = ep.Path.Split('?')[0];
-        var parts = path.Split('/');
+        string methodPrefix = ep.Method == "GET" ? "Get" : "";
+        string path = ep.Path.Split('?')[0];
+        string[] parts = path.Split('/');
         // 跳过 /api/{controller} 前缀，只取动作部分
         var actionParts = parts.Skip(3); // /api/files/upload → ["upload"]
         if (actionParts.Count() == 0)
+        {
             actionParts = parts.Skip(2); // 没有子路径的情况
+        }
 
-        var name = string.Join("", actionParts.Select((p, i) =>
+        string name = string.Join("", actionParts.Select((p, i) =>
             p.Contains('{') ? "ById" : char.ToUpper(p[0]) + p[1..]));
         return $"{methodPrefix}{name}";
     }
@@ -150,34 +155,50 @@ public static class ControllerStubGenerator
     private static string GetDefaultParameters(EndpointDef ep)
     {
         // 简单推断常见参数
-        var parts = ep.Path.Split('/');
-        var hasPathParam = parts.Any(p => p.Contains('{'));
+        string[] parts = ep.Path.Split('/');
+        bool hasPathParam = parts.Any(p => p.Contains('{'));
 
         if (ep.Path.Contains("{shareId}"))
+        {
             return "string shareId";
+        }
 
         // 文件下载 → path query param
         if (ep.Path == "/api/files/download")
+        {
             return "[FromQuery] string path, [FromQuery] int? version = null";
+        }
 
         if (ep.Path == "/api/files/tree")
+        {
             return "[FromQuery] int? sinceVersion = null, [FromQuery] string? path = null, [FromQuery] int limit = 5000, [FromQuery] string? cursor = null";
+        }
 
         if (ep.Path == "/api/versions")
+        {
             return "[FromQuery] string path";
+        }
 
         if (ep.Path == "/api/files/search")
+        {
             return "[FromQuery] string q, [FromQuery] int limit = 50";
+        }
 
         if (ep.Path == "/api/thumbnails")
+        {
             return "[FromQuery] string path, [FromQuery] int size = 200";
+        }
 
         if (ep.Path.Contains("chunk/status"))
+        {
             return "[FromQuery] string path, [FromQuery] string fileHash, [FromQuery] int totalChunks";
+        }
 
         // 默认：json body
         if (ep.Method != "GET")
+        {
             return "[FromBody] object request";
+        }
 
         return "";
     }

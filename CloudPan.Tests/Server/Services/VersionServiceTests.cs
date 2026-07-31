@@ -12,9 +12,9 @@ public class VersionServiceTests : Infrastructure.TestBase
     public async Task NextVersion_首次调用_返回1()
     {
         var dbFactory = CreateServerDbFactory();
-        var svc = new VersionService(dbFactory);
+        VersionService svc = new VersionService(dbFactory);
 
-        var version = await svc.NextVersionAsync();
+        int version = await svc.NextVersionAsync();
         Assert.Equal(1, version);
     }
 
@@ -22,11 +22,11 @@ public class VersionServiceTests : Infrastructure.TestBase
     public async Task NextVersion_连续调用_单调递增()
     {
         var dbFactory = CreateServerDbFactory();
-        var svc = new VersionService(dbFactory);
+        VersionService svc = new VersionService(dbFactory);
 
-        var v1 = await svc.NextVersionAsync();
-        var v2 = await svc.NextVersionAsync();
-        var v3 = await svc.NextVersionAsync();
+        int v1 = await svc.NextVersionAsync();
+        int v2 = await svc.NextVersionAsync();
+        int v3 = await svc.NextVersionAsync();
 
         Assert.Equal(1, v1);
         Assert.Equal(2, v2);
@@ -37,9 +37,9 @@ public class VersionServiceTests : Infrastructure.TestBase
     public async Task GetCurrentVersion_初始状态_返回0()
     {
         var dbFactory = CreateServerDbFactory();
-        var svc = new VersionService(dbFactory);
+        VersionService svc = new VersionService(dbFactory);
 
-        var version = await svc.GetCurrentVersionAsync();
+        int version = await svc.GetCurrentVersionAsync();
         Assert.Equal(0, version);
     }
 
@@ -47,10 +47,10 @@ public class VersionServiceTests : Infrastructure.TestBase
     public async Task GetCurrentVersion_不递增()
     {
         var dbFactory = CreateServerDbFactory();
-        var svc = new VersionService(dbFactory);
+        VersionService svc = new VersionService(dbFactory);
 
-        var before = await svc.GetCurrentVersionAsync();
-        var after = await svc.GetCurrentVersionAsync();
+        int before = await svc.GetCurrentVersionAsync();
+        int after = await svc.GetCurrentVersionAsync();
 
         Assert.Equal(before, after);
     }

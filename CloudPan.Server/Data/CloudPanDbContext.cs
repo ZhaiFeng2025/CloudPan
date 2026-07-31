@@ -1,12 +1,13 @@
-using Microsoft.EntityFrameworkCore;
-using CloudPan.Shared;
 using CloudPan.Server.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace CloudPan.Server.Data;
 
 /// <summary>
 /// CloudPan 服务端数据库上下文。
 /// SQLite + WAL 模式，EF Core Code-First。
+/// 当前使用 EnsureCreated 策略（自动建表/删表重建），
+/// 未启用 EF Core Migrations。Phase 1 应迁移至 Migrations。
 /// </summary>
 public class CloudPanDbContext : DbContext
 {

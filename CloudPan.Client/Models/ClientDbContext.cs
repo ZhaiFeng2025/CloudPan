@@ -5,6 +5,8 @@ namespace CloudPan.Client.Models;
 /// <summary>
 /// 客户端本地 SQLite 数据库。
 /// 存储传输队列、远程快照、同步游标。
+/// 当前使用 EnsureCreated 策略（自动建表/删表重建），
+/// 未启用 EF Core Migrations。Phase 1 应迁移至 Migrations。
 /// </summary>
 public class ClientDbContext : DbContext
 {
@@ -21,10 +23,27 @@ public class ClientDbContext : DbContext
 
     public ClientDbContext(DbContextOptions<ClientDbContext> options) : base(options) { }
 
+    private bool _pragmaSet;
+
     protected override void OnConfiguring(DbContextOptionsBuilder options)
     {
         if (!options.IsConfigured)
+        {
             options.UseSqlite($"Data Source={_dbPath}");
+        }
+    }
+
+    /// <summary>确保当前连接设置了 WAL 模式 + busy_timeout + 外键约束。</summary>
+    public void EnsureWAL()
+    {
+        if (!_pragmaSet)
+        {
+            Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
+            Database.ExecuteSqlRaw("PRAGMA synchronous=NORMAL;");
+            Database.ExecuteSqlRaw("PRAGMA busy_timeout=5000;");
+            Database.ExecuteSqlRaw("PRAGMA foreign_keys=ON;");
+            _pragmaSet = true;
+        }
     }
 
     protected override void OnModelCreating(ModelBuilder model)
@@ -52,12 +71,13 @@ public class SyncQueueItem
 {
     public int Id { get; set; }
     public string FilePath { get; set; } = "";
-    public int Operation { get; set; } // 0=Upload, 1=Download, 2=Delete
+    public int Operation { get; set; } // 0=Upload, 1=Download, 2=Delete, 3=Rename
     public int Priority { get; set; }
     public int? BaseVersion { get; set; }
     public long? FileSize { get; set; }
     public int RetryCount { get; set; }
     public string? LastError { get; set; }
+    public string? TargetPath { get; set; } // 重命名操作的目标路径
     public string CreatedAt { get; set; } = DateTime.UtcNow.ToString("O");
 }
 

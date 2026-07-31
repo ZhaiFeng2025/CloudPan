@@ -1,9 +1,10 @@
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using CloudPan.Shared;
+using CloudPan.Server;
 using CloudPan.Server.Data;
 using CloudPan.Server.Models;
 using CloudPan.Server.Services;
+using CloudPan.Shared;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using IOFile = System.IO.File;
 using IOFileInfo = System.IO.FileInfo;
 
@@ -14,23 +15,30 @@ namespace CloudPan.Server.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/versions")]
+[EndpointAuth(AuthMode.Token)]
 public class VersionsController : ControllerBase
 {
     private readonly IDbContextFactory<CloudPanDbContext> _dbFactory;
     private readonly IFileStorageService _storage;
     private readonly IFileIndexService _index;
     private readonly IVersionService _version;
+    private readonly ISyncLogService _syncLog;
+    private readonly IWebSocketHandler _wsHandler;
 
     public VersionsController(
         IDbContextFactory<CloudPanDbContext> dbFactory,
         IFileStorageService storage,
         IFileIndexService index,
-        IVersionService version)
+        IVersionService version,
+        ISyncLogService syncLog,
+        IWebSocketHandler wsHandler)
     {
         _dbFactory = dbFactory;
         _storage = storage;
         _index = index;
         _version = version;
+        _syncLog = syncLog;
+        _wsHandler = wsHandler;
     }
 
     /// <summary>
@@ -40,7 +48,9 @@ public class VersionsController : ControllerBase
     public async Task<IActionResult> GetVersions([FromQuery] string path, [FromQuery] int limit = 10)
     {
         if (string.IsNullOrWhiteSpace(path))
-            return BadRequest(new { error = new { code = "BAD_REQUEST", message = "path 参数缺失" } });
+        {
+            return this.Error(HttpErrorCode.BAD_REQUEST, "path 参数缺失", "缺少文件路径参数");
+        }
 
         await using var db = await _dbFactory.CreateDbContextAsync();
         var versions = await db.VersionRecords
@@ -69,7 +79,9 @@ public class VersionsController : ControllerBase
     public async Task<IActionResult> Restore([FromBody] RestoreRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.FilePath))
-            return BadRequest(new { error = new { code = "BAD_REQUEST", message = "filePath 参数缺失" } });
+        {
+            return this.Error(HttpErrorCode.BAD_REQUEST, "filePath 参数缺失", "缺少文件路径参数");
+        }
 
         await using var db = await _dbFactory.CreateDbContextAsync();
 
@@ -77,22 +89,28 @@ public class VersionsController : ControllerBase
         var targetVersion = await db.VersionRecords
             .FirstOrDefaultAsync(v => v.FilePath == request.FilePath && v.Version == request.Version);
         if (targetVersion == null)
-            return NotFound(new { error = new { code = "NOT_FOUND", message = $"版本不存在: v{request.Version}" } });
+        {
+            return this.Error(HttpErrorCode.NOT_FOUND, $"版本不存在: v{request.Version}", "指定的历史版本不存在");
+        }
 
         // 检查历史文件
-        var versionFilePath = Path.Combine(
+        string versionFilePath = Path.Combine(
             Path.GetDirectoryName(_storage.GetAbsolutePath(request.FilePath))!,
             ".cloudpan", ".versions", targetVersion.StoragePath);
         if (!IOFile.Exists(versionFilePath))
-            return NotFound(new { error = new { code = "NOT_FOUND", message = "历史版本文件已丢失" } });
+        {
+            return this.Error(HttpErrorCode.NOT_FOUND, "历史版本文件已丢失", "历史版本文件已丢失，无法恢复");
+        }
 
         var currentEntry = await _index.GetByPathAsync(request.FilePath);
         if (currentEntry == null)
-            return NotFound(new { error = new { code = "NOT_FOUND", message = $"文件不存在: {request.FilePath}" } });
+        {
+            return this.Error(HttpErrorCode.NOT_FOUND, $"文件不存在: {request.FilePath}", "文件不存在，无法恢复");
+        }
 
         // 1. 存档当前版本
-        var deviceId = HttpContext.Items["DeviceId"] as string ?? "unknown";
-        var storagePath = await _storage.StoreVersionAsync(request.FilePath, currentEntry.Version);
+        string deviceId = HttpContext.Items["DeviceId"] as string ?? "unknown";
+        string storagePath = await _storage.StoreVersionAsync(request.FilePath, currentEntry.Version);
 
         db.VersionRecords.Add(new VersionRecord
         {
@@ -106,8 +124,8 @@ public class VersionsController : ControllerBase
         });
 
         // 2. 用历史文件覆盖当前文件
-        var targetPath = _storage.GetAbsolutePath(request.FilePath);
-        var tmpPath = targetPath + ".tmp";
+        string targetPath = _storage.GetAbsolutePath(request.FilePath);
+        string tmpPath = targetPath + ".tmp";
         using (var srcStream = IOFile.OpenRead(versionFilePath))
         using (var dstStream = IOFile.Create(tmpPath))
         {
@@ -117,9 +135,9 @@ public class VersionsController : ControllerBase
         IOFile.Move(tmpPath, targetPath, overwrite: true);
 
         // 3. 计算哈希并更新索引
-        var newVersion = await _version.NextVersionAsync();
-        var hash = await _storage.ComputeHashAsync(targetPath);
-        var size = new IOFileInfo(targetPath).Length;
+        int newVersion = await _version.NextVersionAsync();
+        string hash = await _storage.ComputeHashAsync(targetPath);
+        long size = new IOFileInfo(targetPath).Length;
 
         await _index.UpsertFileAsync(
             request.FilePath, FileType.File, hash, size,
@@ -140,6 +158,14 @@ public class VersionsController : ControllerBase
 
         await db.SaveChangesAsync();
 
+        // 写入审计日志（回滚成功）
+        string restoreDeviceId = HttpContext.Items["DeviceId"] as string ?? "unknown";
+        await _syncLog.LogAsync(request.FilePath, SyncOperation.Restore, restoreDeviceId, LogResult.Success,
+            $"回滚到 v{request.Version}");
+
+        // WebSocket 广播
+        await _wsHandler.BroadcastFileChangedAsync(request.FilePath, newVersion, restoreDeviceId);
+
         return Ok(new
         {
             data = new
@@ -154,4 +180,5 @@ public class VersionsController : ControllerBase
     }
 }
 
+/// <summary>将文件恢复至指定历史版本的请求。</summary>
 public record RestoreRequest(string FilePath, int Version);

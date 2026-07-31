@@ -11,7 +11,7 @@ public class RequestIdMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        var requestId = Guid.NewGuid().ToString("N")[..12];
+        string requestId = Guid.NewGuid().ToString("N")[..12];
         context.Response.Headers["X-Request-Id"] = requestId;
         context.Items["RequestId"] = requestId;
 
@@ -22,6 +22,7 @@ public class RequestIdMiddleware
     }
 }
 
+/// <summary>请求 ID 中间件的扩展方法（为每个请求生成唯一追踪 ID）。</summary>
 public static class RequestIdMiddlewareExtensions
 {
     public static IApplicationBuilder UseRequestId(this IApplicationBuilder builder)

@@ -1,5 +1,3 @@
-using CloudPan.Shared;
-
 namespace CloudPan.Client.Services;
 
 /// <summary>
@@ -9,24 +7,32 @@ namespace CloudPan.Client.Services;
 public interface IApiClient
 {
     /// <summary>健康检查。</summary>
-    Task<bool> HealthCheckAsync();
+    Task<bool> HealthCheckAsync(CancellationToken ct = default);
 
     /// <summary>获取文件树（增量）。</summary>
-    Task<FileTreeApiResponse?> GetFileTreeAsync(int sinceVersion, int limit = 5000, string? subPath = null, string? cursor = null);
+    Task<FileTreeApiResponse?> GetFileTreeAsync(int sinceVersion, int limit = 5000, string? subPath = null, string? cursor = null, CancellationToken ct = default);
 
     /// <summary>上传文件。返回服务端响应。</summary>
-    Task<UploadApiResponse?> UploadAsync(string localPath, string remotePath, int baseVersion, string lastModified, IProgress<long>? progress = null);
+    Task<UploadApiResponse?> UploadAsync(string localPath, string remotePath, int baseVersion, string lastModified, IProgress<long>? progress = null, CancellationToken ct = default);
 
-    /// <summary>下载文件。返回服务端文件最后修改时间。</summary>
+    /// <summary>下载文件。返回服务端文件最后修改时间和期望哈希。</summary>
     /// <exception cref="InvalidDataException">文件 SHA-256 与服务端不匹配。</exception>
-    Task<string?> DownloadAsync(string remotePath, string localPath, IProgress<long>? progress = null);
+    Task<DownloadResult?> DownloadAsync(string remotePath, string localPath, IProgress<long>? progress = null, CancellationToken ct = default);
 
     /// <summary>删除文件。</summary>
-    Task DeleteAsync(string path, int baseVersion);
+    Task DeleteAsync(string path, int baseVersion, CancellationToken ct = default);
 
     /// <summary>移动/重命名文件。</summary>
-    Task MoveAsync(string oldPath, string newPath, int baseVersion);
+    Task MoveAsync(string oldPath, string newPath, int baseVersion, CancellationToken ct = default);
 
     /// <summary>创建文件夹。</summary>
-    Task MkdirAsync(string path);
+    Task MkdirAsync(string path, CancellationToken ct = default);
+
+    /// <summary>分块上传文件（自动判断 <10MB 直传、>=10MB 分块）。</summary>
+    Task<UploadApiResponse?> UploadChunkedAsync(
+        string localPath, string remotePath, int baseVersion, string lastModified,
+        IProgress<long>? progress = null, CancellationToken ct = default);
+
+    /// <summary>查询分块上传进度。</summary>
+    Task<ChunkStatusResponse?> GetChunkStatusAsync(string path, CancellationToken ct = default);
 }

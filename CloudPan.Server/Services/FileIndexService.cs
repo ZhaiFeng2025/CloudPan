@@ -1,6 +1,6 @@
-using CloudPan.Shared;
 using CloudPan.Server.Data;
 using CloudPan.Server.Models;
+using CloudPan.Shared;
 using Microsoft.EntityFrameworkCore;
 
 namespace CloudPan.Server.Services;
@@ -31,26 +31,33 @@ public class FileIndexService : IFileIndexService
 
         // 增量：仅返回版本号大于 sinceVersion 的文件
         if (sinceVersion.HasValue)
+        {
             query = query.Where(f => f.Version > sinceVersion.Value);
+        }
 
         // 子目录过滤
         if (!string.IsNullOrEmpty(subPath))
         {
-            var prefix = subPath.TrimEnd('/') + "/";
+            string prefix = subPath.TrimEnd('/') + "/";
             query = query.Where(f => f.Path.StartsWith(prefix));
         }
 
         // 游标分页（基于 Path）
         if (!string.IsNullOrEmpty(cursor))
+        {
             query = query.Where(f => f.Path.CompareTo(cursor) > 0);
+        }
 
         query = query.OrderBy(f => f.Path).Take(limit + 1);
 
         var items = await query.ToListAsync();
-        var hasMore = items.Count > limit;
-        if (hasMore) items.RemoveAt(items.Count - 1);
+        bool hasMore = items.Count > limit;
+        if (hasMore)
+        {
+            items.RemoveAt(items.Count - 1);
+        }
 
-        var maxVersion = await db.FileEntries.MaxAsync(f => (int?)f.Version) ?? 0;
+        int maxVersion = await db.FileEntries.MaxAsync(f => (int?)f.Version) ?? 0;
 
         return new FileTreeResponse(
             items.Select(MapToDto).ToList(),
@@ -130,14 +137,14 @@ public class FileIndexService : IFileIndexService
     public async Task<List<string>> DeleteAsync(string path, bool isDirectory)
     {
         await using var db = await _dbFactory.CreateDbContextAsync();
-        var deletedPaths = new List<string>();
+        List<string> deletedPaths = new List<string>();
 
         // 收集所有待删除路径
-        var pathsToDelete = new List<string>();
+        List<string> pathsToDelete = new List<string>();
 
         if (isDirectory)
         {
-            var prefix = path.TrimEnd('/') + "/";
+            string prefix = path.TrimEnd('/') + "/";
             var children = await db.FileEntries
                 .Where(f => f.Path.StartsWith(prefix))
                 .ToListAsync();
@@ -146,7 +153,9 @@ public class FileIndexService : IFileIndexService
 
         var entry = await db.FileEntries.FindAsync(path);
         if (entry != null)
+        {
             pathsToDelete.Add(entry.Path);
+        }
 
         // 先删除关联的版本历史（FK 约束要求）
         if (pathsToDelete.Count > 0)
@@ -160,7 +169,7 @@ public class FileIndexService : IFileIndexService
         // 再删除文件条目
         if (isDirectory)
         {
-            var prefix = path.TrimEnd('/') + "/";
+            string prefix = path.TrimEnd('/') + "/";
             var children = await db.FileEntries
                 .Where(f => f.Path.StartsWith(prefix))
                 .ToListAsync();
@@ -168,7 +177,9 @@ public class FileIndexService : IFileIndexService
         }
 
         if (entry != null)
+        {
             db.FileEntries.Remove(entry);
+        }
 
         await db.SaveChangesAsync();
         deletedPaths.AddRange(pathsToDelete);
@@ -184,7 +195,7 @@ public class FileIndexService : IFileIndexService
         await using var db = await _dbFactory.CreateDbContextAsync();
         await using var tx = await db.Database.BeginTransactionAsync();
 
-        var timestamp = DateTime.UtcNow.ToString("O");
+        string timestamp = DateTime.UtcNow.ToString("O");
 
         try
         {
@@ -195,8 +206,8 @@ public class FileIndexService : IFileIndexService
 
             if (isDirectory)
             {
-                var oldPrefix = oldPath.TrimEnd('/') + "/";
-                var newPrefix = newPath.TrimEnd('/') + "/";
+                string oldPrefix = oldPath.TrimEnd('/') + "/";
+                string newPrefix = newPath.TrimEnd('/') + "/";
 
                 // SQLite 的 REPLACE 函数做前缀替换
                 await db.Database.ExecuteSqlRawAsync(
@@ -221,7 +232,9 @@ public class FileIndexService : IFileIndexService
         await using var db = await _dbFactory.CreateDbContextAsync();
 
         if (await db.FileEntries.AnyAsync(f => f.Path == path))
+        {
             throw new InvalidOperationException($"路径已存在: {path}");
+        }
 
         db.FileEntries.Add(new FileEntry
         {

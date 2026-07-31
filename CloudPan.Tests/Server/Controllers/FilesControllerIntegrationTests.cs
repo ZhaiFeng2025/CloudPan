@@ -1,7 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using CloudPan.Shared;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Extensions.Configuration;
 using Xunit;
 
 namespace CloudPan.Tests.Server.Controllers;
@@ -70,10 +70,10 @@ public class FilesControllerIntegrationTests : IClassFixture<WebApplicationFacto
     public async Task Upload_正常文件_返回版本号()
     {
         // 准备测试文件
-        var testFilePath = Path.Combine(_tempDir, "test_upload.txt");
+        string testFilePath = Path.Combine(_tempDir, "test_upload.txt");
         await File.WriteAllTextAsync(testFilePath, "integration test content");
 
-        using var form = new MultipartFormDataContent();
+        using MultipartFormDataContent form = new MultipartFormDataContent();
         await using var fileStream = File.OpenRead(testFilePath);
         form.Add(new StreamContent(fileStream), "file", "test.txt");
         form.Add(new StringContent("/integration/test.txt"), "path");
@@ -102,10 +102,10 @@ public class FilesControllerIntegrationTests : IClassFixture<WebApplicationFacto
     [Fact]
     public async Task Upload_空路径_返回400()
     {
-        var testFilePath = Path.Combine(_tempDir, "empty_path.txt");
+        string testFilePath = Path.Combine(_tempDir, "empty_path.txt");
         await File.WriteAllTextAsync(testFilePath, "x");
 
-        using var form = new MultipartFormDataContent();
+        using MultipartFormDataContent form = new MultipartFormDataContent();
         await using var fileStream = File.OpenRead(testFilePath);
         form.Add(new StreamContent(fileStream), "file", "test.txt");
         form.Add(new StringContent(""), "path"); // 空路径
@@ -121,7 +121,7 @@ public class FilesControllerIntegrationTests : IClassFixture<WebApplicationFacto
     [Fact]
     public async Task Mkdir_创建文件夹_返回路径()
     {
-        var folderPath = $"/test-folder-{Guid.NewGuid():N}/";
+        string folderPath = $"/test-folder-{Guid.NewGuid():N}/";
         var response = await _client.PostAsJsonAsync("/api/files/mkdir",
             new { path = folderPath }, JsonOptions);
         response.EnsureSuccessStatusCode();
@@ -163,10 +163,10 @@ public class FilesControllerIntegrationTests : IClassFixture<WebApplicationFacto
     public async Task GetTree_上传后_包含文件()
     {
         // 先上传一个文件
-        var testFilePath = Path.Combine(_tempDir, "for_tree.txt");
+        string testFilePath = Path.Combine(_tempDir, "for_tree.txt");
         await File.WriteAllTextAsync(testFilePath, "tree test");
 
-        using var form = new MultipartFormDataContent();
+        using MultipartFormDataContent form = new MultipartFormDataContent();
         await using var fileStream = File.OpenRead(testFilePath);
         form.Add(new StreamContent(fileStream), "file", "for_tree.txt");
         form.Add(new StringContent("/tree-test.txt"), "path");
@@ -186,10 +186,10 @@ public class FilesControllerIntegrationTests : IClassFixture<WebApplicationFacto
     public async Task Search_匹配关键词_返回结果()
     {
         // 上传关键词文件（本地文件名与远程路径不同，避免文件锁冲突）
-        var localFile = Path.Combine(_tempDir, "_src_keyword_file.txt");
+        string localFile = Path.Combine(_tempDir, "_src_keyword_file.txt");
         await File.WriteAllTextAsync(localFile, "searchable");
 
-        using var form = new MultipartFormDataContent();
+        using MultipartFormDataContent form = new MultipartFormDataContent();
         await using var fileStream = File.OpenRead(localFile);
         form.Add(new StreamContent(fileStream), "file", "keyword_file.txt");
         form.Add(new StringContent("/keyword_file.txt"), "path");
@@ -219,10 +219,10 @@ public class FilesControllerIntegrationTests : IClassFixture<WebApplicationFacto
     public async Task Delete_上传后删除_成功()
     {
         // 上传
-        var testFilePath = Path.Combine(_tempDir, "delete_me.txt");
+        string testFilePath = Path.Combine(_tempDir, "delete_me.txt");
         await File.WriteAllTextAsync(testFilePath, "to be deleted");
 
-        using var form = new MultipartFormDataContent();
+        using MultipartFormDataContent form = new MultipartFormDataContent();
         await using var fileStream = File.OpenRead(testFilePath);
         form.Add(new StreamContent(fileStream), "file", "delete_me.txt");
         form.Add(new StringContent("/delete-me.txt"), "path");
@@ -248,15 +248,15 @@ public class FilesControllerIntegrationTests : IClassFixture<WebApplicationFacto
     [Fact]
     public async Task Move_重命名_成功()
     {
-        var guid = Guid.NewGuid().ToString("N")[..8];
-        var oldPath = $"/old-{guid}.txt";
-        var newPath = $"/new-{guid}.txt";
+        string guid = Guid.NewGuid().ToString("N")[..8];
+        string oldPath = $"/old-{guid}.txt";
+        string newPath = $"/new-{guid}.txt";
 
         // 先上传
-        var localFile = Path.Combine(_tempDir, $"old_{guid}.txt");
+        string localFile = Path.Combine(_tempDir, $"old_{guid}.txt");
         await File.WriteAllTextAsync(localFile, "rename me");
 
-        using var form = new MultipartFormDataContent();
+        using MultipartFormDataContent form = new MultipartFormDataContent();
         await using var fileStream = File.OpenRead(localFile);
         form.Add(new StreamContent(fileStream), "file", $"old_{guid}.txt");
         form.Add(new StringContent(oldPath), "path");
@@ -280,15 +280,15 @@ public class FilesControllerIntegrationTests : IClassFixture<WebApplicationFacto
     [Fact]
     public async Task Download_上传后下载_内容一致且返回哈希头()
     {
-        var guid = Guid.NewGuid().ToString("N")[..8];
-        var remotePath = $"/download-test-{guid}.txt";
-        var content = $"download integrity check {guid}";
+        string guid = Guid.NewGuid().ToString("N")[..8];
+        string remotePath = $"/download-test-{guid}.txt";
+        string content = $"download integrity check {guid}";
 
         // 上传
-        var localFile = Path.Combine(_tempDir, $"src_{guid}.txt");
+        string localFile = Path.Combine(_tempDir, $"src_{guid}.txt");
         await File.WriteAllTextAsync(localFile, content);
 
-        using var form = new MultipartFormDataContent();
+        using MultipartFormDataContent form = new MultipartFormDataContent();
         await using var fileStream = File.OpenRead(localFile);
         form.Add(new StreamContent(fileStream), "file", $"src_{guid}.txt");
         form.Add(new StringContent(remotePath), "path");
@@ -297,20 +297,20 @@ public class FilesControllerIntegrationTests : IClassFixture<WebApplicationFacto
         await _client.PostAsync("/api/files/upload", form);
 
         // 下载
-        var downloadPath = Path.Combine(_tempDir, $"dl_{guid}.txt");
+        string downloadPath = Path.Combine(_tempDir, $"dl_{guid}.txt");
         var response = await _client.GetAsync(
             $"/api/files/download?path={Uri.EscapeDataString(remotePath)}");
         response.EnsureSuccessStatusCode();
 
         // 验证响应头包含哈希
         Assert.True(response.Headers.TryGetValues("X-File-Hash", out var hashValues));
-        var hash = hashValues.First();
+        string hash = hashValues.First();
         Assert.Equal(64, hash.Length); // SHA-256 64 hex chars
 
         // 验证内容一致
         using var dlStream = await response.Content.ReadAsStreamAsync();
-        using var reader = new StreamReader(dlStream);
-        var downloadedContent = await reader.ReadToEndAsync();
+        using StreamReader reader = new StreamReader(dlStream);
+        string downloadedContent = await reader.ReadToEndAsync();
         Assert.Equal(content, downloadedContent);
     }
 
@@ -321,14 +321,14 @@ public class FilesControllerIntegrationTests : IClassFixture<WebApplicationFacto
     [Fact]
     public async Task Upload_版本冲突_返回409和冲突副本()
     {
-        var guid = Guid.NewGuid().ToString("N")[..8];
-        var remotePath = $"/conflict-{guid}.txt";
+        string guid = Guid.NewGuid().ToString("N")[..8];
+        string remotePath = $"/conflict-{guid}.txt";
 
         // 第一次上传 → 版本 1
-        var localFile1 = Path.Combine(_tempDir, $"_src1_{guid}.txt");
+        string localFile1 = Path.Combine(_tempDir, $"_src1_{guid}.txt");
         await File.WriteAllTextAsync(localFile1, "version 1");
 
-        using (var form = new MultipartFormDataContent())
+        using (MultipartFormDataContent form = new MultipartFormDataContent())
         {
             await using var fs = File.OpenRead(localFile1);
             form.Add(new StreamContent(fs), "file", "file1.txt");
@@ -340,10 +340,10 @@ public class FilesControllerIntegrationTests : IClassFixture<WebApplicationFacto
         }
 
         // 第二次上传（baseVersion=1 且版本匹配 → 正常覆盖 → 版本 2）
-        var localFile2 = Path.Combine(_tempDir, $"_src2_{guid}.txt");
+        string localFile2 = Path.Combine(_tempDir, $"_src2_{guid}.txt");
         await File.WriteAllTextAsync(localFile2, "version 2");
 
-        using (var form = new MultipartFormDataContent())
+        using (MultipartFormDataContent form = new MultipartFormDataContent())
         {
             await using var fs = File.OpenRead(localFile2);
             form.Add(new StreamContent(fs), "file", "file2.txt");
@@ -355,10 +355,10 @@ public class FilesControllerIntegrationTests : IClassFixture<WebApplicationFacto
         }
 
         // 第三次上传（baseVersion=1，但服务端已是 v2 → 冲突！）
-        var localFile3 = Path.Combine(_tempDir, $"_src3_{guid}.txt");
+        string localFile3 = Path.Combine(_tempDir, $"_src3_{guid}.txt");
         await File.WriteAllTextAsync(localFile3, "version 3 - conflict!");
 
-        using (var form = new MultipartFormDataContent())
+        using (MultipartFormDataContent form = new MultipartFormDataContent())
         {
             await using var fs = File.OpenRead(localFile3);
             form.Add(new StreamContent(fs), "file", "file3.txt");
@@ -371,8 +371,9 @@ public class FilesControllerIntegrationTests : IClassFixture<WebApplicationFacto
 
             var body = await r.Content.ReadFromJsonAsync<JsonElement>(JsonOptions);
             var error = body.GetProperty("error");
-            Assert.Equal("CONFLICT", error.GetProperty("code").GetString());
-            Assert.True(error.GetProperty("conflictPath").GetString().Contains("冲突"));
+            Assert.Equal(HttpErrorCode.CONFLICT.Code, error.GetProperty("code").GetString());
+            // Phase 1: conflictPath/currentVersion/baseVersion 已迁移到 detail 字段
+            Assert.Contains("冲突", error.GetProperty("detail").GetString());
         }
     }
 

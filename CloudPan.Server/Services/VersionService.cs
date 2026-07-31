@@ -1,5 +1,4 @@
 using CloudPan.Server.Data;
-using CloudPan.Server.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace CloudPan.Server.Services;
@@ -25,17 +24,24 @@ public class VersionService : IVersionService
     {
         await using var db = await _dbFactory.CreateDbContextAsync();
 
-        // 原子递增：SQLite WAL 模式下写操作串行，UPDATE+SELECT 在单事务内保证原子
+        // 使用显式事务包装 UPDATE+SELECT，确保原子递增
+        await using var tx = await db.Database.BeginTransactionAsync();
+
         // 如果 global_version 行不存在则先创建
         await db.Database.ExecuteSqlRawAsync(
             "INSERT OR IGNORE INTO AppConfig(Key, Value) VALUES('global_version', '0')");
 
+        // 原子递增（其他连接在提交前只能看到旧值）
         await db.Database.ExecuteSqlRawAsync(
             "UPDATE AppConfig SET Value = CAST(Value AS INTEGER) + 1 WHERE Key = 'global_version'");
 
-        // 在同一连接上读取（SQLite 连接是串行的）
+        // 在同一事务中读取最新值
         var config = await db.AppConfigs.FindAsync("global_version");
-        return config != null ? int.Parse(config.Value) : 1;
+        int result = config != null ? int.Parse(config.Value) : 1;
+
+        await tx.CommitAsync();
+
+        return result;
     }
 
     /// <summary>

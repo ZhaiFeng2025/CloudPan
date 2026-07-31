@@ -1,5 +1,5 @@
-using CloudPan.Shared;
 using CloudPan.Server.Services;
+using CloudPan.Shared;
 using Xunit;
 
 namespace CloudPan.Tests.Server.Services;
@@ -13,7 +13,7 @@ public class FileIndexServiceTests : Infrastructure.TestBase
     public async Task UpsertFile_新建_返回新条目()
     {
         var dbFactory = CreateServerDbFactory();
-        var index = new FileIndexService(dbFactory);
+        FileIndexService index = new FileIndexService(dbFactory);
 
         var entry = await index.UpsertFileAsync(
             "/test/file.txt", FileType.File, "abc123", 1024,
@@ -28,7 +28,7 @@ public class FileIndexServiceTests : Infrastructure.TestBase
     public async Task UpsertFile_更新_版本号和哈希变化()
     {
         var dbFactory = CreateServerDbFactory();
-        var index = new FileIndexService(dbFactory);
+        FileIndexService index = new FileIndexService(dbFactory);
 
         await index.UpsertFileAsync("/a.txt", FileType.File, "hash1", 100,
             DateTime.UtcNow.ToString("O"), 1);
@@ -45,7 +45,7 @@ public class FileIndexServiceTests : Infrastructure.TestBase
     public async Task GetByPath_存在_返回条目()
     {
         var dbFactory = CreateServerDbFactory();
-        var index = new FileIndexService(dbFactory);
+        FileIndexService index = new FileIndexService(dbFactory);
 
         await index.UpsertFileAsync("/found.txt", FileType.File, "hash", 50,
             DateTime.UtcNow.ToString("O"), 1);
@@ -59,7 +59,7 @@ public class FileIndexServiceTests : Infrastructure.TestBase
     public async Task GetByPath_不存在_返回null()
     {
         var dbFactory = CreateServerDbFactory();
-        var index = new FileIndexService(dbFactory);
+        FileIndexService index = new FileIndexService(dbFactory);
 
         var found = await index.GetByPathAsync("/ghost.txt");
         Assert.Null(found);
@@ -69,7 +69,7 @@ public class FileIndexServiceTests : Infrastructure.TestBase
     public async Task Delete_文件_物理删除()
     {
         var dbFactory = CreateServerDbFactory();
-        var index = new FileIndexService(dbFactory);
+        FileIndexService index = new FileIndexService(dbFactory);
 
         await index.UpsertFileAsync("/bye.txt", FileType.File, "hash", 1,
             DateTime.UtcNow.ToString("O"), 1);
@@ -85,7 +85,7 @@ public class FileIndexServiceTests : Infrastructure.TestBase
     public async Task Delete_文件夹_递归删除子文件()
     {
         var dbFactory = CreateServerDbFactory();
-        var index = new FileIndexService(dbFactory);
+        FileIndexService index = new FileIndexService(dbFactory);
 
         await index.CreateDirectoryAsync("/parent/", 1);
         await index.UpsertFileAsync("/parent/child1.txt", FileType.File, "hash", 10,
@@ -107,7 +107,7 @@ public class FileIndexServiceTests : Infrastructure.TestBase
     public async Task Move_文件_路径更新()
     {
         var dbFactory = CreateServerDbFactory();
-        var index = new FileIndexService(dbFactory);
+        FileIndexService index = new FileIndexService(dbFactory);
 
         await index.UpsertFileAsync("/old.txt", FileType.File, "hash", 1,
             DateTime.UtcNow.ToString("O"), 1);
@@ -124,10 +124,10 @@ public class FileIndexServiceTests : Infrastructure.TestBase
     public async Task GetFileTree_分页_返回hasMore和nextCursor()
     {
         var dbFactory = CreateServerDbFactory();
-        var index = new FileIndexService(dbFactory);
+        FileIndexService index = new FileIndexService(dbFactory);
 
         // 创建 5 个文件
-        for (var i = 0; i < 5; i++)
+        for (int i = 0; i < 5; i++)
         {
             await index.UpsertFileAsync($"/file_{i:D3}.txt", FileType.File, "hash", i,
                 DateTime.UtcNow.ToString("O"), i + 1);
@@ -153,7 +153,7 @@ public class FileIndexServiceTests : Infrastructure.TestBase
     public async Task GetFileTree_增量_仅返回高版本文件()
     {
         var dbFactory = CreateServerDbFactory();
-        var index = new FileIndexService(dbFactory);
+        FileIndexService index = new FileIndexService(dbFactory);
 
         await index.UpsertFileAsync("/v1.txt", FileType.File, "hash", 10,
             DateTime.UtcNow.ToString("O"), 1);
@@ -172,7 +172,7 @@ public class FileIndexServiceTests : Infrastructure.TestBase
     public async Task CreateDirectory_新建文件夹()
     {
         var dbFactory = CreateServerDbFactory();
-        var index = new FileIndexService(dbFactory);
+        FileIndexService index = new FileIndexService(dbFactory);
 
         await index.CreateDirectoryAsync("/my-folder/", 1);
 
@@ -185,7 +185,7 @@ public class FileIndexServiceTests : Infrastructure.TestBase
     public async Task CreateDirectory_重复创建_抛出异常()
     {
         var dbFactory = CreateServerDbFactory();
-        var index = new FileIndexService(dbFactory);
+        FileIndexService index = new FileIndexService(dbFactory);
 
         await index.CreateDirectoryAsync("/dup/", 1);
 
@@ -197,7 +197,7 @@ public class FileIndexServiceTests : Infrastructure.TestBase
     public async Task Search_按关键词查找()
     {
         var dbFactory = CreateServerDbFactory();
-        var index = new FileIndexService(dbFactory);
+        FileIndexService index = new FileIndexService(dbFactory);
 
         await index.UpsertFileAsync("/docs/report.docx", FileType.File, "hash", 100,
             DateTime.UtcNow.ToString("O"), 1);

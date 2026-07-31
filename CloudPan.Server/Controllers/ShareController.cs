@@ -1,9 +1,11 @@
 using System.Security.Cryptography;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using CloudPan.Server;
 using CloudPan.Server.Data;
 using CloudPan.Server.Models;
 using CloudPan.Server.Services;
+using CloudPan.Shared;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace CloudPan.Server.Controllers;
 
@@ -12,6 +14,7 @@ namespace CloudPan.Server.Controllers;
 /// /api/shares 需要 Token 认证；/share/{id} 公开访问（手机浏览器可直接打开）。
 /// </summary>
 [ApiController]
+[EndpointAuth(AuthMode.Token)]
 public class ShareController : ControllerBase
 {
     private readonly IDbContextFactory<CloudPanDbContext> _dbFactory;
@@ -35,16 +38,20 @@ public class ShareController : ControllerBase
     public async Task<IActionResult> CreateShare([FromBody] CreateShareRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.FilePath))
-            return BadRequest(new { error = new { code = "BAD_REQUEST", message = "filePath 不能为空" } });
+        {
+            return this.Error(HttpErrorCode.BAD_REQUEST, "filePath 不能为空", "文件路径不能为空");
+        }
 
         var entry = await _index.GetByPathAsync(request.FilePath);
         if (entry == null)
-            return NotFound(new { error = new { code = "NOT_FOUND", message = $"文件不存在: {request.FilePath}" } });
+        {
+            return this.Error(HttpErrorCode.NOT_FOUND, $"文件不存在: {request.FilePath}", "文件不存在，无法创建分享链接");
+        }
 
-        var deviceId = HttpContext.Items["DeviceId"] as string ?? "unknown";
+        string deviceId = HttpContext.Items["DeviceId"] as string ?? "unknown";
 
         await using var db = await _dbFactory.CreateDbContextAsync();
-        var share = new Share
+        Share share = new Share
         {
             Id = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant(), // 32 hex
             FilePath = request.FilePath,
@@ -60,7 +67,7 @@ public class ShareController : ControllerBase
         db.Shares.Add(share);
         await db.SaveChangesAsync();
 
-        var baseUrl = $"{Request.Scheme}://{Request.Host}";
+        string baseUrl = $"{Request.Scheme}://{Request.Host}";
         return Ok(new
         {
             data = new
@@ -82,7 +89,9 @@ public class ShareController : ControllerBase
         await using var db = await _dbFactory.CreateDbContextAsync();
         var share = await db.Shares.FindAsync(shareId);
         if (share == null)
-            return NotFound(new { error = new { code = "NOT_FOUND", message = "分享链接不存在" } });
+        {
+            return this.Error(HttpErrorCode.NOT_FOUND, "分享链接不存在", "分享链接不存在或已失效");
+        }
 
         db.Shares.Remove(share);
         await db.SaveChangesAsync();
@@ -94,19 +103,22 @@ public class ShareController : ControllerBase
     /// GET /share/{shareId} — 分享页面（HTML，手机浏览器友好）。
     /// </summary>
     [HttpGet("/share/{shareId}")]
+    [EndpointAuth(AuthMode.Public)]
     public async Task<IActionResult> SharePage(string shareId, [FromQuery] string? password = null)
     {
         await using var db = await _dbFactory.CreateDbContextAsync();
         var share = await db.Shares.FindAsync(shareId);
         if (share == null)
-            return NotFound("分享链接不存在或已失效");
+        {
+            return this.Error(HttpErrorCode.NOT_FOUND, "分享链接不存在或已失效", "分享链接不存在或已失效");
+        }
 
         // 检查过期
         if (!string.IsNullOrEmpty(share.ExpiresAt)
             && DateTime.TryParse(share.ExpiresAt, out var expires)
             && expires < DateTime.UtcNow)
         {
-            return BadRequest("分享链接已过期");
+            return this.Error(HttpErrorCode.BAD_REQUEST, "分享链接已过期", "分享链接已过期");
         }
 
         // 检查密码
@@ -122,7 +134,7 @@ public class ShareController : ControllerBase
                     "text/html; charset=utf-8");
             }
 
-            var inputHash = Convert.ToHexString(SHA256.HashData(
+            string inputHash = Convert.ToHexString(SHA256.HashData(
                 System.Text.Encoding.UTF8.GetBytes(password))).ToLowerInvariant();
             if (!string.Equals(inputHash, share.PasswordHash, StringComparison.OrdinalIgnoreCase))
             {
@@ -137,13 +149,13 @@ public class ShareController : ControllerBase
         // 检查下载次数
         if (share.MaxDownloads.HasValue && share.UsedDownloads >= share.MaxDownloads.Value)
         {
-            return BadRequest("下载次数已用完");
+            return this.Error(HttpErrorCode.BAD_REQUEST, "下载次数已用完", "下载次数已用完，无法继续下载");
         }
 
-        var fileName = Path.GetFileName(share.FilePath);
-        var fileSize = _storage.Exists(share.FilePath)
+        string fileName = Path.GetFileName(share.FilePath);
+        long fileSize = _storage.Exists(share.FilePath)
             ? _storage.GetSize(share.FilePath) : 0;
-        var sizeStr = fileSize > 1_048_576
+        string sizeStr = fileSize > 1_048_576
             ? $"{fileSize / 1_048_576.0:F1} MB"
             : $"{fileSize / 1024.0:F0} KB";
 
@@ -164,34 +176,43 @@ public class ShareController : ControllerBase
     /// GET /share/{shareId}/download — 下载分享文件。
     /// </summary>
     [HttpGet("/share/{shareId}/download")]
+    [EndpointAuth(AuthMode.Public)]
     public async Task<IActionResult> ShareDownload(string shareId, [FromQuery] string? password = null)
     {
         await using var db = await _dbFactory.CreateDbContextAsync();
         var share = await db.Shares.FindAsync(shareId);
         if (share == null)
-            return NotFound(new { error = new { code = "NOT_FOUND", message = "分享链接不存在" } });
+        {
+            return this.Error(HttpErrorCode.NOT_FOUND, "分享链接不存在", "分享链接不存在或已失效");
+        }
 
         // 密码校验
         if (!string.IsNullOrEmpty(share.PasswordHash))
         {
             if (string.IsNullOrEmpty(password))
-                return Unauthorized(new { error = new { code = "UNAUTHORIZED", message = "需要密码" } });
+            {
+                return this.Error(HttpErrorCode.UNAUTHORIZED, "需要密码", "该分享设置了访问密码，请输入密码后重试");
+            }
 
-            var inputHash = Convert.ToHexString(SHA256.HashData(
+            string inputHash = Convert.ToHexString(SHA256.HashData(
                 System.Text.Encoding.UTF8.GetBytes(password))).ToLowerInvariant();
             if (!string.Equals(inputHash, share.PasswordHash, StringComparison.OrdinalIgnoreCase))
-                return Unauthorized(new { error = new { code = "UNAUTHORIZED", message = "密码错误" } });
+            {
+                return this.Error(HttpErrorCode.UNAUTHORIZED, "密码错误", "访问密码错误，请重新输入");
+            }
         }
 
         if (!_storage.Exists(share.FilePath))
-            return NotFound(new { error = new { code = "NOT_FOUND", message = "文件已被删除" } });
+        {
+            return this.Error(HttpErrorCode.NOT_FOUND, "文件已被删除", "分享的文件已被删除，无法下载");
+        }
 
         // 更新下载计数
         share.UsedDownloads++;
         await db.SaveChangesAsync();
 
         var stream = _storage.OpenRead(share.FilePath);
-        var fileName = Path.GetFileName(share.FilePath);
+        string fileName = Path.GetFileName(share.FilePath);
         return File(stream, "application/octet-stream", fileName);
     }
 }

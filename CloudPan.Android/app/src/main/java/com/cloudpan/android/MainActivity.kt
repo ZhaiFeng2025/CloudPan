@@ -70,7 +70,10 @@ class MainActivity : ComponentActivity() {
             if (showFileList) {
                 FileListScreen(
                     repository = repository,
-                    onBackToSettings = { showFileList = false },
+                    onBackToSettings = {
+                        showFileList = false
+                        repository.invalidateClient()  // 断开HTTP连接池
+                    },
                     onPickFileForUpload = { filePickerLauncher.launch("application/*,image/*,video/*") },
                     refreshTrigger = refreshTrigger
                 )

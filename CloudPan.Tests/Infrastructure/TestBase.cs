@@ -33,13 +33,13 @@ public abstract class TestBase : IDisposable
     /// </summary>
     protected IDbContextFactory<CloudPanDbContext> CreateServerDbFactory()
     {
-        var dbPath = Path.Combine(TempDir, "test.db");
+        string dbPath = Path.Combine(TempDir, "test.db");
         var options = new DbContextOptionsBuilder<CloudPanDbContext>()
             .UseSqlite($"Data Source={dbPath}")
             .Options;
 
         // 初始化数据库 + 种子数据
-        using var db = new CloudPanDbContext(options);
+        using CloudPanDbContext db = new CloudPanDbContext(options);
         db.Database.EnsureCreated();
 
         db.Devices.Add(new Device

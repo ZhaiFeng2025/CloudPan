@@ -1,29 +1,30 @@
 using System.Collections.Concurrent;
+using CloudPan.Shared;
 
 namespace CloudPan.Server.Middleware;
 
 /// <summary>
-/// 速率限制中间件——基于 X-Device-Id 头，每设备每分钟最多 60 次 API 调用。
-/// 文件上传(POST /api/files/upload)和下载(GET /api/files/download)不计入限制。
-/// 使用内存 ConcurrentDictionary 存储计数，定时清理过期条目。
+/// 速率限制中间件——基于可信设备 ID（context.Items["DeviceId"]）或 RemoteIpAddress 兜底。
+/// 每设备每分钟最多 SpecConfig.RateLimitPerMinute 次 API 调用。
+/// 文件上传/下载和公开端点不计入限制。
 /// </summary>
 public class RateLimitMiddleware
 {
     private readonly RequestDelegate _next;
-    private const int MaxRequestsPerMinute = 60;
     private static readonly ConcurrentDictionary<string, RateLimitEntry> Counters = new();
-    private static readonly Timer CleanupTimer;
+    private static readonly System.Threading.Timer CleanupTimer;
 
     static RateLimitMiddleware()
     {
-        // 每分钟清理一次过期计数器
-        CleanupTimer = new Timer(_ =>
+        CleanupTimer = new System.Threading.Timer(_ =>
         {
             var now = DateTime.UtcNow;
             foreach (var (key, entry) in Counters)
             {
                 if (now - entry.WindowStart > TimeSpan.FromMinutes(1))
+                {
                     Counters.TryRemove(key, out var _);
+                }
             }
         }, null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
     }
@@ -32,10 +33,10 @@ public class RateLimitMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        var path = context.Request.Path.Value ?? "";
+        string path = context.Request.Path.Value ?? "";
 
-        // 文件上传/下载不计入限制
-        if (path == "/api/files/upload" && context.Request.Method == "POST")
+        // 文件上传/下载不计入限制（含分块上传）
+        if ((path == "/api/files/upload" || path == "/api/files/upload/chunk") && context.Request.Method == "POST")
         {
             await _next(context);
             return;
@@ -53,12 +54,16 @@ public class RateLimitMiddleware
             return;
         }
 
-        var deviceId = context.Request.Headers["X-Device-Id"].FirstOrDefault() ?? "unknown";
-        var key = $"rate:{deviceId}";
+        // 限流键：优先使用认证后的可信 DeviceId，未认证使用 RemoteIpAddress
+        string? deviceId = context.Items["DeviceId"] as string;
+        string key = deviceId != null
+            ? $"rate:device:{deviceId}"
+            : $"rate:ip:{context.Connection.RemoteIpAddress ?? System.Net.IPAddress.None}";
         var now = DateTime.UtcNow;
 
         var entry = Counters.GetOrAdd(key, _ => new RateLimitEntry { WindowStart = now, Count = 0 });
 
+        bool limited = false;
         lock (entry)
         {
             // 滑动窗口：如果超过 1 分钟，重置计数
@@ -70,15 +75,19 @@ public class RateLimitMiddleware
 
             entry.Count++;
 
-            if (entry.Count > MaxRequestsPerMinute)
+            if (entry.Count > SpecConfig.RateLimitPerMinute)
             {
-                context.Response.StatusCode = 429;
-                context.Response.Headers["Retry-After"] = "60";
-                context.Response.ContentType = "application/json";
-                context.Response.WriteAsync(
-                    """{"error":{"code":"RATE_LIMITED","message":"请求过于频繁，请等待 1 分钟","retryAfter":60}}""");
-                return;
+                context.Response.Headers[SpecConfig.RetryAfterHeader] = "60";
+                limited = true;
             }
+        }
+
+        if (limited)
+        {
+            await context.WriteErrorAsync(HttpErrorCode.RATE_LIMITED,
+                $"请求过于频繁（{SpecConfig.RateLimitPerMinute} 次/分钟），请等待 1 分钟",
+                "请求过于频繁，请稍后重试");
+            return;
         }
 
         await _next(context);
@@ -91,6 +100,7 @@ public class RateLimitMiddleware
     }
 }
 
+/// <summary>限流中间件的扩展方法（按 IP 限流，防暴力破解）。</summary>
 public static class RateLimitMiddlewareExtensions
 {
     public static IApplicationBuilder UseRateLimit(this IApplicationBuilder builder)

@@ -2,10 +2,26 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "cloudpan-shared-spec",
   "title": "CloudPan 共享定义",
-  "description": "所有枚举、实体、端点、字段名的唯一事实来源。三份文档引用本文件，禁止各自重复定义。",
-  "version": "1.3.0",
-  "date": "2026-07-28",
+  "description": "所有枚举、实体、端点、字段名、错误码、配置值的唯一事实来源。所有代码和文档引用本文件，禁止各自重复定义。",
+  "version": "1.5.0",
+  "date": "2026-07-31",
   "_changelog": [
+    { "version": "1.5.0", "date": "2026-07-31", "changes": [
+      "v1.0 正式发布——版本号统一为 1.0.0",
+      "运行时崩溃级 Bug 修复：FileWatcherService NRE、SyncIgnoreParser 未处理异常、GlobalExceptionMiddleware 运算符优先级、RateLimitMiddleware 锁内 await、ServerInstaller 命令注入",
+      "CLAuDE.md 更新为发布状态",
+      "硬编码端口改用 SpecPorts 常量"
+    ]},
+    { "version": "1.4.0", "date": "2026-07-31", "changes": [
+      "endpoints[].auth 从 boolean 升级为字符串枚举 (token|public|localhost|message)",
+      "补齐 11 个未注册端点：/admin×5 + /api/trash×3 + /api/version + /api/cert-fingerprint + /pair",
+      "HttpErrorCode 新增 INVALID_DEVICE_ID (400)",
+      "新增 api.errorResponse 统一错误体格式（消除控制器2字段 vs 中间件3字段不一致）",
+      "新增 api.responses 段：定义 5 个 API 响应包装类型",
+      "api.websocket 新增 authMode: message（明确 /ws 认证在首条消息，非 HTTP 头）",
+      "config: 新增 httpPort: 8443, udpDiscoveryPort: 8450",
+      "entities.SyncQueue.fields 新增 TargetPath (TEXT nullable, 客户端重命名目标)"
+    ]},
     { "version": "1.3.0", "date": "2026-07-28", "changes": ["所有文件大小字段 csharpType: long，防止 >2GB 截断"] },
     { "version": "1.0.0", "date": "2026-07-28", "changes": ["初始版本"] },
     { "version": "1.1.0", "date": "2026-07-28", "changes": [
@@ -94,9 +110,10 @@
       ]
     },
     "HttpErrorCode": {
-      "description": "API 错误码",
+      "description": "API 错误码——所有错误响应必须引用此枚举，禁止在代码中手写错误码字符串",
       "values": [
         { "http": 400, "code": "BAD_REQUEST",          "retry": false },
+        { "http": 400, "code": "INVALID_DEVICE_ID",     "retry": false, "note": "设备ID格式无效或长度为0" },
         { "http": 401, "code": "UNAUTHORIZED",          "retry": false },
         { "http": 404, "code": "NOT_FOUND",             "retry": false },
         { "http": 409, "code": "CONFLICT",              "retry": true,  "note": "拉取最新后重传" },
@@ -252,6 +269,7 @@
         { "name": "Priority",    "type": "INTEGER", "nullable": false, "role": "",    "description": "QueuePriority 枚举。默认 0" },
         { "name": "BaseVersion", "type": "INTEGER", "nullable": true,  "role": "",    "description": "冲突检测用" },
         { "name": "FileSize",    "type": "INTEGER", "nullable": true,  "role": "",    "csharpType": "long", "description": "进度估算用" },
+        { "name": "TargetPath",  "type": "TEXT",    "nullable": true,  "role": "",    "description": "重命名操作的目标路径。Upload/Download/Delete 为 NULL" },
         { "name": "RetryCount",  "type": "INTEGER", "nullable": false, "role": "",    "description": "默认 0" },
         { "name": "LastError",   "type": "TEXT",    "nullable": true,  "role": "" },
         { "name": "CreatedAt",   "type": "TEXT",    "nullable": false, "role": "IDX", "description": "FIFO 排序依据" }
@@ -349,45 +367,85 @@
   },
 
   "api": {
-    "baseUrl": "https://{host}:8443",
+    "baseUrl": "http://{host}:8443",
     "authHeader": "Authorization: Bearer {token}",
     "deviceHeader": "X-Device-Id: {deviceId}",
+    "description": "端点认证模式: token=需Bearer头, public=无需认证, localhost=仅回环地址, message=首条消息认证(WebSocket专用)",
     "endpoints": [
-      { "method": "GET",    "path": "/api/health",                          "auth": false, "description": "健康检查" },
-      { "method": "GET",    "path": "/api/files/tree",                      "auth": true,  "description": "文件树（支持 sinceVersion/limit/cursor 分页）" },
-      { "method": "POST",   "path": "/api/files/upload",                    "auth": true,  "description": "上传文件（multipart）" },
-      { "method": "GET",    "path": "/api/files/download",                  "auth": true,  "description": "下载文件（stream）" },
-      { "method": "POST",   "path": "/api/files/delete",                    "auth": true,  "description": "删除文件/文件夹（递归）" },
-      { "method": "POST",   "path": "/api/files/move",                      "auth": true,  "description": "移动/重命名" },
-      { "method": "POST",   "path": "/api/files/mkdir",                     "auth": true,  "description": "创建文件夹" },
-      { "method": "POST",   "path": "/api/files/upload/chunk",              "auth": true,  "description": "分块上传" },
-      { "method": "GET",    "path": "/api/files/upload/chunk/status",       "auth": true,  "description": "查询分块上传进度" },
-      { "method": "GET",    "path": "/api/files/search",                    "auth": true,  "description": "文件名搜索" },
-      { "method": "GET",    "path": "/api/thumbnails",                      "auth": true,  "description": "图片缩略图" },
-      { "method": "GET",    "path": "/api/versions",                        "auth": true,  "description": "版本历史列表" },
-      { "method": "POST",   "path": "/api/versions/restore",                "auth": true,  "description": "回滚到历史版本" },
-      { "method": "GET",    "path": "/api/devices",                         "auth": true,  "description": "设备列表" },
-      { "method": "POST",   "path": "/api/shares",                          "auth": true,  "description": "创建分享链接" },
-      { "method": "DELETE", "path": "/api/shares/{shareId}",                "auth": true,  "description": "撤销分享链接" },
-      { "method": "GET",    "path": "/share/{shareId}",                     "auth": false, "description": "访问分享页面（无需 Token）" },
-      { "method": "GET",    "path": "/share/{shareId}/download",            "auth": false, "description": "下载分享文件（?password=xxx）" }
+      { "method": "GET",    "path": "/api/health",                          "auth": "public",    "description": "健康检查" },
+      { "method": "GET",    "path": "/api/version",                         "auth": "public",    "description": "服务端版本信息" },
+      { "method": "GET",    "path": "/api/cert-fingerprint",                "auth": "token",     "description": "自签证书 SHA-256 指纹" },
+      { "method": "GET",    "path": "/pair",                                "auth": "localhost", "description": "设备配对页面（显示 Token，仅本地访问）" },
+      { "method": "GET",    "path": "/api/files/tree",                      "auth": "token",     "description": "文件树（支持 sinceVersion/limit/cursor 分页）" },
+      { "method": "POST",   "path": "/api/files/upload",                    "auth": "token",     "description": "上传文件（multipart）" },
+      { "method": "GET",    "path": "/api/files/download",                  "auth": "token",     "description": "下载文件（stream）" },
+      { "method": "POST",   "path": "/api/files/delete",                    "auth": "token",     "description": "删除文件/文件夹（递归）" },
+      { "method": "POST",   "path": "/api/files/move",                      "auth": "token",     "description": "移动/重命名" },
+      { "method": "POST",   "path": "/api/files/mkdir",                     "auth": "token",     "description": "创建文件夹" },
+      { "method": "POST",   "path": "/api/files/upload/chunk",              "auth": "token",     "description": "分块上传" },
+      { "method": "GET",    "path": "/api/files/upload/chunk/status",       "auth": "token",     "description": "查询分块上传进度" },
+      { "method": "GET",    "path": "/api/files/search",                    "auth": "token",     "description": "文件名搜索" },
+      { "method": "GET",    "path": "/api/thumbnails",                      "auth": "token",     "description": "图片缩略图" },
+      { "method": "GET",    "path": "/api/versions",                        "auth": "token",     "description": "版本历史列表" },
+      { "method": "POST",   "path": "/api/versions/restore",                "auth": "token",     "description": "回滚到历史版本" },
+      { "method": "GET",    "path": "/api/devices",                         "auth": "token",     "description": "设备列表" },
+      { "method": "POST",   "path": "/api/shares",                          "auth": "token",     "description": "创建分享链接" },
+      { "method": "DELETE", "path": "/api/shares/{shareId}",                "auth": "token",     "description": "撤销分享链接" },
+      { "method": "GET",    "path": "/share/{shareId}",                     "auth": "public",    "description": "访问分享页面（无需 Token）" },
+      { "method": "GET",    "path": "/share/{shareId}/download",            "auth": "public",    "description": "下载分享文件（?password=xxx）" },
+      { "method": "GET",    "path": "/api/trash",                           "auth": "token",     "description": "回收站文件列表" },
+      { "method": "POST",   "path": "/api/trash/restore",                   "auth": "token",     "description": "恢复回收站文件" },
+      { "method": "DELETE", "path": "/api/trash/empty",                     "auth": "token",     "description": "清空回收站" },
+      { "method": "GET",    "path": "/admin",                               "auth": "localhost", "description": "管理面板首页" },
+      { "method": "GET",    "path": "/admin/api/files",                     "auth": "localhost", "description": "管理面板——文件列表" },
+      { "method": "GET",    "path": "/admin/api/devices",                   "auth": "localhost", "description": "管理面板——设备列表" },
+      { "method": "GET",    "path": "/admin/api/logs",                      "auth": "localhost", "description": "管理面板——同步日志" },
+      { "method": "GET",    "path": "/admin/api/stats",                     "auth": "localhost", "description": "管理面板——统计信息" }
     ],
     "websocket": {
-      "endpoint": "wss://{host}:8443/ws",
+      "endpoint": "ws://{host}:8443/ws",
       "auth": "连接后首条消息发送 { type: 'auth', token: 'xxx', deviceId: 'xxx' }",
+      "authMode": "message",
       "heartbeat": { "pingIntervalSeconds": 30, "pongTimeoutSeconds": 60 },
       "reconnectBackoff": "1s → 2s → 4s → ... max 60s",
       "reconnectMaxBackoffSeconds": 60,
-      "_note": "Android 客户端不使用 WebSocket（改用定时 HTTPS 轮询），因此 Device.Online 对 Android 设备始终为 0"
+      "_note": "authMode=message 表示认证在首条 JSON 消息中完成，非 HTTP Authorization 头。Android 客户端不使用 WebSocket（改用定时 HTTPS 轮询），因此 Device.Online 对 Android 设备始终为 0"
     },
     "rateLimit": {
       "_ref": "config.rateLimitPerMinute",
-      "default": "60 requests/minute/device (文件上传下载不计入)",
+      "default": "60 requests/minute/device（文件上传/下载不计入。限流键: 已认证→DeviceId，未认证→RemoteIpAddress）",
       "retryAfterHeader": "Retry-After"
+    },
+    "errorResponse": {
+      "description": "统一 API 错误响应体格式——所有控制器和中间件必须使用此格式",
+      "shape": {
+        "error": {
+          "code": "HttpErrorCode.code（如 BAD_REQUEST）",
+          "message": "开发者消息（英文技术描述）",
+          "friendlyMessage": "用户友好消息（中文，可安全展示给终端用户）",
+          "detail": "(可选) 调试详情——仅开发环境返回内部异常信息"
+        }
+      }
+    },
+    "responses": {
+      "FileTreeResponse": {
+        "description": "GET /api/files/tree 响应包装",
+        "fields": ["data: FileEntryDto[]", "nextCursor: string?", "hasMore: bool", "maxVersion: int"]
+      },
+      "UploadResponse": {
+        "description": "POST /api/files/upload 响应",
+        "fields": ["ok: bool", "data: { path, version, hash, size, conflictResolved? }"]
+      },
+      "ChunkUploadResponse": {
+        "description": "POST /api/files/upload/chunk 响应",
+        "fields": ["ok: bool", "chunkIndex: int", "received: int", "total: int", "done: bool"]
+      }
     }
   },
 
   "config": {
+    "httpPort": 8443,
+    "udpDiscoveryPort": 8450,
     "syncRoot": "{用户选择的同步根文件夹}",
     "hiddenDir": ".cloudpan",
     "versionsDir": ".versions",
@@ -409,12 +467,14 @@
     "chunkedUploadTimeoutMinutes": 1440,
     "websocketReconnectMaxBackoffSeconds": 60,
     "_comments": {
+      "httpPort": "服务端 HTTP 监听端口。Phase 0 使用纯 HTTP（无 TLS）",
+      "udpDiscoveryPort": "UDP 局域网发现服务端口，响应 CLOUDPAN_DISCOVER 广播",
       "chunkSize": "分块上传每块字节数（4MB）",
       "chunkedUploadThreshold": "文件 ≥ 此值使用分块上传，< 此值整文件直传。与 queuePriorityThreshold 独立——大文件也可设为高优先级",
       "queuePriorityThreshold": "文件 < 此值标记为 High 优先级，优先传输。默认 1MB。独立于分块阈值",
       "chunkedUploadTimeoutMinutes": "分块上传超时（默认 24h）。超时未完成则清理临时文件",
       "retryBackoffMs": "HTTP API 请求失败指数退避序列（独立于 WebSocket 重连退避）。达到 maxRetryCount 次后放弃并通知用户",
-      "rateLimitPerMinute": "每设备每分钟 API 调用上限（文件上传/下载不计入）",
+      "rateLimitPerMinute": "每设备每分钟 API 调用上限（文件上传/下载不计入）。限流键: 已认证→context.Items[DeviceId]，未认证→RemoteIpAddress",
       "conflictSuffixPattern": "冲突副本命名模式。占位符：yyyyMMdd=日期, HHmmss=时间。示例：report_冲突_20260728_143000.docx",
       "syncignoreFormat": ".syncignore 语法：每行一个 glob 模式。支持 *（单层通配）和 **（递归通配）。以 # 开头的行为注释。示例：*.tmp、**/node_modules/、# 这是注释"
     }

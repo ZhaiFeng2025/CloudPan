@@ -2,7 +2,7 @@
 
 ## 项目概要
 
-自托管家庭文件同步系统。C# / .NET 8 + WinUI 3（Windows）、Kotlin（Android）、SQLite + EF Core、ASP.NET Core 8 Kestrel。当前处于 Phase 0（原型验证）。
+自托管家庭文件同步系统。C# / .NET 8 + WinForms（Windows）、Kotlin（Android）、SQLite + EF Core、ASP.NET Core 8 Kestrel。当前版本 **v1.0.0 正式发布版**。
 
 ## 核心规则
 
@@ -40,36 +40,37 @@ dotnet run --project CloudPan.CodeGen -- --verify
 - 纯内部类型（不跨进程/不对外暴露）
 - WinUI 3 XAML 绑定用的 ViewModel（可从 DTO 手工适配）
 
-### 1. 开发阶段
+### 1. 版本与发布状态
 
-当前处于 **Phase 0（原型验证）**。先跑通「台式机放文件 → 笔记本自动出现」这一条链路。
+当前 **v1.0.0 正式发布版**。核心功能完整：文件同步、版本历史、回收站、分块上传、分享链接、缩略图、冲突处理、速率限制、管理面板、UDP 局域网发现。
 
-Phase 0 明确不做：
-- HTTPS / TLS / 证书
-- 选择性同步、冲突处理、版本历史
-- 大文件分块续传
-- UI 美化
-- Android 客户端
-- 自动更新
+v1.0 技术范围：
+- 家庭局域网内使用 HTTP（未启用 TLS）
+- Windows 服务端 + 客户端（WinForms）
+- Android 客户端原型（`CloudPan.Android/`，v1.0 为 Android 基础框架）
+- 尚未启用自动更新（计划 v1.1）
 
 ### 2. 技术约束
 
 - 所有项目目标 `net8.0-windows`（服务端和客户端均 Windows）
-- 服务端端口 8443（Phase 0 用 HTTP，不加 TLS）
-- 数据库 SQLite WAL 模式，EF Core Code-First
+- 服务端监听端口由 `SpecPorts.HttpPort` 定义（当前 8443，HTTP，家庭局域网）
+- 数据库 SQLite WAL 模式，EF Core Code-First（使用 EnsureCreated）
 - 文件存储为镜像目录结构（与同步根一致，原始文件可直接访问）
 - 隐藏元数据目录 `.cloudpan`（DB、版本历史、缩略图）
 - 原子写入：先写 `.tmp` → 校验 → rename
+- 端口与配置常量定义在 `ContractManifest.g.cs` → `SpecPorts` / `SpecConfig`
 
-### 3. 解决方案结构（规划）
+### 3. 解决方案结构
 
 ```
 CloudPan.sln
-├── CloudPan.Shared/          # 共享类型（从 spec 生成的枚举 + DTO）
-├── CloudPan.Server/          # ASP.NET Core 服务端（Windows Service + 托盘）
-├── CloudPan.Client/          # Windows Forms 桌面客户端（托盘常驻 + 管理窗口，Phase 0）
-├── CloudPan.CodeGen/         # 契约代码生成器（读 shared-spec.json → 生成代码）
-└── CloudPan.Android/         # Kotlin Android 客户端（Phase 1b）
+├── CloudPan.Shared/          # 共享类型（从 spec 生成的枚举 + DTO + 契约清单 + 设计令牌）
+├── CloudPan.Server/          # ASP.NET Core 服务端（Windows Service + 托盘 + 管理窗口）
+├── CloudPan.Client/          # Windows Forms 桌面客户端（托盘常驻 + 管理窗口）
+├── CloudPan.CodeGen/         # 契约代码生成器（读 shared-spec.json → 生成 .g.cs）
+├── CloudPan.Analyzers/       # Roslyn 自定义分析器（CP001-CP304，契约合规校验）
+├── CloudPan.Tests/           # 单元测试 + 集成测试 + 架构测试 + 基准测试
+└── CloudPan.Android/         # Kotlin Android 客户端（v1.0 为基础框架原型）
 ```
 
 ### 4. 命名约定

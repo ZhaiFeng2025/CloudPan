@@ -16,7 +16,7 @@ public static class EntityGenerator
 
     public static string Generate(SpecDocument spec)
     {
-        var sb = new StringBuilder();
+        StringBuilder sb = new StringBuilder();
         sb.AppendLine("// AUTO-GENERATED from shared-spec.json")
           .AppendLine($"// 版本: {spec.Version}  日期: {spec.Date}")
           .AppendLine("// 源: shared-spec.json → entities")
@@ -36,9 +36,11 @@ public static class EntityGenerator
         foreach (var (entityName, entity) in spec.Entities)
         {
             if (ClientOnlyTables.Contains(entityName))
+            {
                 continue;
+            }
 
-            var tableName = entity.Table;
+            string tableName = entity.Table;
 
             sb.AppendLine($"/// <summary>");
             sb.AppendLine($"/// {entity.Description}");
@@ -48,12 +50,14 @@ public static class EntityGenerator
             // 从 spec 的 indexes 字段生成实际索引
             if (entity.Indexes != null && entity.Indexes.Count > 0)
             {
-                foreach (var idxSql in entity.Indexes)
+                foreach (string idxSql in entity.Indexes)
                 {
                     // 格式: "idx_xxx ON TableName(Col1, Col2 DESC)"
-                    var attr = ParseIndexAttribute(idxSql);
+                    string? attr = ParseIndexAttribute(idxSql);
                     if (attr != null)
+                    {
                         sb.AppendLine(attr);
+                    }
                 }
             }
 
@@ -62,11 +66,11 @@ public static class EntityGenerator
 
             foreach (var field in entity.Fields)
             {
-                var csType = TypeMapper.MapToCSharp(field);
-                var nullable = field.Nullable ? "?" : "";
-                var isPk = field.Role.Contains("PK");
-                var isAutoIncrement = field.Role.Contains("AUTOINCREMENT");
-                var isFk = field.Role.Contains("FK");
+                string csType = TypeMapper.MapToCSharp(field);
+                string nullable = field.Nullable ? "?" : "";
+                bool isPk = field.Role.Contains("PK");
+                bool isAutoIncrement = field.Role.Contains("AUTOINCREMENT");
+                bool isFk = field.Role.Contains("FK");
 
                 sb.AppendLine($"    /// <summary>{field.Description ?? field.Name}</summary>");
 
@@ -74,22 +78,28 @@ public static class EntityGenerator
                 {
                     sb.AppendLine($"    [Key]");
                     if (isAutoIncrement)
+                    {
                         sb.AppendLine($"    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]");
+                    }
                 }
 
                 if (isFk)
                 {
                     // 从 FK→Entity(Col) 中提取目标类型
-                    var fkTarget = ParseForeignKeyType(field.Role);
+                    string? fkTarget = ParseForeignKeyType(field.Role);
                     if (fkTarget != null)
+                    {
                         sb.AppendLine($"    [ForeignKey(nameof({fkTarget}))]");
+                    }
                 }
 
                 if (!field.Nullable && csType == "string")
+                {
                     sb.AppendLine($"    [Required]");
+                }
 
-                var defaultValue = GetDefaultValue(field);
-                var defaultExpr = defaultValue != null ? $" = {defaultValue};" : "";
+                string? defaultValue = GetDefaultValue(field);
+                string defaultExpr = defaultValue != null ? $" = {defaultValue};" : "";
 
                 sb.AppendLine($"    public {csType}{nullable} {field.Name} {{ get; set; }}{defaultExpr}");
                 sb.AppendLine();
@@ -133,27 +143,35 @@ public static class EntityGenerator
     private static string? ParseIndexAttribute(string indexSql)
     {
         // 提取列名部分
-        var onIdx = indexSql.IndexOf(" ON ", StringComparison.OrdinalIgnoreCase);
-        if (onIdx < 0) return null;
+        int onIdx = indexSql.IndexOf(" ON ", StringComparison.OrdinalIgnoreCase);
+        if (onIdx < 0)
+        {
+            return null;
+        }
 
-        var afterOn = indexSql[(onIdx + 4)..]; // "FileEntry(State)" or "FileEntry(FilePath, Version DESC)"
-        var parenStart = afterOn.IndexOf('(');
-        var parenEnd = afterOn.LastIndexOf(')');
-        if (parenStart < 0 || parenEnd < 0) return null;
+        string afterOn = indexSql[(onIdx + 4)..]; // "FileEntry(State)" or "FileEntry(FilePath, Version DESC)"
+        int parenStart = afterOn.IndexOf('(');
+        int parenEnd = afterOn.LastIndexOf(')');
+        if (parenStart < 0 || parenEnd < 0)
+        {
+            return null;
+        }
 
-        var columnsPart = afterOn[(parenStart + 1)..parenEnd]; // "State" or "FilePath, Version DESC"
+        string columnsPart = afterOn[(parenStart + 1)..parenEnd]; // "State" or "FilePath, Version DESC"
         var columns = columnsPart.Split(',')
             .Select(c => c.Trim().Split(' ')[0]) // 去掉 DESC/ASC
             .Select(c => $"nameof({c})");
 
-        var isUnique = indexSql.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase);
+        bool isUnique = indexSql.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase);
 
         // 单列简单索引
         if (columns.Count() == 1 && !isUnique)
+        {
             return $"    [Index({string.Join(", ", columns)})]";
+        }
 
         // 多列或唯一索引
-        var uniqueFlag = isUnique ? "IsUnique = true, " : "";
+        string uniqueFlag = isUnique ? "IsUnique = true, " : "";
         return $"    [Index({string.Join(", ", columns)}, {uniqueFlag}Name = \"{indexSql.Split(' ')[0]}\")]";
     }
 
@@ -162,19 +180,35 @@ public static class EntityGenerator
     /// </summary>
     private static string? ParseForeignKeyType(string role)
     {
-        var fkMarker = "FK→";
-        var idx = role.IndexOf(fkMarker);
-        if (idx < 0) return null;
-        var start = idx + fkMarker.Length;
-        var parenIdx = role.IndexOf('(', start);
-        if (parenIdx < 0) return role[start..].Trim();
+        string fkMarker = "FK→";
+        int idx = role.IndexOf(fkMarker);
+        if (idx < 0)
+        {
+            return null;
+        }
+
+        int start = idx + fkMarker.Length;
+        int parenIdx = role.IndexOf('(', start);
+        if (parenIdx < 0)
+        {
+            return role[start..].Trim();
+        }
+
         return role[start..parenIdx].Trim();
     }
 
     private static string? GetDefaultValue(FieldDef field)
     {
-        if (field.Description?.Contains("默认 0") == true) return "0";
-        if (field.Description?.Contains("默认 1") == true) return "1";
+        if (field.Description?.Contains("默认 0") == true)
+        {
+            return "0";
+        }
+
+        if (field.Description?.Contains("默认 1") == true)
+        {
+            return "1";
+        }
+
         return null;
     }
 }

@@ -1,6 +1,8 @@
+using CloudPan.Server;
+using CloudPan.Server.Data;
+using CloudPan.Shared;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using CloudPan.Server.Data;
 
 namespace CloudPan.Server.Controllers;
 
@@ -9,6 +11,7 @@ namespace CloudPan.Server.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/devices")]
+[EndpointAuth(AuthMode.Token)]
 public class DevicesController : ControllerBase
 {
     private readonly IDbContextFactory<CloudPanDbContext> _dbFactory;

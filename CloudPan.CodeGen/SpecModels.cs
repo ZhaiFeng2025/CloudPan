@@ -36,7 +36,9 @@ public record EnumDef(
         if (Values.ValueKind == JsonValueKind.Array)
         {
             if (Values.GetArrayLength() == 0)
+            {
                 return new List<EnumValue>();
+            }
 
             var first = Values[0];
             if (first.ValueKind == JsonValueKind.String)
@@ -121,25 +123,29 @@ public record ApiDef(
     string BaseUrl,
     string AuthHeader,
     string DeviceHeader,
+    string? Description,
     List<EndpointDef> Endpoints,
     WebSocketDef Websocket,
-    RateLimitDef? RateLimit
+    RateLimitDef? RateLimit,
+    ErrorResponseDef? ErrorResponse,
+    Dictionary<string, ApiResponseDef>? Responses
 );
 
 public record EndpointDef(
     string Method,
     string Path,
-    bool Auth,
+    string Auth,    // v1.4.0: "token" | "public" | "localhost" | "message"（替代旧 bool）
     string Description
 );
 
 public record WebSocketDef(
     string Endpoint,
     string Auth,
+    string? AuthMode,    // v1.4.0: "message" 表示认证在首条 JSON 消息中
     HeartbeatDef Heartbeat,
     string ReconnectBackoff,
     int? ReconnectMaxBackoffSeconds,
-    string? _note
+    [property: JsonPropertyName("_note")] string? Note
 );
 
 public record HeartbeatDef(
@@ -148,7 +154,17 @@ public record HeartbeatDef(
 );
 
 public record RateLimitDef(
-    string _ref,
+    [property: JsonPropertyName("_ref")] string Ref,
     string Default,
     string RetryAfterHeader
+);
+
+public record ErrorResponseDef(
+    string Description,
+    Dictionary<string, Dictionary<string, string>> Shape
+);
+
+public record ApiResponseDef(
+    string Description,
+    List<string> Fields
 );

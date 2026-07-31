@@ -10,7 +10,7 @@ public static class DtoGenerator
 {
     public static string Generate(SpecDocument spec)
     {
-        var sb = new StringBuilder();
+        StringBuilder sb = new StringBuilder();
         sb.AppendLine("// AUTO-GENERATED from shared-spec.json")
           .AppendLine($"// 版本: {spec.Version}  日期: {spec.Date}")
           .AppendLine("// 源: shared-spec.json → entities → apiMapping")
@@ -26,21 +26,26 @@ public static class DtoGenerator
         foreach (var (entityName, entity) in spec.Entities)
         {
             if (entity.ApiMapping == null || entity.ApiMapping.Count == 0)
+            {
                 continue;
+            }
 
             // 收集要暴露的字段
-            var mappedFields = new List<(FieldDef Field, string JsonName)>();
+            List<(FieldDef Field, string JsonName)> mappedFields = new List<(FieldDef Field, string JsonName)>();
             foreach (var field in entity.Fields)
             {
-                if (entity.ApiMapping.TryGetValue(field.Name, out var jsonName))
+                if (entity.ApiMapping.TryGetValue(field.Name, out string? jsonName))
                 {
                     mappedFields.Add((field, jsonName));
                 }
             }
 
-            if (mappedFields.Count == 0) continue;
+            if (mappedFields.Count == 0)
+            {
+                continue;
+            }
 
-            var dtoName = $"{entityName}Dto";
+            string dtoName = $"{entityName}Dto";
 
             sb.AppendLine($"/// <summary>");
             sb.AppendLine($"/// {entity.Description}");
@@ -50,9 +55,9 @@ public static class DtoGenerator
             for (int i = 0; i < mappedFields.Count; i++)
             {
                 var (field, jsonName) = mappedFields[i];
-                var comma = i < mappedFields.Count - 1 ? "," : "";
-                var csType = TypeMapper.MapToCSharp(field);
-                var nullable = field.Nullable ? "?" : "";
+                string comma = i < mappedFields.Count - 1 ? "," : "";
+                string csType = TypeMapper.MapToCSharp(field);
+                string nullable = field.Nullable ? "?" : "";
 
                 sb.AppendLine($"    [property: JsonPropertyName(\"{jsonName}\")]");
                 sb.AppendLine($"    {csType}{nullable} {field.Name}{comma}");

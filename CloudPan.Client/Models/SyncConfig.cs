@@ -1,3 +1,5 @@
+using CloudPan.Shared;
+
 namespace CloudPan.Client.Models;
 
 /// <summary>
@@ -9,11 +11,20 @@ public record SyncConfig
     public string SyncRoot { get; init; } = "";
 
     /// <summary>服务端地址，如 http://localhost:8443。</summary>
-    public string ServerUrl { get; init; } = "http://localhost:8443";
+    public string ServerUrl { get; init; } = $"http://localhost:{SpecPorts.HttpPort}";
 
     /// <summary>家庭共享 Token（64 字符十六进制）。</summary>
     public string Token { get; init; } = "";
 
     /// <summary>设备 GUID，首次连接时生成，持久化存储。</summary>
     public string DeviceId { get; init; } = "";
+
+    /// <summary>上传速率限制（字节/秒），0 = 不限速。</summary>
+    public long UploadSpeedLimitBps { get; init; } = 0;
+
+    /// <summary>下载速率限制（字节/秒），0 = 不限速。</summary>
+    public long DownloadSpeedLimitBps { get; init; } = 0;
+
+    /// <summary>已选择同步的文件夹路径列表（默认全选 "/"）。</summary>
+    public List<string> SelectedPaths { get; init; } = new() { "/" };
 }

@@ -1,5 +1,7 @@
+using System.Net;
 using System.Security.Cryptography;
 using CloudPan.Server.Data;
+using CloudPan.Shared;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -7,15 +9,12 @@ namespace CloudPan.Server.Middleware;
 
 /// <summary>
 /// Token 认证中间件。
-/// 验证 Authorization: Bearer {token} 头，比对 AppConfig 中存储的 SHA-256(token)。
-/// 无需认证的端点：/api/health、/share/ 下的公开分享链接。
+/// 认证模式由端点元数据（EndpointAuthAttribute）驱动，未标注的端点回退到 SpecEndpoints 契约表：
+/// AuthMode.Public/Message 跳过 HTTP 头检查（WebSocket 为消息级认证）；AuthMode.Localhost 仅允许回环地址访问。
 /// </summary>
 public class TokenAuthMiddleware
 {
     private readonly RequestDelegate _next;
-
-    /// <summary>无需 Token 的路径前缀（公开端点）。</summary>
-    private static readonly string[] PublicPaths = ["/api/health", "/share/"];
 
     public TokenAuthMiddleware(RequestDelegate next)
     {
@@ -24,39 +23,54 @@ public class TokenAuthMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        // 公开端点跳过认证
-        var path = context.Request.Path.Value ?? "";
-        if (PublicPaths.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
+        // 解析认证模式：优先读端点元数据，非控制器路由（如 /ws）回退 SpecEndpoints 契约表
+        AuthMode mode = ResolveAuthMode(context);
+
+        // 公开端点和 WebSocket（消息级认证）跳过 HTTP 头认证
+        if (mode is AuthMode.Public or AuthMode.Message)
         {
             await _next(context);
             return;
         }
 
-        // 提取 Bearer token
-        var authHeader = context.Request.Headers.Authorization.FirstOrDefault();
-        if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        // 仅本机端点：检查回环地址（管理面板 /admin、配对页 /pair）
+        if (mode == AuthMode.Localhost)
         {
-            context.Response.StatusCode = 401;
-            context.Response.ContentType = "application/json";
-            await context.Response.WriteAsync(
-                """{"error":{"code":"UNAUTHORIZED","message":"缺少 Authorization: Bearer {token} 头"}}""");
+            if (!IsLoopback(context.Connection.RemoteIpAddress))
+            {
+                await context.WriteErrorAsync(HttpErrorCode.UNAUTHORIZED,
+                    "该端点仅允许本机访问",
+                    "请通过 127.0.0.1 从本机访问");
+                return;
+            }
+
+            await _next(context);
             return;
         }
 
-        var token = authHeader["Bearer ".Length..].Trim();
+        // 提取 Bearer token
+        string? authHeader = context.Request.Headers.Authorization.FirstOrDefault();
+        if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            await context.WriteErrorAsync(HttpErrorCode.UNAUTHORIZED,
+                "缺少 Authorization: Bearer {token} 头",
+                "请提供验证 Token 以连接服务");
+            return;
+        }
+
+        string token = authHeader["Bearer ".Length..].Trim();
         if (string.IsNullOrEmpty(token))
         {
-            context.Response.StatusCode = 401;
-            context.Response.ContentType = "application/json";
-            await context.Response.WriteAsync(
-                """{"error":{"code":"UNAUTHORIZED","message":"Token 为空"}}""");
+            await context.WriteErrorAsync(HttpErrorCode.UNAUTHORIZED,
+                "Token 为空",
+                "请提供有效的家庭共享 Token");
             return;
         }
 
         // 验证 token 哈希（内存缓存避免每次请求查 DB）
-        var tokenHash = ComputeSha256(token);
+        string tokenHash = ComputeSha256(token);
         var cache = context.RequestServices.GetRequiredService<IMemoryCache>();
-        var storedHash = await cache.GetOrCreateAsync("token_hash_cache", async entry =>
+        string? storedHash = await cache.GetOrCreateAsync("token_hash_cache", async entry =>
         {
             entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
             var dbFactory = context.RequestServices.GetRequiredService<IDbContextFactory<CloudPanDbContext>>();
@@ -69,58 +83,136 @@ public class TokenAuthMiddleware
 
         if (storedHash == null)
         {
-            // Token 尚未初始化——Phase 0 放行（允许首次设置）
-            await _next(context);
+            // Token 未配置——拒绝所有认证请求
+            await context.WriteErrorAsync(HttpErrorCode.SERVICE_UNAVAILABLE,
+                "服务尚未初始化，请稍后重试",
+                "服务尚未初始化，请稍后重试");
             return;
         }
 
-        if (!string.Equals(tokenHash, storedHash, StringComparison.OrdinalIgnoreCase))
+        // 使用 Ordinal 比较——十六进制哈希统一 lowercase，无需 IgnoreCase
+        if (!string.Equals(tokenHash, storedHash, StringComparison.Ordinal))
         {
-            context.Response.StatusCode = 401;
-            context.Response.ContentType = "application/json";
-            await context.Response.WriteAsync(
-                """{"error":{"code":"UNAUTHORIZED","message":"Token 无效"}}""");
+            await context.WriteErrorAsync(HttpErrorCode.UNAUTHORIZED,
+                "Token 无效",
+                "Token 不正确，请确认是否与服务端显示的 Token 一致");
             return;
         }
 
         // 提取设备 ID（放在 HttpContext.Items 中供控制器使用）
         var dbFactory = context.RequestServices.GetRequiredService<IDbContextFactory<CloudPanDbContext>>();
         await using var db = await dbFactory.CreateDbContextAsync();
-        var deviceId = context.Request.Headers["X-Device-Id"].FirstOrDefault();
+        string? deviceId = context.Request.Headers["X-Device-Id"].FirstOrDefault();
         if (!string.IsNullOrEmpty(deviceId))
         {
+            // 校验 Device ID 格式
+            if (deviceId.Length > 64 || !System.Text.RegularExpressions.Regex.IsMatch(deviceId, @"^[a-zA-Z0-9_-]+$"))
+            {
+                await context.WriteErrorAsync(HttpErrorCode.INVALID_DEVICE_ID,
+                    "Device ID 格式无效：长度 1-64，仅允许字母、数字、下划线和短横",
+                    "设备标识格式不正确，请检查客户端配置");
+                return;
+            }
+
             context.Items["DeviceId"] = deviceId;
 
-            // 自动注册未知设备 + 更新在线状态
+            // 自动注册未知设备 + 更新 LastSeen（Online 状态由 WebSocket 管理）
             var device = await db.Devices.FindAsync(deviceId);
             if (device == null)
             {
                 db.Devices.Add(new Models.Device
                 {
                     Id = deviceId,
-                    Name = $"设备-{deviceId[..8]}",
+                    Name = $"设备-{deviceId[..Math.Min(8, deviceId.Length)]}",
                     Person = null,
                     LastSeen = DateTime.UtcNow.ToString("O"),
-                    Online = 1,
+                    Online = 0, // HTTP 请求不表示实时在线（WebSocket 管理）
                     RegisteredAt = DateTime.UtcNow.ToString("O")
                 });
             }
             else
             {
                 device.LastSeen = DateTime.UtcNow.ToString("O");
-                device.Online = 1;
+                // Online 由 WebSocket 连接/断开管理，不在 HTTP 请求中更新
             }
-            await db.SaveChangesAsync();
+            try
+            {
+                await db.SaveChangesAsync();
+            }
+            catch (DbUpdateException)
+            {
+                // 并发竞态：另一请求已先行注册该设备，重新查询已有记录
+                var logger = context.RequestServices
+                    .GetRequiredService<ILogger<TokenAuthMiddleware>>();
+                logger.LogWarning("设备 {DeviceId} 注册并发冲突（正常竞态条件），重新查询已有记录", deviceId);
+                var existing = await db.Devices.FindAsync(deviceId);
+                if (existing != null)
+                {
+                    existing.LastSeen = DateTime.UtcNow.ToString("O");
+                    await db.SaveChangesAsync();
+                }
+            }
         }
 
         await _next(context);
     }
 
+    /// <summary>
+    /// 解析端点认证模式。
+    /// 1. 控制器路由：读取 EndpointAuthAttribute（类级别默认值）。
+    /// 2. 非控制器路由（如 /ws）或未标注控制器：按方法+路径查 SpecEndpoints 契约表；
+    ///    契约中未注册的路径安全默认要求 Token 认证。
+    /// </summary>
+    private static AuthMode ResolveAuthMode(HttpContext context)
+    {
+        var attribute = context.GetEndpoint()?.Metadata.GetMetadata<EndpointAuthAttribute>();
+        if (attribute != null)
+        {
+            return attribute.Mode;
+        }
+
+        return FindEndpointSpec(context)?.Auth ?? AuthMode.Token;
+    }
+
+    /// <summary>按 HTTP 方法 + 路径查 SpecEndpoints（模板参数路径如 /share/{shareId} 归一化匹配）。</summary>
+    private static EndpointSpec? FindEndpointSpec(HttpContext context)
+    {
+        string method = context.Request.Method;
+        string path = context.Request.Path.Value ?? "/";
+
+        var ep = SpecEndpoints.Find(method, path);
+        if (ep != null)
+        {
+            return ep;
+        }
+
+        // 模板参数归一化：/share/abc123 → /share/{x}
+        int lastSlash = path.LastIndexOf('/');
+        if (lastSlash > 0)
+        {
+            ep = SpecEndpoints.Find(method, path[..lastSlash] + "/{x}");
+        }
+
+        return ep;
+    }
+
+    /// <summary>检查地址是否为回环地址（含 IPv4-mapped IPv6，如 ::ffff:127.0.0.1）。</summary>
+    private static bool IsLoopback(IPAddress? ip)
+    {
+        if (ip == null)
+        {
+            return false;
+        }
+
+        return IPAddress.IsLoopback(ip)
+            || (ip.IsIPv4MappedToIPv6 && IPAddress.IsLoopback(ip.MapToIPv4()));
+    }
+
     /// <summary>计算 SHA-256（64 字符十六进制）。</summary>
     private static string ComputeSha256(string input)
     {
-        var bytes = System.Text.Encoding.UTF8.GetBytes(input);
-        var hash = SHA256.HashData(bytes);
+        byte[] bytes = System.Text.Encoding.UTF8.GetBytes(input);
+        byte[] hash = SHA256.HashData(bytes);
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 }

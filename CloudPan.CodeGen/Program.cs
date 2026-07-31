@@ -19,13 +19,13 @@ public static class Program
 
     public static int Main(string[] args)
     {
-        var verifyMode = args.Contains("--verify");
+        bool verifyMode = args.Contains("--verify");
 
         try
         {
             // 1. 定位 shared-spec.json
-            var solutionRoot = FindSolutionRoot();
-            var specPath = Path.Combine(solutionRoot, "shared-spec.json");
+            string solutionRoot = FindSolutionRoot();
+            string specPath = Path.Combine(solutionRoot, "shared-spec.json");
             if (!File.Exists(specPath))
             {
                 Console.Error.WriteLine($"❌ 找不到 shared-spec.json: {specPath}");
@@ -33,7 +33,7 @@ public static class Program
             }
 
             Console.WriteLine($"📄 读取契约: {specPath}");
-            var json = File.ReadAllText(specPath);
+            string json = File.ReadAllText(specPath);
             var spec = JsonSerializer.Deserialize<SpecDocument>(json, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
@@ -47,21 +47,24 @@ public static class Program
             Console.WriteLine($"📋 契约版本: {spec.Version}");
 
             // 2. 生成代码
-            var generators = new Dictionary<string, (string Dir, string File, string Content)>
+            Dictionary<string, (string Dir, string File, string Content)> generators = new Dictionary<string, (string Dir, string File, string Content)>
             {
-                ["枚举"] = (SharedOutputDir, "Enums.g.cs", EnumGenerator.Generate(spec)),
-                ["DTO"]  = (SharedOutputDir, "Dtos.g.cs",   DtoGenerator.Generate(spec)),
-                ["实体"] = (ServerOutputDir, "Entities.g.cs", EntityGenerator.Generate(spec)),
+                ["枚举"]     = (SharedOutputDir, "Enums.g.cs",             EnumGenerator.Generate(spec)),
+                ["DTO"]      = (SharedOutputDir, "Dtos.g.cs",              DtoGenerator.Generate(spec)),
+                ["实体"]     = (ServerOutputDir, "Entities.g.cs",          EntityGenerator.Generate(spec)),
+                ["清单"]     = (SharedOutputDir, "ContractManifest.g.cs",  ManifestGenerator.Generate(spec)),
+                ["错误响应"] = (SharedOutputDir, "ErrorResponse.g.cs",     ErrorResponseGenerator.Generate(spec)),
+                ["API响应"]  = (SharedOutputDir, "ApiResponses.g.cs",      ApiResponseGenerator.Generate(spec)),
                 // Controller 骨架仅作参考，实际业务逻辑需手写，不再自动生成
             };
 
-            var hasChanges = false;
+            bool hasChanges = false;
 
             foreach (var (label, (dir, filename, content)) in generators)
             {
-                var outputDir = Path.Combine(solutionRoot, dir);
+                string outputDir = Path.Combine(solutionRoot, dir);
                 Directory.CreateDirectory(outputDir);
-                var outputPath = Path.Combine(outputDir, filename);
+                string outputPath = Path.Combine(outputDir, filename);
 
                 if (verifyMode)
                 {
@@ -73,7 +76,7 @@ public static class Program
                         continue;
                     }
 
-                    var existing = File.ReadAllText(outputPath);
+                    string existing = File.ReadAllText(outputPath);
                     if (existing != content)
                     {
                         Console.WriteLine($"❌ {label}: 生成内容与现有文件不一致 — {outputPath}");
@@ -88,7 +91,7 @@ public static class Program
                 else
                 {
                     // 生成模式
-                    var previousContent = File.Exists(outputPath) ? File.ReadAllText(outputPath) : null;
+                    string? previousContent = File.Exists(outputPath) ? File.ReadAllText(outputPath) : null;
                     if (previousContent == content)
                     {
                         Console.WriteLine($"⏭️  {label}: 无变更 — {outputPath}");
@@ -103,7 +106,7 @@ public static class Program
             }
 
             // 3. 如果 Server 项目还不存在，提示
-            var serverDir = Path.Combine(solutionRoot, "CloudPan.Server");
+            string serverDir = Path.Combine(solutionRoot, "CloudPan.Server");
             if (!Directory.Exists(serverDir))
             {
                 Console.WriteLine();
@@ -137,13 +140,20 @@ public static class Program
     private static string FindSolutionRoot()
     {
         // 从程序运行目录开始向上搜索
-        var dir = Environment.CurrentDirectory;
+        string dir = Environment.CurrentDirectory;
         while (dir != null)
         {
             if (File.Exists(Path.Combine(dir, "shared-spec.json")))
+            {
                 return dir;
+            }
+
             var parent = Directory.GetParent(dir);
-            if (parent == null) break;
+            if (parent == null)
+            {
+                break;
+            }
+
             dir = parent.FullName;
         }
         throw new InvalidOperationException(

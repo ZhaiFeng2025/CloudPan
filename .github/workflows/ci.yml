@@ -1,33 +1,46 @@
-name: CI
-
+name: CloudPan CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
 
 jobs:
   build-and-test:
     runs-on: windows-latest
-    timeout-minutes: 15
-
     steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: 安装 .NET 8
-        uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
-      - name: 还原依赖
-        run: dotnet restore
-
-      - name: 编译
-        run: dotnet build --no-restore --configuration Release
-
-      - name: 运行测试
-        run: dotnet test --no-build --configuration Release --verbosity normal
-
-      - name: 校验代码生成
+      - name: CodeGen Verify
         run: dotnet run --project CloudPan.CodeGen -- --verify
+
+      - name: Build (Release)
+        run: dotnet build -c Release -p:TreatWarningsAsErrors=true
+
+      - name: Test (Release)
+        run: dotnet test -c Release --no-build --logger "trx;LogFileName=test-results.trx"
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: '**/TestResults/*.trx'
+
+      - name: Publish Server
+        run: dotnet publish CloudPan.Server -c Release -o publish/server --self-contained false
+
+      - name: Publish Client
+        run: dotnet publish CloudPan.Client -c Release -o publish/client --self-contained false
+
+      - name: Upload Release Artifacts
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudpan-${{ github.ref_name }}
+          path: publish/

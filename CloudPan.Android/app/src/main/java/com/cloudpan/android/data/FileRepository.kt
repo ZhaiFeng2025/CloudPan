@@ -49,6 +49,8 @@ class FileRepository(private val settings: SettingsStore) {
 
     suspend fun downloadFile(remotePath: String, localDir: File): Result<File> {
         return withContext(Dispatchers.IO) {
+            val fileName = remotePath.substringAfterLast('/')
+            val tmpFile = File(localDir, ".${fileName}.tmp")
             try {
                 val response = api().downloadFile(remotePath)
                 if (!response.isSuccessful) {
@@ -59,13 +61,58 @@ class FileRepository(private val settings: SettingsStore) {
                 val body: ResponseBody = response.body()
                     ?: return@withContext Result.failure(Exception("空响应体"))
 
-                val fileName = remotePath.substringAfterLast('/')
-                val localFile = File(localDir, fileName)
-                FileOutputStream(localFile).use { out ->
+                FileOutputStream(tmpFile).use { out ->
                     body.byteStream().use { input -> input.copyTo(out) }
                 }
+                val localFile = File(localDir, fileName)
+                tmpFile.renameTo(localFile)
                 Result.success(localFile)
             } catch (e: Exception) {
+                try { tmpFile.delete() } catch (_: Exception) {}
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                Result.failure(e)
+            }
+        }
+    }
+
+    suspend fun downloadFileWithProgress(
+        remotePath: String,
+        localDir: File,
+        onProgress: (downloaded: Long, total: Long) -> Unit = { _, _ -> }
+    ): Result<File> {
+        return withContext(Dispatchers.IO) {
+            val fileName = remotePath.substringAfterLast('/')
+            val tmpFile = File(localDir, ".${fileName}.tmp")
+            try {
+                val response = api().downloadFile(remotePath)
+                if (!response.isSuccessful) {
+                    return@withContext Result.failure(
+                        Exception("下载失败: ${response.code()} ${response.message()}")
+                    )
+                }
+                val body = response.body()
+                    ?: return@withContext Result.failure(Exception("空响应体"))
+
+                val totalBytes = body.contentLength()
+                FileOutputStream(tmpFile).use { out ->
+                    body.byteStream().use { input ->
+                        val buffer = ByteArray(8192)
+                        var downloaded = 0L
+                        var bytesRead: Int
+                        while (input.read(buffer).also { bytesRead = it } != -1) {
+                            kotlinx.coroutines.ensureActive()
+                            out.write(buffer, 0, bytesRead)
+                            downloaded += bytesRead
+                            onProgress(downloaded, totalBytes)
+                        }
+                    }
+                }
+                val localFile = File(localDir, fileName)
+                tmpFile.renameTo(localFile)
+                Result.success(localFile)
+            } catch (e: Exception) {
+                try { tmpFile.delete() } catch (_: Exception) {}
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 Result.failure(e)
             }
         }

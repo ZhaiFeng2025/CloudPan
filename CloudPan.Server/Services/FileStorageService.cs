@@ -28,7 +28,7 @@ public class FileStorageService : IFileStorageService
     public string GetAbsolutePath(string relativePath)
     {
         // 去掉开头的 /
-        var cleanPath = relativePath.TrimStart('/');
+        string cleanPath = relativePath.TrimStart('/');
         return Path.Combine(_syncRoot, cleanPath);
     }
 
@@ -39,21 +39,29 @@ public class FileStorageService : IFileStorageService
     public string? ValidatePath(string relativePath)
     {
         if (string.IsNullOrWhiteSpace(relativePath))
+        {
             return "路径不能为空";
-        if (relativePath.Contains(".."))
-            return "路径包含非法字符 (..)";
+        }
+
         if (relativePath.Contains('\0'))
+        {
             return "路径包含空字符";
+        }
 
-        // Path.GetFullPath 同时应用于 rootPath 和 absolutePath，
-        // 保证短文件名/正斜杠/大小写规范化后前缀一致
-        var absolutePath = Path.GetFullPath(GetAbsolutePath(relativePath));
-        var rootPath = Path.GetFullPath(_syncRoot);
-        if (!rootPath.EndsWith(Path.DirectorySeparatorChar))
-            rootPath += Path.DirectorySeparatorChar;
+        // 规范化路径并检查是否越界
+        string absolutePath = Path.GetFullPath(GetAbsolutePath(relativePath));
+        string rootPrefix = _syncRoot;
+        if (!rootPrefix.EndsWith(Path.DirectorySeparatorChar))
+        {
+            rootPrefix += Path.DirectorySeparatorChar;
+        }
 
-        if (!absolutePath.StartsWith(rootPath, StringComparison.OrdinalIgnoreCase))
+        System.Diagnostics.Debug.WriteLine($"[ValidatePath] absolute={absolutePath}, root={rootPrefix}");
+
+        if (!absolutePath.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase))
+        {
             return "路径越界";
+        }
 
         return null; // 合法
     }
@@ -63,9 +71,9 @@ public class FileStorageService : IFileStorageService
     /// </summary>
     public async Task<string> ComputeHashAsync(string absolutePath, CancellationToken ct = default)
     {
-        using var sha = SHA256.Create();
+        using SHA256 sha = SHA256.Create();
         await using var stream = File.OpenRead(absolutePath);
-        var hash = await sha.ComputeHashAsync(stream, ct);
+        byte[] hash = await sha.ComputeHashAsync(stream, ct);
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
@@ -76,11 +84,14 @@ public class FileStorageService : IFileStorageService
     public async Task<string?> AtomicWriteAsync(
         string relativePath, Stream content, string? expectedHash, CancellationToken ct = default)
     {
-        var targetPath = GetAbsolutePath(relativePath);
-        var dir = Path.GetDirectoryName(targetPath);
-        if (dir != null) Directory.CreateDirectory(dir);
+        string targetPath = GetAbsolutePath(relativePath);
+        string? dir = Path.GetDirectoryName(targetPath);
+        if (dir != null)
+        {
+            Directory.CreateDirectory(dir);
+        }
 
-        var tmpPath = targetPath + ".tmp";
+        string tmpPath = targetPath + ".tmp";
 
         try
         {
@@ -94,7 +105,7 @@ public class FileStorageService : IFileStorageService
             // 校验哈希
             if (expectedHash != null)
             {
-                var actualHash = await ComputeHashAsync(tmpPath, ct);
+                string actualHash = await ComputeHashAsync(tmpPath, ct);
                 if (!string.Equals(actualHash, expectedHash, StringComparison.OrdinalIgnoreCase))
                 {
                     File.Delete(tmpPath);
@@ -122,7 +133,7 @@ public class FileStorageService : IFileStorageService
     /// </summary>
     public FileStream OpenRead(string relativePath)
     {
-        var path = GetAbsolutePath(relativePath);
+        string path = GetAbsolutePath(relativePath);
         return File.OpenRead(path);
     }
 
@@ -147,9 +158,11 @@ public class FileStorageService : IFileStorageService
     /// </summary>
     public void Delete(string relativePath)
     {
-        var path = GetAbsolutePath(relativePath);
+        string path = GetAbsolutePath(relativePath);
         if (File.Exists(path))
+        {
             File.Delete(path);
+        }
     }
 
     /// <summary>
@@ -157,9 +170,11 @@ public class FileStorageService : IFileStorageService
     /// </summary>
     public void DeleteDirectory(string relativePath)
     {
-        var path = GetAbsolutePath(relativePath);
+        string path = GetAbsolutePath(relativePath);
         if (Directory.Exists(path))
+        {
             Directory.Delete(path, recursive: true);
+        }
     }
 
     /// <summary>
@@ -167,10 +182,14 @@ public class FileStorageService : IFileStorageService
     /// </summary>
     public void Move(string oldRelativePath, string newRelativePath)
     {
-        var src = GetAbsolutePath(oldRelativePath);
-        var dst = GetAbsolutePath(newRelativePath);
-        var dstDir = Path.GetDirectoryName(dst);
-        if (dstDir != null) Directory.CreateDirectory(dstDir);
+        string src = GetAbsolutePath(oldRelativePath);
+        string dst = GetAbsolutePath(newRelativePath);
+        string? dstDir = Path.GetDirectoryName(dst);
+        if (dstDir != null)
+        {
+            Directory.CreateDirectory(dstDir);
+        }
+
         File.Move(src, dst);
     }
 
@@ -179,7 +198,7 @@ public class FileStorageService : IFileStorageService
     /// </summary>
     public void CreateDirectory(string relativePath)
     {
-        var path = GetAbsolutePath(relativePath);
+        string path = GetAbsolutePath(relativePath);
         Directory.CreateDirectory(path);
     }
 
@@ -188,14 +207,17 @@ public class FileStorageService : IFileStorageService
     /// </summary>
     public async Task<string> StoreVersionAsync(string relativePath, int version, CancellationToken ct = default)
     {
-        var srcPath = GetAbsolutePath(relativePath);
-        if (!File.Exists(srcPath)) throw new FileNotFoundException("源文件不存在", srcPath);
+        string srcPath = GetAbsolutePath(relativePath);
+        if (!File.Exists(srcPath))
+        {
+            throw new FileNotFoundException("源文件不存在", srcPath);
+        }
 
-        var fileName = Path.GetFileName(relativePath);
-        var nameWithoutExt = Path.GetFileNameWithoutExtension(fileName);
-        var ext = Path.GetExtension(fileName);
-        var versionFileName = $"{nameWithoutExt}_v{version}_{DateTime.UtcNow:yyyyMMdd}{ext}";
-        var versionPath = Path.Combine(_versionsDir, versionFileName);
+        string fileName = Path.GetFileName(relativePath);
+        string nameWithoutExt = Path.GetFileNameWithoutExtension(fileName);
+        string ext = Path.GetExtension(fileName);
+        string versionFileName = $"{nameWithoutExt}_v{version}_{DateTime.UtcNow:yyyyMMdd}{ext}";
+        string versionPath = Path.Combine(_versionsDir, versionFileName);
 
         Directory.CreateDirectory(_versionsDir);
         using var srcStream = File.OpenRead(srcPath);

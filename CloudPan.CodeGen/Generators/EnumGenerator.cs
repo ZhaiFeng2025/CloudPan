@@ -13,7 +13,7 @@ public static class EnumGenerator
 {
     public static string Generate(SpecDocument spec)
     {
-        var sb = new StringBuilder();
+        StringBuilder sb = new StringBuilder();
         sb.AppendLine("// AUTO-GENERATED from shared-spec.json")
           .AppendLine($"// 版本: {spec.Version}  日期: {spec.Date}")
           .AppendLine("// 源: shared-spec.json → enums")
@@ -35,7 +35,10 @@ public static class EnumGenerator
             }
 
             var values = enumDef.GetValues();
-            if (values.Count == 0) continue;
+            if (values.Count == 0)
+            {
+                continue;
+            }
 
             // 字符串数组（无显式数值）→ 生成 static class + const string
             if (values.All(v => v.Value == null))
@@ -63,13 +66,15 @@ public static class EnumGenerator
         for (int i = 0; i < values.Count; i++)
         {
             var v = values[i];
-            var val = v.Value ?? i;
-            var comma = i < values.Count - 1 ? "," : "";
+            int val = v.Value ?? i;
+            string comma = i < values.Count - 1 ? "," : "";
 
             if (!string.IsNullOrEmpty(v.Note))
+            {
                 sb.AppendLine($"    /// <summary>{v.Note}</summary>");
+            }
 
-            var scopeSuffix = v.Scope == "client-only" ? " // 仅客户端" : "";
+            string scopeSuffix = v.Scope == "client-only" ? " // 仅客户端" : "";
             sb.AppendLine($"    {v.Name} = {val}{comma}{scopeSuffix}");
         }
 
@@ -112,8 +117,8 @@ public static class EnumGenerator
 
         foreach (var c in codes)
         {
-            var fieldName = c.Code; // BAD_REQUEST, UNAUTHORIZED, etc.
-            var note = c.Note != null ? $", Note: \"{c.Note}\"" : "";
+            string fieldName = c.Code; // BAD_REQUEST, UNAUTHORIZED, etc.
+            string note = c.Note != null ? $", Note: \"{c.Note}\"" : "";
             sb.AppendLine($"    /// <summary>HTTP {c.Http} — {c.Code}{(c.Retry ? "（可重试）" : "")}</summary>");
             sb.AppendLine($"    public static readonly ErrorCode {fieldName} = new({c.Http}, \"{c.Code}\", {(c.Retry ? "true" : "false")}{note});");
         }
@@ -124,7 +129,10 @@ public static class EnumGenerator
 
     private static string ToPascalCase(string input)
     {
-        if (string.IsNullOrEmpty(input)) return input;
+        if (string.IsNullOrEmpty(input))
+        {
+            return input;
+        }
         // 将 snake_case 转为 PascalCase: "auth_ok" → "AuthOk"
         return string.Concat(input.Split('_')
             .Select(part => part.Length > 0 ? char.ToUpper(part[0]) + part[1..].ToLower() : ""));

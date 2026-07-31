@@ -37,3 +37,20 @@ $RECYCLE.BIN/
 # CloudPan 运行时目录（本地开发数据）
 CloudPan_Client/
 CloudPanSync/
+publish/dist/
+
+# 开发临时文件（截图、调试脚本、自动生成的审计文件）
+capture.bat
+capture.ps1
+capture_screenshots.ps1
+gen_findings.js
+gen_findings.py
+out_params.json
+screenshots/
+scripts/
+generate_icon.csx
+
+# 测试输出
+CloudPan.Tests/TestResults/
+
+CloudPan.Android/jdk/

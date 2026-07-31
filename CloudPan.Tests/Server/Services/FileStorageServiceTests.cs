@@ -11,16 +11,16 @@ public class FileStorageServiceTests : Infrastructure.TestBase
     [Fact]
     public void ValidatePath_合法路径_返回null()
     {
-        var svc = new FileStorageService(TempDir);
-        var result = svc.ValidatePath("/docs/report.docx");
+        FileStorageService svc = new FileStorageService(TempDir);
+        string? result = svc.ValidatePath("/docs/report.docx");
         Assert.Null(result);
     }
 
     [Fact]
     public void ValidatePath_空字符串_返回错误()
     {
-        var svc = new FileStorageService(TempDir);
-        var result = svc.ValidatePath("");
+        FileStorageService svc = new FileStorageService(TempDir);
+        string? result = svc.ValidatePath("");
         Assert.NotNull(result);
         Assert.Contains("不能为空", result);
     }
@@ -28,17 +28,17 @@ public class FileStorageServiceTests : Infrastructure.TestBase
     [Fact]
     public void ValidatePath_含点点_返回错误_路径遍历攻击()
     {
-        var svc = new FileStorageService(TempDir);
-        var result = svc.ValidatePath("/../../../etc/passwd");
+        FileStorageService svc = new FileStorageService(TempDir);
+        string? result = svc.ValidatePath("/../../../etc/passwd");
         Assert.NotNull(result);
-        Assert.Contains("非法字符", result);
+        Assert.Contains("越界", result);
     }
 
     [Fact]
     public void ValidatePath_含空字符_返回错误()
     {
-        var svc = new FileStorageService(TempDir);
-        var result = svc.ValidatePath("/test\0bad");
+        FileStorageService svc = new FileStorageService(TempDir);
+        string? result = svc.ValidatePath("/test\0bad");
         Assert.NotNull(result);
         Assert.Contains("空字符", result);
     }
@@ -46,77 +46,77 @@ public class FileStorageServiceTests : Infrastructure.TestBase
     [Fact]
     public void ValidatePath_路径越界_返回错误()
     {
-        var svc = new FileStorageService(TempDir);
-        var result = svc.ValidatePath("/../outside.txt");
+        FileStorageService svc = new FileStorageService(TempDir);
+        string? result = svc.ValidatePath("/../outside.txt");
         Assert.NotNull(result);
     }
 
     [Fact]
     public void GetAbsolutePath_去除开头的斜杠()
     {
-        var svc = new FileStorageService(TempDir);
-        var result = svc.GetAbsolutePath("/docs/file.txt");
+        FileStorageService svc = new FileStorageService(TempDir);
+        string result = svc.GetAbsolutePath("/docs/file.txt");
         // 使用 Path.GetFullPath 规范化路径分隔符
-        var expected = Path.GetFullPath(Path.Combine(TempDir, "docs", "file.txt"));
+        string expected = Path.GetFullPath(Path.Combine(TempDir, "docs", "file.txt"));
         Assert.Equal(expected, Path.GetFullPath(result));
     }
 
     [Fact]
     public async Task AtomicWrite_正常写入_文件存在且内容正确()
     {
-        var svc = new FileStorageService(TempDir);
-        var content = "Hello CloudPan!"u8.ToArray();
-        using var stream = new MemoryStream(content);
+        FileStorageService svc = new FileStorageService(TempDir);
+        byte[] content = "Hello CloudPan!"u8.ToArray();
+        using MemoryStream stream = new MemoryStream(content);
 
-        var error = await svc.AtomicWriteAsync("/test/hello.txt", stream, expectedHash: null);
+        string? error = await svc.AtomicWriteAsync("/test/hello.txt", stream, expectedHash: null);
         Assert.Null(error);
 
-        var fullPath = Path.Combine(TempDir, "test", "hello.txt");
+        string fullPath = Path.Combine(TempDir, "test", "hello.txt");
         Assert.True(File.Exists(fullPath));
 
-        var written = await File.ReadAllBytesAsync(fullPath);
+        byte[] written = await File.ReadAllBytesAsync(fullPath);
         Assert.Equal(content, written);
     }
 
     [Fact]
     public async Task AtomicWrite_自动创建父目录()
     {
-        var svc = new FileStorageService(TempDir);
-        using var stream = new MemoryStream("deep"u8.ToArray());
+        FileStorageService svc = new FileStorageService(TempDir);
+        using MemoryStream stream = new MemoryStream("deep"u8.ToArray());
 
         await svc.AtomicWriteAsync("/a/b/c/d/file.txt", stream, expectedHash: null);
 
-        var fullPath = Path.Combine(TempDir, "a", "b", "c", "d", "file.txt");
+        string fullPath = Path.Combine(TempDir, "a", "b", "c", "d", "file.txt");
         Assert.True(File.Exists(fullPath));
     }
 
     [Fact]
     public async Task AtomicWrite_哈希校验失败_返回错误并清理tmp()
     {
-        var svc = new FileStorageService(TempDir);
-        using var stream = new MemoryStream("content"u8.ToArray());
+        FileStorageService svc = new FileStorageService(TempDir);
+        using MemoryStream stream = new MemoryStream("content"u8.ToArray());
 
-        var error = await svc.AtomicWriteAsync("/test/badhash.txt", stream,
+        string? error = await svc.AtomicWriteAsync("/test/badhash.txt", stream,
             expectedHash: "0000000000000000000000000000000000000000000000000000000000000000");
 
         Assert.NotNull(error);
         Assert.Contains("哈希校验失败", error);
 
         // 确认 .tmp 已清理
-        var tmpPath = Path.Combine(TempDir, "test", "badhash.txt.tmp");
+        string tmpPath = Path.Combine(TempDir, "test", "badhash.txt.tmp");
         Assert.False(File.Exists(tmpPath));
     }
 
     [Fact]
     public async Task ComputeHash_相同内容_相同哈希()
     {
-        var svc = new FileStorageService(TempDir);
-        var filePath = Path.Combine(TempDir, "hash_test.bin");
-        var content = new byte[] { 1, 2, 3, 4, 5 };
+        FileStorageService svc = new FileStorageService(TempDir);
+        string filePath = Path.Combine(TempDir, "hash_test.bin");
+        byte[] content = new byte[] { 1, 2, 3, 4, 5 };
         await File.WriteAllBytesAsync(filePath, content);
 
-        var hash1 = await svc.ComputeHashAsync(filePath);
-        var hash2 = await svc.ComputeHashAsync(filePath);
+        string hash1 = await svc.ComputeHashAsync(filePath);
+        string hash2 = await svc.ComputeHashAsync(filePath);
 
         Assert.Equal(hash1, hash2);
         Assert.Equal(64, hash1.Length); // SHA-256: 64 hex chars
@@ -125,8 +125,8 @@ public class FileStorageServiceTests : Infrastructure.TestBase
     [Fact]
     public void Exists_文件存在_返回true()
     {
-        var svc = new FileStorageService(TempDir);
-        var filePath = Path.Combine(TempDir, "exists_test.txt");
+        FileStorageService svc = new FileStorageService(TempDir);
+        string filePath = Path.Combine(TempDir, "exists_test.txt");
         File.WriteAllText(filePath, "test");
 
         Assert.True(svc.Exists("/exists_test.txt"));
@@ -136,8 +136,8 @@ public class FileStorageServiceTests : Infrastructure.TestBase
     [Fact]
     public void Delete_删除文件()
     {
-        var svc = new FileStorageService(TempDir);
-        var relPath = "/delete_me.txt";
+        FileStorageService svc = new FileStorageService(TempDir);
+        string relPath = "/delete_me.txt";
         File.WriteAllText(Path.Combine(TempDir, "delete_me.txt"), "bye");
 
         svc.Delete(relPath);
@@ -147,8 +147,8 @@ public class FileStorageServiceTests : Infrastructure.TestBase
     [Fact]
     public void DeleteDirectory_递归删除()
     {
-        var svc = new FileStorageService(TempDir);
-        var dir = Path.Combine(TempDir, "folder", "sub");
+        FileStorageService svc = new FileStorageService(TempDir);
+        string dir = Path.Combine(TempDir, "folder", "sub");
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "file.txt"), "inside");
 
@@ -160,7 +160,7 @@ public class FileStorageServiceTests : Infrastructure.TestBase
     [Fact]
     public void Move_重命名文件()
     {
-        var svc = new FileStorageService(TempDir);
+        FileStorageService svc = new FileStorageService(TempDir);
         File.WriteAllText(Path.Combine(TempDir, "old.txt"), "move me");
 
         svc.Move("/old.txt", "/new.txt");
@@ -172,7 +172,7 @@ public class FileStorageServiceTests : Infrastructure.TestBase
     [Fact]
     public void EnsureSyncRootExists_创建目录()
     {
-        var svc = new FileStorageService(TempDir);
+        FileStorageService svc = new FileStorageService(TempDir);
         svc.EnsureSyncRootExists();
         Assert.True(Directory.Exists(Path.Combine(TempDir, ".cloudpan")));
     }
