@@ -6,7 +6,7 @@ REM CloudPan Server — Windows Service 安装脚本（需管理员权限）
 set SERVICE_NAME=CloudPanServer
 set DISPLAY_NAME="CloudPan 文件同步服务"
 set DESCRIPTION="自托管家庭文件同步系统——后台服务"
-set BINPATH=%~dp0publish\dist\Server\CloudPan.Server.exe
+set BINPATH=%~dp0publish\win-x64\server\CloudPan.Server.exe
 set SYNCDIR=%USERPROFILE%\CloudPan
 
 REM 检查管理员权限

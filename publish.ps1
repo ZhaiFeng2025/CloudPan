@@ -3,7 +3,7 @@ param([string]$OutDir = "$PSScriptRoot\publish")
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
-$dist = "$OutDir\dist"
+$dist = "$OutDir\win-x64"
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  CloudPan Build Script" -ForegroundColor Cyan

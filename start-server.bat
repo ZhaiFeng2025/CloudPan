@@ -2,7 +2,7 @@
 chcp 65001 >nul
 cd /d "%~dp0"
 
-set "EXE=%~dp0publish\dist\Server\CloudPan.Server.exe"
+set "EXE=%~dp0publish\win-x64\server\CloudPan.Server.exe"
 set "SYNCDIR=%~dp0CloudPanSync"
 
 if not exist "%SYNCDIR%" mkdir "%SYNCDIR%"

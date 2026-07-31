@@ -37,7 +37,7 @@ $RECYCLE.BIN/
 # CloudPan 运行时目录（本地开发数据）
 CloudPan_Client/
 CloudPanSync/
-publish/dist/
+publish/
 
 # 开发临时文件（截图、调试脚本、自动生成的审计文件）
 capture.bat
