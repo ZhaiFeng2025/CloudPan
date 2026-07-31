@@ -160,11 +160,6 @@ using (var scope = app.Services.CreateScope())
     await db.Database.ExecuteSqlRawAsync("PRAGMA synchronous=NORMAL;");
     await db.Database.ExecuteSqlRawAsync("PRAGMA foreign_keys=ON;");
 
-    // 立即执行 checkpoint——确保 EnsureCreatedAsync 创建的表全部落盘，
-    // 避免后续 "no such table" 错误（表定义在 WAL 中，主 DB 文件未更新）
-    try { await db.Database.ExecuteSqlRawAsync("PRAGMA wal_checkpoint(TRUNCATE);"); }
-    catch (Exception ex) { Log.Warning(ex, "WAL checkpoint 失败（非致命）"); }
-
     // 种子："server" 设备（用于 VersionRecord.DeviceId FK）
     if (!await db.Devices.AnyAsync(d => d.Id == "server"))
     {
@@ -232,14 +227,28 @@ using (var scope = app.Services.CreateScope())
     await db.SaveChangesAsync();
 
     // 启动时重置所有设备为离线状态（运行时会通过 WebSocket 重新标记在线）
+    // 先检查 Devices 表是否存在，避免旧版无此表的 DB 启动时打印堆栈
     try
     {
-        await db.Database.ExecuteSqlRawAsync("UPDATE Devices SET Online = 0");
+        var tableExists = await db.Database.SqlQueryRaw<int>(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='Devices';").ToListAsync();
+        if (tableExists.Count > 0 && tableExists[0] > 0)
+        {
+            await db.Database.ExecuteSqlRawAsync("UPDATE Devices SET Online = 0");
+        }
+        else
+        {
+            Log.Information("Devices 表尚未创建，跳过设备在线状态重置");
+        }
     }
     catch (Exception ex)
     {
-        Log.Warning(ex, "重置设备在线状态失败（非致命，表可能尚未创建）");
+        Log.Warning(ex, "重置设备在线状态失败（非致命）");
     }
+
+    // WAL checkpoint（PASSIVE 模式：尝试将 WAL 写入主 DB，失败不截断 WAL，保留数据完整性）
+    try { await db.Database.ExecuteSqlRawAsync("PRAGMA wal_checkpoint(PASSIVE);"); }
+    catch (Exception ex) { Log.Warning(ex, "WAL checkpoint 失败（非致命）"); }
 
     // 释放 DbContext（因 schema 迁移可能替换实例，不能用 using 声明）
     if (db != null)
