@@ -156,6 +156,85 @@ public class ChunkedUploadServiceTests : Infrastructure.TestBase
         Assert.False(status.IsComplete);
     }
 
+    [Fact]
+    public async Task ReceiveChunk_Move覆盖目标失败_回滚FileEntry到旧hash与version_重试收敛()
+    {
+        var dbFactory = CreateServerDbFactory();
+        var storage = new FileStorageService(TempDir);
+        var index = new FileIndexService(dbFactory);
+        var version = new VersionService(dbFactory);
+        var syncLog = new SyncLogService(dbFactory, NullLogger<SyncLogService>.Instance);
+        var svc = new ChunkedUploadService(dbFactory, storage, index, version, syncLog);
+
+        string path = "/finalize.bin";
+        string targetPath = Path.Combine(TempDir, "finalize.bin");
+
+        // 旧文件已存在于磁盘与索引（版本经 VersionService 分配，保证版本号单调）。
+        // deviceId 用种子设备 "server"（VersionRecord.DeviceId 有 FK 指向 Device，测试库仅播种 server）
+        byte[] oldContent = CreateContent(500);
+        string oldHash = Convert.ToHexString(SHA256.HashData(oldContent)).ToLowerInvariant();
+        string oldLastModified = DateTime.UtcNow.AddHours(-1).ToString("O");
+        int oldVersion = await version.NextVersionAsync();
+        File.WriteAllBytes(targetPath, oldContent);
+        await index.UpsertFileAsync(path, FileType.File, oldHash, oldContent.Length, oldLastModified, oldVersion, FileState.Synced);
+
+        // 新内容（2 块：ChunkSize + 100，末块可短）
+        byte[] newContent = CreateContent(SpecConfig.ChunkSize + 100);
+        string newHash = Convert.ToHexString(SHA256.HashData(newContent)).ToLowerInvariant();
+
+        // 锁定目标文件：FileShare.ReadWrite 允许存档阶段读取旧内容，但拒绝重命名/覆盖 → Move 必然失败（文件被锁场景）
+        await using var lockStream = new FileStream(targetPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+
+        // 第 0 块（进度），捕获临时文件路径
+        using var s0 = new MemoryStream(newContent, 0, SpecConfig.ChunkSize);
+        var out0 = await svc.ReceiveChunkAsync(path, 0, 2, newHash, 0, null, "server", s0);
+        Assert.IsType<ChunkProgressOutcome>(out0);
+
+        string tempPath;
+        await using (var inspect = await dbFactory.CreateDbContextAsync())
+        {
+            tempPath = (await inspect.ChunkedUploads.FindAsync(path))!.TempPath;
+        }
+
+        // 第 1 块（末块）→ FinalizeAsync：DB 事务提交后 Move 覆盖目标失败（目标被锁）→ 触发索引回滚
+        using var s1 = new MemoryStream(newContent, SpecConfig.ChunkSize, 100);
+        await Assert.ThrowsAnyAsync<Exception>(() => svc.ReceiveChunkAsync(path, 1, 2, newHash, 0, null, "server", s1));
+
+        // 断言回滚：FileEntry 恢复旧 hash/version/size/LastModified，无孤儿版本记录，会话已清理，磁盘仍是旧内容，临时文件已删
+        await using (var verify = await dbFactory.CreateDbContextAsync())
+        {
+            var entry = await verify.FileEntries.FindAsync(path);
+            Assert.NotNull(entry);
+            Assert.Equal(oldHash, entry!.CurrentHash);
+            Assert.Equal(oldVersion, entry.Version);
+            Assert.Equal(oldContent.Length, entry.CurrentSize);
+            Assert.Equal(oldLastModified, entry.LastModified);
+            Assert.Equal((int)FileState.Synced, entry.State);
+
+            Assert.False(await verify.VersionRecords.AnyAsync(v => v.FilePath == path));
+            Assert.Null(await verify.ChunkedUploads.FindAsync(path));
+        }
+        Assert.Equal(oldContent, await File.ReadAllBytesAsync(targetPath));
+        Assert.False(File.Exists(tempPath));
+
+        // 释放锁 → 客户端重试（全新会话）→ Move 成功，索引与磁盘收敛到新内容
+        await lockStream.DisposeAsync();
+        using var r0 = new MemoryStream(newContent, 0, SpecConfig.ChunkSize);
+        await svc.ReceiveChunkAsync(path, 0, 2, newHash, 0, null, "server", r0);
+        using var r1 = new MemoryStream(newContent, SpecConfig.ChunkSize, 100);
+        var retryOutcome = await svc.ReceiveChunkAsync(path, 1, 2, newHash, 0, null, "server", r1);
+        var completed = Assert.IsType<ChunkCompletedOutcome>(retryOutcome);
+        Assert.Equal(newHash, completed.Hash);
+        Assert.Equal(newContent, await File.ReadAllBytesAsync(targetPath));
+
+        await using (var verify = await dbFactory.CreateDbContextAsync())
+        {
+            var entry = await verify.FileEntries.FindAsync(path);
+            Assert.Equal(newHash, entry!.CurrentHash);
+            Assert.Equal(completed.Version, entry.Version);
+        }
+    }
+
     /// <summary>生成确定性字节内容（模式填充，非随机，便于断言与哈希复现）。</summary>
     private static byte[] CreateContent(int length)
     {

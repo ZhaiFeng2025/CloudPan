@@ -846,7 +846,7 @@
       "title": "分块上传崩溃恢复幂等化",
       "dimension": "function",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 2,
       "findingId": "F-20",
       "dependsOn": [],
@@ -866,7 +866,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "分块上传崩溃恢复幂等化（F-20/T-020）：块写入由 FileMode.Append 追加改为按块索引 seek 定位写入——块 i 固定落在 [i*ChunkSize, (i+1)*ChunkSize) 区间（与客户端 ApiClient.UploadChunkedAsync 切块语义一致），保持『先落字节、后更位图』顺序；崩溃窗口（字节已落盘但位图未更新）下客户端重发同块覆盖同位置而非追加，不产生重复字节，合并后 SHA-256 必然一致。合并前新增交叉校验：位图声称全块已收但临时文件长度 < (TotalChunks-1)*ChunkSize（非末块缺失）时重置会话让客户端从头重传，避免永久失败。\n改动文件：CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.cs（ReceiveChunkAsync 块写入 seek 定位 + FinalizeAsync 合并前交叉校验）；CloudPan.Tests/Server/Services/ChunkedUploadServiceTests.cs（两块/幂等跳过测试对齐真实 4MB 定长切块语义；新增崩溃恢复测试 ReceiveChunk_崩溃后重发同块_合并SHA256一致——模拟块 1 字节已落盘位图未更新→客户端重发同块→合并 SHA-256 与完整文件一致）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter ChunkedUpload 6/6 通过（含新增崩溃恢复用例）；全量 dotnet test CloudPan.Tests -c Release 188/188 通过（原 187 + 1）；架构测试 10/10 通过；dotnet run --project CloudPan.CodeGen -- --verify 7 项全部一致。",
+      "note": "分块上传崩溃恢复幂等化（F-20/T-020）：块写入由 FileMode.Append 追加改为按块索引 seek 定位写入——块 i 固定落在 [i*ChunkSize, (i+1)*ChunkSize) 区间（与客户端 ApiClient.UploadChunkedAsync 切块语义一致），保持『先落字节、后更位图』顺序；崩溃窗口（字节已落盘但位图未更新）下客户端重发同块覆盖同位置而非追加，不产生重复字节，合并后 SHA-256 必然一致。合并前新增交叉校验：位图声称全块已收但临时文件长度 < (TotalChunks-1)*ChunkSize（非末块缺失）时重置会话让客户端从头重传，避免永久失败。\n改动文件：CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.cs（ReceiveChunkAsync 块写入 seek 定位 + FinalizeAsync 合并前交叉校验）；CloudPan.Tests/Server/Services/ChunkedUploadServiceTests.cs（两块/幂等跳过测试对齐真实 4MB 定长切块语义；新增崩溃恢复测试 ReceiveChunk_崩溃后重发同块_合并SHA256一致——模拟块 1 字节已落盘位图未更新→客户端重发同块→合并 SHA-256 与完整文件一致）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter ChunkedUpload 6/6 通过（含新增崩溃恢复用例）；全量 dotnet test CloudPan.Tests -c Release 188/188 通过（原 187 + 1）；架构测试 10/10 通过；dotnet run --project CloudPan.CodeGen -- --verify 7 项全部一致。\n【验收结论 2026-08-03】task-verifier 独立裁决：通过。验收标准『dotnet test --filter ChunkedUpload』实测 6/6 通过（Failed 0 / Passed 6 / Skipped 0），其中关键崩溃恢复用例 ReceiveChunk_崩溃后重发同块_合并SHA256一致 按 FQN --filter 单独精确运行 1/1 通过，完整覆盖验收场景『块已落盘但位图未更新→客户端重发同块→合并后 SHA-256 一致』：块 0 正常接收位图 [0]；直接向临时文件 offset=ChunkSize 写入块 1 字节（模拟崩溃窗口：字节已落盘、ReceivedChunks 位图未更新）；客户端重发同块（同内容）；断言合并完成 Hash==完整文件 SHA-256、Size==bytes.Length、合并文件逐字节一致（Assert.Equal(bytes, merged)）。该用例在旧 FileMode.Append 追加实现下必失败（重发块追加产生重复字节→哈希不匹配），seek 定位覆盖后通过，直接证明幂等修复生效。独立核查代码路径：ChunkedUploadService.ReceiveChunkAsync 块写入 seek 定位（chunkOffset = chunkIndex*SpecConfig.ChunkSize → fs.Seek(SeekOrigin.Begin) → CopyToAsync，行 145-151），与客户端 ApiClient.UploadChunkedAsync 切块语义一致（offset = i*ChunkSize，非末块满 ChunkSize、末块可短，ApiClient.cs:271-276），重发同块覆盖同位置不产生重复字节；保持『先落字节、后更位图』顺序（行 142-155），幂等跳过已接收块（行 136-140）；FinalizeAsync 合并前交叉校验（行 189-198：位图全块已收但 fileLength < (TotalChunks-1)*ChunkSize 重置会话从头重传）+ SHA-256 合并校验（行 200-210）；Controller 纯适配无 FileMode.Append 残留（FilesController.ChunkedUpload.cs:10 注释 + :64 调 IChunkedUploadService）。附加标准『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error（10 项目全编译）。单条自动标准通过，无手动项。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -874,7 +874,7 @@
       "title": "分块上传 Finalize 原子化（DB/FS 一致）",
       "dimension": "function",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 2,
       "findingId": "F-21",
       "dependsOn": [
@@ -896,8 +896,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "与 T-020 同文件顺序执行；批次 1 T-002 迁移控制器时须携带本修复。",
-      "updatedAt": null
+      "note": "分块上传 Finalize 原子化（F-21/T-021）：Move 覆盖目标失败（文件被锁）时回滚 FileEntry 到旧 hash/version，确保索引永远反映真实磁盘内容。\n方案选型：需求二选一（Move 先于 DB 提交 / Move 失败回滚 FileEntry）——选后者，与 T-020 既有『DB 事务提交→FS 原子覆盖』结构最小改动，且回滚直接消除毒化状态（DB 已提交新 hash/version 而磁盘仍旧内容、客户端下轮树同步对齐错误索引永不重传）。\n实现：ChunkedUploadService.FinalizeAsync 阶段 3 的 IOFile.Move 失败 catch 中新增 RollbackFinalizeAsync——使用全新 DbContext（CLAUDE.md 7.3：不复用已提交的 db，其变更追踪器持有新值而非 DB 真值）开启独立事务：FileEntry 恢复旧 hash/version/size/LastModified/State（新建文件则删除条目）、移除本次新增的孤儿 VersionRecord（旧内容仍是磁盘真值，存档冗余）并删除存档文件；临时文件 finally 清理后 rethrow（客户端 500 后队列重试/下轮扫描按哈希差异重新上传收敛）。DB 失败路径不变（原 catch 清理孤儿存档）。\n改动文件：CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.cs（阶段 3 catch 回滚 + 新增 RollbackFinalizeAsync）；CloudPan.Tests/Server/Services/ChunkedUploadServiceTests.cs（新增 ReceiveChunk_Move覆盖目标失败_回滚FileEntry到旧hash与version_重试收敛）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter ChunkedUpload 7/7 通过（原 6 + 新增 1，新增用例以 FileShare.ReadWrite 锁目标文件模拟 Move 失败→断言回滚后 FileEntry 恢复旧 hash/version/size/LastModified、无孤儿 VersionRecord、会话已清理、临时文件已删、磁盘仍为旧内容；释放锁后客户端重传→Move 成功收敛到新内容）；全量 dotnet test CloudPan.Tests -c Release 189/189 通过（原 188 + 1）。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-022",

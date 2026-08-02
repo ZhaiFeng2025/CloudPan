@@ -349,14 +349,19 @@ public class ChunkedUploadService : IChunkedUploadService
             throw;
         }
 
-        // —— 阶段 3：FS 原子覆盖（DB 已提交；失败时文件保持旧内容，下次同步按哈希重传自愈）——
+        // —— 阶段 3：FS 原子覆盖（DB 已提交）——
+        //    Move 失败（目标被锁等）时磁盘仍是旧内容，但索引已指向新 hash/version——若放任，客户端下轮树同步
+        //    对齐错误索引（本地新内容匹配索引新 hash）永不重传，索引与磁盘永久不一致（F-21 毒化状态）。
+        //    处理：回滚 FileEntry 到旧 hash/version（新建文件则删除条目）+ 移除孤儿 VersionRecord 与存档，
+        //    使索引回到与磁盘一致的旧状态；客户端重试/下轮扫描按哈希差异重新上传收敛。
         try
         {
             IOFile.Move(record.TempPath, targetPath, overwrite: true);
         }
         catch
         {
-            try { SafeDeleteTemp(record.TempPath); } catch { }
+            try { await RollbackFinalizeAsync(path, existingForArchive, archivePath); }
+            finally { SafeDeleteTemp(record.TempPath); }
             throw;
         }
 
@@ -364,6 +369,71 @@ public class ChunkedUploadService : IChunkedUploadService
         await _syncLog.LogAsync(path, SyncOperation.Upload, deviceId, LogResult.Success);
 
         return new ChunkCompletedOutcome(path, newVersion, hash, uploadFileSize);
+    }
+
+    /// <summary>
+    /// Finalize 的 Move 覆盖目标失败（文件被锁等）后回滚索引（F-21 / CLAUDE.md 7.1 DB+FS 一致性）。
+    /// 阶段 2 的 DB 事务已提交（索引指向新 hash/version），但 Move 失败磁盘仍是旧内容——若不回滚，
+    /// 客户端下轮树同步对齐错误索引（本地新内容 == 索引新 hash）永不重传，索引与内容永久不一致。
+    /// 回滚：FileEntry 恢复旧 hash/version/size/LastModified（新建文件则删除条目）、移除本次新增的
+    /// 孤儿 VersionRecord（旧内容仍是磁盘真值，无需版本存档）并删除存档文件，使索引回到与磁盘一致的旧状态；
+    /// 客户端重试/下轮扫描按哈希差异重新上传收敛。
+    /// </summary>
+    private async Task RollbackFinalizeAsync(string path, FileEntry? oldEntry, string? archivePath)
+    {
+        // 使用全新 DbContext：不可复用已提交的 db——其变更追踪器仍持有新值而非 DB 真值（CLAUDE.md 7.3）
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        await using var tx = await db.Database.BeginTransactionAsync();
+        try
+        {
+            var entry = await db.FileEntries.FindAsync(path);
+            if (entry != null)
+            {
+                if (oldEntry != null)
+                {
+                    entry.CurrentHash = oldEntry.CurrentHash;
+                    entry.CurrentSize = oldEntry.CurrentSize;
+                    entry.Version = oldEntry.Version;
+                    entry.LastModified = oldEntry.LastModified;
+                    entry.State = oldEntry.State;
+                }
+                else
+                {
+                    // 新建文件：磁盘上目标从未落位，移除索引条目
+                    db.FileEntries.Remove(entry);
+                }
+            }
+
+            // 移除本次新增的孤儿版本记录（新建文件无存档，archivePath 必为 null，此处不冲突）
+            if (archivePath != null)
+            {
+                var orphan = await db.VersionRecords
+                    .FirstOrDefaultAsync(v => v.FilePath == path && v.StoragePath == archivePath);
+                if (orphan != null)
+                {
+                    db.VersionRecords.Remove(orphan);
+                }
+            }
+
+            await db.SaveChangesAsync();
+            await tx.CommitAsync();
+
+            // 事务提交后清理孤儿存档文件（FS 副作用，CLAUDE.md 7.3）
+            if (archivePath != null)
+            {
+                try
+                {
+                    IOFile.Delete(Path.Combine(
+                        _storage.GetAbsolutePath("/"), ".cloudpan", ".versions", archivePath));
+                }
+                catch { /* 尽力清理 */ }
+            }
+        }
+        catch
+        {
+            await tx.RollbackAsync();
+            throw;
+        }
     }
 
     /// <summary>安全删除临时文件。</summary>
