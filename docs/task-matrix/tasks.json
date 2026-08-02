@@ -511,7 +511,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "判定：当前 MainWindow 为状态+日志形态，无 T-013 的完整文件浏览视图，但每文件状态列表可在现有界面独立落地（不预占 T-013 面包屑/网格/搜索形态），故选择实现而非阻塞。\n实现：MainWindow 新增「同步状态」页签（ListView 状态图标+文件名，图标/颜色双通道），欢迎面板移入「最近活动」页签内避免遮住页签栏；每文件状态由 Client.Core SyncEngine.GetFileSyncStatusesAsync 查询（快照 FileState + 待处理队列瞬态 + 本地存在性），冲突(!)/错误(✗)由 UI 本地列表叠加覆盖，其余按 FileState 枚举映射 ✓(Synced)/↻(Uploading·Downloading·Modified·Deleting)/☁(CloudOnly)/!(Conflict)。\n改动文件：新增 CloudPan.Client.Core/Services/SyncEngine.Status.cs（FileSyncStatusItem + GetFileSyncStatusesAsync）；修改 CloudPan.Client.UI/UI/MainWindow.cs（内容区改页签容器 + 状态列表 + 5s 定时刷新，Shown 启动/隐藏托盘停止，async void 顶层 try-catch 防异常丢失）；CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 4 用例：Synced/CloudOnly/Uploading/本地新文件 Modified）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 171/171 通过（原 167 + 新增 4）；架构测试 9/9 通过。验收标准为手动（同步目录文件显示对应状态图标），由验收者实机验证。",
+      "note": "判定：当前 MainWindow 为状态+日志形态，无 T-013 的完整文件浏览视图，但每文件状态列表可在现有界面独立落地（不预占 T-013 面包屑/网格/搜索形态），故选择实现而非阻塞。\n实现：MainWindow 新增「同步状态」页签（ListView 状态图标+文件名，图标/颜色双通道），欢迎面板移入「最近活动」页签内避免遮住页签栏；每文件状态由 Client.Core SyncEngine.GetFileSyncStatusesAsync 查询（快照 FileState + 待处理队列瞬态 + 本地存在性），冲突(!)/错误(✗)由 UI 本地列表叠加覆盖，其余按 FileState 枚举映射 ✓(Synced)/↻(Uploading·Downloading·Modified·Deleting)/☁(CloudOnly)/!(Conflict)。\n改动文件：新增 CloudPan.Client.Core/Services/SyncEngine.Status.cs（FileSyncStatusItem + GetFileSyncStatusesAsync）；修改 CloudPan.Client.UI/UI/MainWindow.cs（内容区改页签容器 + 状态列表 + 5s 定时刷新，Shown 启动/隐藏托盘停止，async void 顶层 try-catch 防异常丢失）；CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 4 用例：Synced/CloudOnly/Uploading/本地新文件 Modified）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 171/171 通过（原 167 + 新增 4）；架构测试 9/9 通过。验收标准为手动（同步目录文件显示对应状态图标），由验收者实机验证。\n【验收结论 2026-08-03】task-verifier 独立裁决：本任务验收标准仅 1 条手动项（同步目录文件显示对应状态图标），无自动项；子 Agent 无法执行 UI 实机检查，按流程 Step 3' 保持 status=acceptance 待人工确认（不置 done、不放行）。代码路径/逻辑存在性核查通过：①状态映射——MainWindow.cs:1220-1243 ResolveDisplayState 将 FileState 枚举映射为（图标,颜色）双通道，覆盖需求五态：Synced→✓绿、Uploading/Downloading/Modified→↻蓝、Deleting→↻灰、CloudOnly→☁灰、Conflict→!橙；UI 本地错误/冲突列表叠加覆盖为 ✗红/!橙（优先级最高，瞬时状态优先可见）；状态取自 FileState 枚举（Enums.g.cs 契约生成：Synced=0/Modified=1/Deleting=2/CloudOnly=3/Downloading=4/Uploading=5/Conflict=7，引用值全部有效，且枚举值 6 保留位未用不冲突）。②双通道渲染——MainWindow.cs:1197-1217 ApplyFileStatuses 以 ListViewItem(icon)+lvi.ForeColor=color 实现图标列+前景色双通道。③定时刷新——MainWindow.cs:107 _statusRefreshTimer Interval=5000；:1154-1158 OnShown 启动并立即刷新一次；:1714 隐藏托盘停止刷新（Shown 时重启）；StatusRefreshTimer_Tick 为 async void+顶层 try-catch+_statusRefreshBusy 防重入，符合 CLAUDE.md 7.2。④数据来源——新增 SyncEngine.Status.cs GetFileSyncStatusesAsync 读 RemoteSnapshots 快照 FileState+SyncQueue 待处理队列瞬态（Upload/Download/Delete→Uploading/Downloading/Deleting）+本地文件系统存在性（忽略 .cloudpan 与忽略规则），partial 类可访问 SyncEngine.Scan.cs:379/388/404 私有辅助方法（ToRelativePath/ShouldIgnoreScan/NormalizePath）。⑤独立运行新增 4 测试用例 4/4 通过（已同步Synced本地存在/CloudOnly无本地副本/待上传队列Uploading/本地新文件Modified）。⑥CloudPan.Client.UI.csproj -c Release 编译 Build succeeded 0 Warning 0 Error。待人工确认清单：同步目录文件显示对应状态图标（实机运行 Windows 客户端，将文件放入同步目录/触发上传/构造冲突与错误场景，观察 ✓↻!✗☁ 图标与颜色是否正确呈现、5s 定时刷新是否生效、页签切换与欢迎面板不遮挡）。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -519,7 +519,7 @@
       "title": "无障碍修复：对比度与最小字号（WCAG 2.1 AA）",
       "dimension": "ux",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 1,
       "findingId": "F-10",
       "dependsOn": [],
@@ -540,8 +540,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "无障碍修复（F-10）：两端 DesignTokens 同步修改（逐字节一致，T-011 收敛前两端同步改）。TextMuted 由 150,150,150 加深至 117,117,117（#757575），白底对比度 2.96:1→4.61:1，≥WCAG 2.1 AA 4.5:1；SizeCaption 8.5f→10f（≥10pt）；SizeBody 12f→14f，并新增 SizeBodyMin=14f 正文最小字号约束常量（SizeBody 引用之），BodySmall/Mono 为辅助小字号保持 10f。改动文件：CloudPan.Client.UI/UI/DesignTokens.cs、CloudPan.Server.UI/DesignTokens.cs（各 3 处改动）。验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 171/171 通过；验收命令 grep 'TextMuted' CloudPan.Client.UI/UI/DesignTokens.cs 数值为 117,117,117 符合对比度 ≥4.5:1。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-011",

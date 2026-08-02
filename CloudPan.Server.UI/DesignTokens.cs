@@ -31,7 +31,7 @@ public static class CloudPanColors
     // -- 文字色 --
     public static readonly Color TextPrimary = Color.FromArgb(30, 30, 30);
     public static readonly Color TextSecondary = Color.FromArgb(80, 80, 80);
-    public static readonly Color TextMuted = Color.FromArgb(150, 150, 150);
+    public static readonly Color TextMuted = Color.FromArgb(117, 117, 117);
     public static readonly Color TextError = Color.FromArgb(198, 40, 40);
     public static readonly Color TextDarkGray = Color.FromArgb(97, 97, 97);
     public static readonly Color TextOnPrimary = Color.FromArgb(255, 255, 255);
@@ -196,9 +196,15 @@ public static class CloudPanFonts
     // -- 字号常量 --
     public const float SizeTitle = 20f;
     public const float SizeSubtitle = 14f;
-    public const float SizeBody = 12f;
+
+    // -- 正文最小字号约束（WCAG 1.4.3，老人/弱视用户可读性下限） --
+    // 正文（Body/阅读文本）字号不得低于此值；BodySmall/Mono 为辅助小字号，
+    // Caption 已提至 ≥10 磅。
+    /// <summary>正文最小字号（磅）。</summary>
+    public const float SizeBodyMin = 14f;
+    public const float SizeBody = SizeBodyMin;
     public const float SizeBodySmall = 10f;
-    public const float SizeCaption = 8.5f;
+    public const float SizeCaption = 10f;
     public const float SizeMono = 10f;
 
     // -- 字体规格结构 --
