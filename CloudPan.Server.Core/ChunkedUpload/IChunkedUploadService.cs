@@ -1,4 +1,4 @@
-namespace CloudPan.Server.Services;
+namespace CloudPan.Server.Core;
 
 /// <summary>分块上传操作结果基类。</summary>
 public abstract record ChunkUploadOutcome;

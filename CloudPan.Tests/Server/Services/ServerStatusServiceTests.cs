@@ -1,5 +1,5 @@
-using CloudPan.Server.Data;
-using CloudPan.Server.Services;
+using CloudPan.Infrastructure.Persistence;
+using CloudPan.Server.Core;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -64,9 +64,9 @@ public class ServerStatusServiceTests : Infrastructure.TestBase
     {
         var (svc, dbFactory) = CreateServiceAsync();
         var index = new FileIndexService(dbFactory);
-        await index.UpsertFileAsync("/a/one.txt", CloudPan.Shared.FileType.File, "h", 1,
+        await index.UpsertFileAsync("/a/one.txt", CloudPan.Contract.FileType.File, "h", 1,
             DateTime.UtcNow.ToString("O"), 1);
-        await index.UpsertFileAsync("/b/two.txt", CloudPan.Shared.FileType.File, "h", 1,
+        await index.UpsertFileAsync("/b/two.txt", CloudPan.Contract.FileType.File, "h", 1,
             DateTime.UtcNow.ToString("O"), 2);
 
         var aFiles = await svc.GetFilesAsync("/a/", 100);

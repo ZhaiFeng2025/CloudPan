@@ -1,4 +1,4 @@
-namespace CloudPan.Server.Services;
+namespace CloudPan.Server.Core;
 
 /// <summary>普通上传编排结果。</summary>
 public record UploadResult(string Path, int Version, string Hash, long Size);

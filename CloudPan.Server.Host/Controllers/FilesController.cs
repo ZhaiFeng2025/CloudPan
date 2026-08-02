@@ -1,9 +1,10 @@
-using CloudPan.Server;
-using CloudPan.Server.Services;
-using CloudPan.Shared;
+using CloudPan.Contract;
+using CloudPan.Infrastructure.Storage;
+using CloudPan.Server.Core;
+using CloudPan.Server.Host;
 using Microsoft.AspNetCore.Mvc;
 
-namespace CloudPan.Server.Controllers;
+namespace CloudPan.Server.Host.Controllers;
 
 /// <summary>
 /// 文件操作 API：上传、下载、文件树、删除、移动、创建文件夹、搜索。

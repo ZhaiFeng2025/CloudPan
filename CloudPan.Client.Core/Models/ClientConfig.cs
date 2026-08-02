@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace CloudPan.Client.Models;
+namespace CloudPan.Client.Core.Models;
 
 /// <summary>
 /// 客户端持久化配置（JSON 存储，支持版本迁移）。

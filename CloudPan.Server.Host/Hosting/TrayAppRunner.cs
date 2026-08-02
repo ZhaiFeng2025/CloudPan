@@ -2,7 +2,7 @@ using System.ServiceProcess;
 using Microsoft.AspNetCore.Builder;
 using Serilog;
 
-namespace CloudPan.Server.Hosting;
+namespace CloudPan.Server.Host.Hosting;
 
 /// <summary>
 /// 运行模式处理器：Windows Service / headless console / tray GUI（T-015 从 Server.UI 移入）。

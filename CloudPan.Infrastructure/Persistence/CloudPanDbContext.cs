@@ -1,7 +1,7 @@
-using CloudPan.Server.Models;
+using CloudPan.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace CloudPan.Server.Data;
+namespace CloudPan.Infrastructure.Persistence;
 
 /// <summary>
 /// CloudPan 服务端数据库上下文。

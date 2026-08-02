@@ -1,6 +1,6 @@
-using CloudPan.Shared;
+using CloudPan.Contract;
 
-namespace CloudPan.Client.Services;
+namespace CloudPan.Client.Core.Services;
 
 /// <summary>
 /// 服务端 API 客户端接口。

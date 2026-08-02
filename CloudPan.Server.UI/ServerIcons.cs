@@ -3,7 +3,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 
-namespace CloudPan.Shared.UI;
+namespace CloudPan.Server.UI;
 
 /// <summary>
 /// 服务端图标（绿色 + "S" 徽章），运行时自绘（无需外部 .ico 文件）。

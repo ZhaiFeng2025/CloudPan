@@ -1,9 +1,9 @@
-using CloudPan.Server.Data;
-using CloudPan.Server.Models;
-using CloudPan.Shared;
+using CloudPan.Contract;
+using CloudPan.Infrastructure.Models;
+using CloudPan.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
-namespace CloudPan.Server.Services;
+namespace CloudPan.Server.Core;
 
 /// <summary>
 /// 文件索引服务。管理 FileEntry 的 CRUD 操作。

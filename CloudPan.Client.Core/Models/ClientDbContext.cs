@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 
-namespace CloudPan.Client.Models;
+namespace CloudPan.Client.Core.Models;
 
 /// <summary>
 /// 客户端本地 SQLite 数据库。

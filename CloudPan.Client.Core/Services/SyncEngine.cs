@@ -1,10 +1,10 @@
 using System.Collections.Concurrent;
-using CloudPan.Client.Models;
-using CloudPan.Shared;
+using CloudPan.Client.Core.Models;
+using CloudPan.Contract;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace CloudPan.Client.Services;
+namespace CloudPan.Client.Core.Services;
 
 /// <summary>冲突详情。</summary>
 public record ConflictInfo(
@@ -113,7 +113,7 @@ public partial class SyncEngine : IDisposable
 
     // 构造函数中初始化 _ignorePatterns（见上方构造函数修改）
 
-    public SyncEngine(IApiClient api, Models.SyncConfig config, IDbContextFactory<ClientDbContext> dbFactory, ILogger<SyncEngine> logger, WebSocketClient? wsClient = null, FileWatcherService? fileWatcher = null)
+    public SyncEngine(IApiClient api, SyncConfig config, IDbContextFactory<ClientDbContext> dbFactory, ILogger<SyncEngine> logger, WebSocketClient? wsClient = null, FileWatcherService? fileWatcher = null)
     {
         _api = api;
         _syncRoot = config.SyncRoot;

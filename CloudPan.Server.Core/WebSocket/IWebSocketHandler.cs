@@ -1,4 +1,4 @@
-namespace CloudPan.Server.Services;
+namespace CloudPan.Server.Core;
 
 /// <summary>
 /// WebSocket 连接管理服务接口。

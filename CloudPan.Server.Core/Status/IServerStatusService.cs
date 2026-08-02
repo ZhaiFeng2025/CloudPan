@@ -1,4 +1,4 @@
-namespace CloudPan.Server.Services;
+namespace CloudPan.Server.Core;
 
 /// <summary>文件条目摘要（管理面板文件列表）。</summary>
 public sealed record FileEntryInfo(string Path, int Type, string? CurrentHash, long CurrentSize, int Version, int State, string LastModified);

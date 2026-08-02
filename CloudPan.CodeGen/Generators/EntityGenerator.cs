@@ -30,7 +30,7 @@ public static class EntityGenerator
         sb.AppendLine();
         sb.AppendLine("#nullable enable");
         sb.AppendLine();
-        sb.AppendLine("namespace CloudPan.Server.Models;");
+        sb.AppendLine("namespace CloudPan.Infrastructure.Models;");
         sb.AppendLine();
 
         foreach (var (entityName, entity) in spec.Entities)

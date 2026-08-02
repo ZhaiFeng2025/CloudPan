@@ -1,8 +1,8 @@
 using System.Text.Json;
-using CloudPan.Shared;
+using CloudPan.Contract;
 using Microsoft.AspNetCore.Mvc;
 
-namespace CloudPan.Server;
+namespace CloudPan.Server.Host;
 
 /// <summary>
 /// 统一 API 错误响应工厂。

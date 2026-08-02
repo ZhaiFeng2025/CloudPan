@@ -1,10 +1,10 @@
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
-using CloudPan.Client.Models;
+using CloudPan.Client.Core.Models;
 using Microsoft.Extensions.Logging;
 
-namespace CloudPan.Client.Services;
+namespace CloudPan.Client.Core.Services;
 
 /// <summary>
 /// WebSocket 客户端——连接服务端、接收推送、断线重连。

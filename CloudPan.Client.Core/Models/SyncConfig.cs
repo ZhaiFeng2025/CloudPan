@@ -1,6 +1,6 @@
-using CloudPan.Shared;
+using CloudPan.Contract;
 
-namespace CloudPan.Client.Models;
+namespace CloudPan.Client.Core.Models;
 
 /// <summary>
 /// 客户端同步配置——供 DI 容器注入，消除原始类型（string syncRoot）的注入歧义。

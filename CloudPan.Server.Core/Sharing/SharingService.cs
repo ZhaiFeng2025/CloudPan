@@ -1,11 +1,13 @@
 using System.Globalization;
 using System.Security.Cryptography;
-using CloudPan.Server.Data;
-using CloudPan.Server.Models;
-using CloudPan.Shared;
+using CloudPan.Contract;
+using CloudPan.Infrastructure.Models;
+using CloudPan.Infrastructure.Persistence;
+using CloudPan.Infrastructure.Security;
+using CloudPan.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
 
-namespace CloudPan.Server.Services;
+namespace CloudPan.Server.Core;
 
 /// <inheritdoc />
 public class SharingService : ISharingService

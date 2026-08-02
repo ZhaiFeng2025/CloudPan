@@ -1,7 +1,7 @@
-using CloudPan.Server.Models;
-using CloudPan.Shared;
+using CloudPan.Contract;
+using CloudPan.Infrastructure.Models;
 
-namespace CloudPan.Server.Services;
+namespace CloudPan.Server.Core;
 
 /// <summary>
 /// 文件索引服务接口。

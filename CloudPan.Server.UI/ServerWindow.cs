@@ -1,7 +1,7 @@
 using System.Data;
 using System.Drawing.Drawing2D;
-using CloudPan.Server.Data;
-using CloudPan.Shared;
+using CloudPan.Infrastructure.Design;
+using CloudPan.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -41,7 +41,7 @@ public class ServerWindow : Form
         Size = new Size(720, 520);
         MinimumSize = new Size(600, 400);
         StartPosition = FormStartPosition.CenterScreen;
-        Icon = CloudPan.Shared.UI.ServerIcons.CreateServer();
+        Icon = CloudPan.Server.UI.ServerIcons.CreateServer();
         Font = new Font(CloudPanFonts.FontFamily, CloudPanFonts.SizeBody);
         BackColor = CloudPanColors.BackgroundWhite;
 

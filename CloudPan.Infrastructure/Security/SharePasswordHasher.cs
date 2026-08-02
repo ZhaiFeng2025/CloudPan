@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 
-namespace CloudPan.Server.Services;
+namespace CloudPan.Infrastructure.Security;
 
 /// <summary>
 /// 分享链接密码哈希器。使用 PBKDF2（带随机盐，防暴力破解），

@@ -1,8 +1,8 @@
-using CloudPan.Client.Models;
-using CloudPan.Shared;
+using CloudPan.Client.Core.Models;
+using CloudPan.Contract;
 using Microsoft.EntityFrameworkCore;
 
-namespace CloudPan.Client.Services;
+namespace CloudPan.Client.Core.Services;
 
 /// <summary>每文件同步状态视图项——供 UI 渲染每文件状态图标（✓↻!✗☁）。</summary>
 public sealed record FileSyncStatusItem(string RelativePath, bool IsDirectory, int State, bool LocalExists);

@@ -1,8 +1,8 @@
-using CloudPan.Shared;
+using CloudPan.Contract;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace CloudPan.Client.Services;
+namespace CloudPan.Client.Core.Services;
 
 /// <summary>
 /// SyncEngine 部分实现：回收站操作（T-014）——文件浏览删除默认进回收站（服务端软删墓碑+移入回收站），

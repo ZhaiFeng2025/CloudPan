@@ -1,4 +1,4 @@
-namespace CloudPan.Server.Services;
+namespace CloudPan.Server.Core;
 
 /// <summary>
 /// 运行时设置服务——AppConfig 键值表的类型化门面。

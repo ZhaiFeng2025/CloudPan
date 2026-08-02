@@ -1,8 +1,9 @@
 using System.Net;
 using System.Net.Sockets;
-using CloudPan.Server.Hosting;
-using CloudPan.Server.Services;
-using CloudPan.Shared;
+using CloudPan.Infrastructure.Configuration;
+using CloudPan.Infrastructure.Design;
+using CloudPan.Server.Core;
+using CloudPan.Server.Host.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CloudPan.Server.UI;

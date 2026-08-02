@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.Drawing.Drawing2D;
-using CloudPan.Client.Services;
-using CloudPan.Shared;
+using CloudPan.Client.Core.Models;
+using CloudPan.Client.Core.Services;
+using CloudPan.Contract;
+using CloudPan.Infrastructure.Design;
 
 namespace CloudPan.Client.UI;
 
@@ -1503,7 +1505,7 @@ public class MainWindow : Form
             string dbPath = System.IO.Path.Combine(Program.SyncRoot, ".cloudpan", "client.db");
             if (File.Exists(dbPath))
             {
-                using Models.ClientDbContext db = new Models.ClientDbContext(dbPath);
+                using ClientDbContext db = new ClientDbContext(dbPath);
                 var snapshot = db.RemoteSnapshots.Find(path);
                 if (snapshot != null)
                 {
@@ -1836,7 +1838,7 @@ public class MainWindow : Form
     {
         if (e.CloseReason == CloseReason.UserClosing)
         {
-            var settings = Services.SettingsStore.Load();
+            var settings = SettingsStore.Load();
             if (!settings.TrayCloseAcknowledged)
             {
                 var result = MessageBox.Show(

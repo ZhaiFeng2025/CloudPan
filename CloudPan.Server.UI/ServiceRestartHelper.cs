@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Security.Principal;
 using System.ServiceProcess;
-using CloudPan.Server.Hosting;
+using CloudPan.Server.Host.Hosting;
 
 namespace CloudPan.Server.UI;
 

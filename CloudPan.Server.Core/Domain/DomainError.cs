@@ -1,6 +1,6 @@
-using CloudPan.Shared;
+using CloudPan.Contract;
 
-namespace CloudPan.Server.Services;
+namespace CloudPan.Server.Core;
 
 /// <summary>
 /// 领域层操作错误。携带 HttpErrorCode 使领域服务与 ASP.NET 解耦，

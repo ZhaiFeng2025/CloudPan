@@ -7,7 +7,7 @@ using System.Text.Json.Serialization;
 
 #nullable enable
 
-namespace CloudPan.Shared;
+namespace CloudPan.Contract;
 
 /// <summary>
 /// 统一 API 错误响应体格式——所有控制器和中间件必须使用此格式

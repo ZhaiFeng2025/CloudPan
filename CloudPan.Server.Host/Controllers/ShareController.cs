@@ -1,9 +1,9 @@
-using CloudPan.Server;
-using CloudPan.Server.Services;
-using CloudPan.Shared;
+using CloudPan.Contract;
+using CloudPan.Server.Core;
+using CloudPan.Server.Host;
 using Microsoft.AspNetCore.Mvc;
 
-namespace CloudPan.Server.Controllers;
+namespace CloudPan.Server.Host.Controllers;
 
 /// <summary>
 /// 文件分享控制器——只做参数绑定与状态码适配，领域逻辑（分享 CRUD/校验/下载计数递增）在 Server.Core ISharingService。

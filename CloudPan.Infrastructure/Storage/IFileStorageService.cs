@@ -1,4 +1,4 @@
-namespace CloudPan.Server.Services;
+namespace CloudPan.Infrastructure.Storage;
 
 /// <summary>
 /// 物理文件存储服务接口。

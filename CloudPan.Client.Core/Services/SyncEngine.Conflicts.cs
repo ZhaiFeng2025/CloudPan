@@ -1,9 +1,9 @@
-using CloudPan.Client.Models;
-using CloudPan.Shared;
+using CloudPan.Client.Core.Models;
+using CloudPan.Contract;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace CloudPan.Client.Services;
+namespace CloudPan.Client.Core.Services;
 
 /// <summary>SyncEngine 部分实现：冲突处理。</summary>
 public partial class SyncEngine

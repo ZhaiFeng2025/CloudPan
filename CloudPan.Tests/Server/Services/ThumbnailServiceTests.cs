@@ -1,5 +1,6 @@
-using CloudPan.Server.Services;
-using CloudPan.Shared;
+using CloudPan.Contract;
+using CloudPan.Infrastructure.Storage;
+using CloudPan.Server.Core;
 using SkiaSharp;
 using Xunit;
 

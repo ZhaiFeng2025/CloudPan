@@ -1,9 +1,9 @@
-using CloudPan.Client.Models;
-using CloudPan.Shared;
+using CloudPan.Client.Core.Models;
+using CloudPan.Contract;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace CloudPan.Client.Services;
+namespace CloudPan.Client.Core.Services;
 
 /// <summary>SyncEngine 部分实现：文件传输（上传/下载/删除/重命名）。</summary>
 public partial class SyncEngine
@@ -97,18 +97,18 @@ public partial class SyncEngine
         {
             snapshot.Version = result?.Data.Version ?? snapshot.Version;
             snapshot.Hash = result?.Data.Hash ?? snapshot.Hash;
-            snapshot.State = (int)CloudPan.Shared.FileState.Synced;
+            snapshot.State = (int)CloudPan.Contract.FileState.Synced;
         }
         else if (result != null)
         {
             db.RemoteSnapshots.Add(new RemoteSnapshot
             {
                 Path = item.FilePath,
-                Type = (int)CloudPan.Shared.FileType.File,
+                Type = (int)CloudPan.Contract.FileType.File,
                 Hash = result.Data.Hash,
                 Size = result.Data.Size,
                 Version = result.Data.Version,
-                State = (int)CloudPan.Shared.FileState.Synced
+                State = (int)CloudPan.Contract.FileState.Synced
             });
         }
         await db.SaveChangesAsync();
@@ -226,7 +226,7 @@ public partial class SyncEngine
             dbSnapshot.Version = item.BaseVersion ?? dbSnapshot.Version;
             dbSnapshot.Hash = downloadedHash;
             dbSnapshot.Size = downloadedSize;
-            dbSnapshot.State = (int)CloudPan.Shared.FileState.Synced;
+            dbSnapshot.State = (int)CloudPan.Contract.FileState.Synced;
         }
         else
         {
@@ -234,11 +234,11 @@ public partial class SyncEngine
             db.RemoteSnapshots.Add(new RemoteSnapshot
             {
                 Path = item.FilePath,
-                Type = (int)CloudPan.Shared.FileType.File,
+                Type = (int)CloudPan.Contract.FileType.File,
                 Hash = downloadedHash,
                 Size = downloadedSize,
                 Version = item.BaseVersion ?? 0,
-                State = (int)CloudPan.Shared.FileState.Synced
+                State = (int)CloudPan.Contract.FileState.Synced
             });
         }
         await db.SaveChangesAsync();
@@ -320,11 +320,11 @@ public partial class SyncEngine
         db.RemoteSnapshots.Add(new RemoteSnapshot
         {
             Path = item.TargetPath,
-            Type = snapshot?.Type ?? (int)CloudPan.Shared.FileType.File,
+            Type = snapshot?.Type ?? (int)CloudPan.Contract.FileType.File,
             Hash = snapshot?.Hash,
             Size = snapshot?.Size ?? 0,
             Version = item.BaseVersion ?? snapshot?.Version ?? 0,
-            State = (int)CloudPan.Shared.FileState.Synced
+            State = (int)CloudPan.Contract.FileState.Synced
         });
         await db.SaveChangesAsync();
         _logger.LogInformation("重命名完成: {Old} → {New}", item.FilePath, item.TargetPath);

@@ -1,11 +1,12 @@
-using CloudPan.Server.Data;
-using CloudPan.Server.Models;
-using CloudPan.Shared;
+using CloudPan.Contract;
+using CloudPan.Infrastructure.Models;
+using CloudPan.Infrastructure.Persistence;
+using CloudPan.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
 using IOFile = System.IO.File;
 using IOFileInfo = System.IO.FileInfo;
 
-namespace CloudPan.Server.Services;
+namespace CloudPan.Server.Core;
 
 /// <inheritdoc />
 public class VersionHistoryService : IVersionHistoryService

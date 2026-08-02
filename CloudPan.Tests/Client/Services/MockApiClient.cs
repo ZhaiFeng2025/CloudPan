@@ -1,5 +1,5 @@
-using CloudPan.Client.Services;
-using CloudPan.Shared;
+using CloudPan.Client.Core.Services;
+using CloudPan.Contract;
 
 namespace CloudPan.Tests.Client.Services;
 

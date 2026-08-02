@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
-using CloudPan.Shared;
+using CloudPan.Contract;
 
-namespace CloudPan.Server.Services;
+namespace CloudPan.Infrastructure.Security;
 
 /// <summary>
 /// 家庭共享 Token 生成器（64 位小写十六进制，字节数由 SpecConfig.TokenEntropy / 8 决定）。

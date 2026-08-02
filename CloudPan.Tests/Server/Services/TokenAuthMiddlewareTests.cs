@@ -1,10 +1,10 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using CloudPan.Server.Data;
-using CloudPan.Server.Middleware;
-using CloudPan.Server.Models;
-using CloudPan.Shared;
+using CloudPan.Contract;
+using CloudPan.Infrastructure.Models;
+using CloudPan.Infrastructure.Persistence;
+using CloudPan.Server.Host.Middleware;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;

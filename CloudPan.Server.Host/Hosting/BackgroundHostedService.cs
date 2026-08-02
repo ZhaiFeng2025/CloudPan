@@ -1,12 +1,12 @@
-using CloudPan.Server.Data;
-using CloudPan.Server.Services;
+using CloudPan.Infrastructure.Persistence;
+using CloudPan.Server.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 // Host 是 WinForms 项目，隐式 using 含 System.Windows.Forms.Timer，用别名消除歧义
 using Timer = System.Threading.Timer;
 
-namespace CloudPan.Server.Hosting;
+namespace CloudPan.Server.Host.Hosting;
 
 /// <summary>
 /// 后台定时任务宿主：回收站 30 天清理、墓碑物理清理、超时分块清理、WAL checkpoint、内存监控。

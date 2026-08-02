@@ -1,10 +1,10 @@
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text.Json;
-using CloudPan.Shared;
+using CloudPan.Contract;
 using Microsoft.Extensions.Logging;
 
-namespace CloudPan.Client.Services;
+namespace CloudPan.Client.Core.Services;
 
 /// <summary>
 /// 服务端 HTTP API 客户端。

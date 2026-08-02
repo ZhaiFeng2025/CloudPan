@@ -1,5 +1,5 @@
-using CloudPan.Server.Data;
-using CloudPan.Server.Models;
+using CloudPan.Infrastructure.Models;
+using CloudPan.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace CloudPan.Tests.Infrastructure;

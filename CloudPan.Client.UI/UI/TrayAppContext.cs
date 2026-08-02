@@ -1,3 +1,5 @@
+using CloudPan.Client.Core.Models;
+using CloudPan.Client.Core.Services;
 using Microsoft.Win32;
 
 namespace CloudPan.Client.UI;
@@ -15,14 +17,14 @@ public class TrayAppContext : ApplicationContext
     private readonly Task _syncTask;
     private readonly Task _wsTask;
     private readonly CancellationTokenSource _cts = new();
-    private readonly Services.SyncEngine _engine;
-    private readonly Services.WebSocketClient _wsClient;
+    private readonly SyncEngine _engine;
+    private readonly WebSocketClient _wsClient;
     private readonly System.Collections.Concurrent.ConcurrentQueue<string> _conflictPaths = new();
     private readonly System.Threading.SynchronizationContext? _syncCtx; // UI 同步上下文（构造函数捕获，供具名事件处理器）
     private readonly System.Collections.Concurrent.ConcurrentQueue<string> _recentActivity = new(); // 最近同步活动（托盘文本）
     private volatile bool _isPaused;
 
-    public TrayAppContext(Services.SyncEngine engine, Services.WebSocketClient wsClient)
+    public TrayAppContext(SyncEngine engine, WebSocketClient wsClient)
     {
         _engine = engine;
         _wsClient = wsClient;
@@ -108,7 +110,7 @@ public class TrayAppContext : ApplicationContext
     }
 
     /// <summary>冲突检测 → 托盘气泡 + 警告图标。</summary>
-    private void OnConflictDetected(Services.ConflictInfo conflictInfo)
+    private void OnConflictDetected(ConflictInfo conflictInfo)
     {
         string path = conflictInfo.RelativePath;
         _syncCtx?.Post(_ =>
@@ -388,7 +390,7 @@ public class TrayAppContext : ApplicationContext
     {
         try
         {
-            Models.ClientConfig cfg = Models.ClientConfig.Load(
+            ClientConfig cfg = ClientConfig.Load(
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "CloudPan", "client-config.json"));
             SettingsForm form = new SettingsForm(

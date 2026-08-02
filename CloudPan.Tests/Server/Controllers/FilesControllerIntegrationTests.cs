@@ -1,6 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
-using CloudPan.Shared;
+using CloudPan.Contract;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
 
@@ -277,7 +277,7 @@ public class FilesControllerIntegrationTests : IClassFixture<WebApplicationFacto
         var item = treeBody.GetProperty("data").EnumerateArray()
             .FirstOrDefault(d => d.GetProperty("path").GetString() == remotePath);
         Assert.NotEqual(default, item);
-        Assert.Equal((int)CloudPan.Shared.FileState.Deleting, item.GetProperty("state").GetInt32());
+        Assert.Equal((int)CloudPan.Contract.FileState.Deleting, item.GetProperty("state").GetInt32());
     }
 
     [Fact]

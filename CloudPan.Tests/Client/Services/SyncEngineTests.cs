@@ -1,6 +1,6 @@
-using CloudPan.Client.Models;
-using CloudPan.Client.Services;
-using CloudPan.Shared;
+using CloudPan.Client.Core.Models;
+using CloudPan.Client.Core.Services;
+using CloudPan.Contract;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -320,8 +320,8 @@ public class SyncEngineTests : IDisposable
         var response = new FileTreeResponse(
             new[]
             {
-                new FileEntryDto("/tomb-del.txt", (int)CloudPan.Shared.FileType.File,
-                    "hash", 30, 5, DateTime.UtcNow.ToString("O"), (int)CloudPan.Shared.FileState.Deleting)
+                new FileEntryDto("/tomb-del.txt", (int)CloudPan.Contract.FileType.File,
+                    "hash", 30, 5, DateTime.UtcNow.ToString("O"), (int)CloudPan.Contract.FileState.Deleting)
             },
             null, false, 5);
 

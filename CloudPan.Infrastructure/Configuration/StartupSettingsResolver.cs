@@ -1,6 +1,6 @@
-using CloudPan.Shared;
+using CloudPan.Contract;
 
-namespace CloudPan.Server.Services;
+namespace CloudPan.Infrastructure.Configuration;
 
 /// <summary>
 /// 启动期设置合并器：CLI 参数（--Port/--SyncRoot）优先，其次 server-settings.json，最后默认值。

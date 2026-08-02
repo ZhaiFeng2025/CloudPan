@@ -21,7 +21,7 @@ public static class EnumGenerator
           .AppendLine();
         sb.AppendLine("#nullable enable");
         sb.AppendLine();
-        sb.AppendLine("namespace CloudPan.Shared;");
+        sb.AppendLine("namespace CloudPan.Contract;");
         sb.AppendLine();
 
         foreach (var (enumName, enumDef) in spec.Enums)

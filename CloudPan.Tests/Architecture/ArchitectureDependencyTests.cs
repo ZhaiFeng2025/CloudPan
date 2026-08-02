@@ -1,5 +1,5 @@
 using System.Xml.Linq;
-using CloudPan.Server.Hosting;
+using CloudPan.Server.Host.Hosting;
 using Xunit;
 
 namespace CloudPan.Tests.Architecture;

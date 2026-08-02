@@ -1,5 +1,5 @@
 using System.Text.Json;
-using CloudPan.Shared;
+using CloudPan.Contract;
 using Xunit;
 
 namespace CloudPan.Tests.Architecture;
@@ -61,7 +61,7 @@ public class ErrorResponseFormatTests
             .ToList();
 
         // 反射收集 ApiErrors 所有公共方法
-        var apiErrorsType = typeof(CloudPan.Server.ApiErrors);
+        var apiErrorsType = typeof(CloudPan.Server.Host.ApiErrors);
         List<System.Reflection.MethodInfo> factoryMethods = apiErrorsType.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
             .Where(m => m.ReturnType == typeof(ErrorResponse))
             .ToList();

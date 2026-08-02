@@ -1,9 +1,9 @@
-using CloudPan.Server;
-using CloudPan.Server.Services;
-using CloudPan.Shared;
+using CloudPan.Contract;
+using CloudPan.Server.Core;
+using CloudPan.Server.Host;
 using Microsoft.AspNetCore.Mvc;
 
-namespace CloudPan.Server.Controllers;
+namespace CloudPan.Server.Host.Controllers;
 
 /// <summary>
 /// 图片缩略图 API——只做参数绑定与状态码适配，领域逻辑（校验/解码/缩放/缓存写盘）在 Server.Core IThumbnailService。

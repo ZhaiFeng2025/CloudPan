@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using BenchmarkDotNet.Attributes;
-using CloudPan.Server.Services;
+using CloudPan.Infrastructure.Storage;
 
 namespace CloudPan.Tests.Benchmarks;
 

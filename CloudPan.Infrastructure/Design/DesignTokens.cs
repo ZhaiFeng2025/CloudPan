@@ -1,6 +1,6 @@
 using System.Drawing;
 
-namespace CloudPan.Shared;
+namespace CloudPan.Infrastructure.Design;
 
 /// <summary>
 /// 应用调色板设计令牌。

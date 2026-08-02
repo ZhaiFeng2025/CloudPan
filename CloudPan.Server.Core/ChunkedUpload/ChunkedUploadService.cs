@@ -1,11 +1,12 @@
 using System.Text.Json;
-using CloudPan.Server.Data;
-using CloudPan.Server.Models;
-using CloudPan.Shared;
+using CloudPan.Contract;
+using CloudPan.Infrastructure.Models;
+using CloudPan.Infrastructure.Persistence;
+using CloudPan.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
 using IOFile = System.IO.File;
 
-namespace CloudPan.Server.Services;
+namespace CloudPan.Server.Core;
 
 /// <inheritdoc />
 public class ChunkedUploadService : IChunkedUploadService

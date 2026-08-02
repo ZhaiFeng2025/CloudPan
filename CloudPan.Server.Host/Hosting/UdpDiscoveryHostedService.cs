@@ -1,10 +1,10 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using CloudPan.Shared;
+using CloudPan.Contract;
 using Microsoft.Extensions.Logging;
 
-namespace CloudPan.Server.Hosting;
+namespace CloudPan.Server.Host.Hosting;
 
 /// <summary>
 /// UDP 局域网发现服务：响应客户端 "CLOUDPAN_DISCOVER" 广播，返回服务端连接信息。

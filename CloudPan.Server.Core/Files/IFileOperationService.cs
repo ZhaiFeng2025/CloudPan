@@ -1,6 +1,6 @@
-using CloudPan.Server.Models;
+using CloudPan.Infrastructure.Models;
 
-namespace CloudPan.Server.Services;
+namespace CloudPan.Server.Core;
 
 /// <summary>删除文件结果。DeletedVersion 为删除后分配的新全局版本号。</summary>
 public sealed record FileDeleteResult(bool Success, string? Path, int? DeletedVersion, DomainError? Error = null);

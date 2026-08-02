@@ -7,7 +7,7 @@ using System.Text.Json.Serialization;
 
 #nullable enable
 
-namespace CloudPan.Shared;
+namespace CloudPan.Contract;
 
 /// <summary>
 /// 服务端文件索引。每行一个文件或目录。Path 为主键。

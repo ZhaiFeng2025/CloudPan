@@ -1,7 +1,7 @@
-using CloudPan.Server.Data;
+using CloudPan.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
-namespace CloudPan.Server.Services;
+namespace CloudPan.Server.Core;
 
 /// <summary>
 /// 运行时设置服务实现。读写 AppConfig 键值表（SQLite WAL 串行化保证并发安全）。

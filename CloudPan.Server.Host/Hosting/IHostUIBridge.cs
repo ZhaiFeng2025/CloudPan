@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 
-namespace CloudPan.Server.Hosting;
+namespace CloudPan.Server.Host.Hosting;
 
 /// <summary>
 /// 可选 UI 桥接口（T-015 / R-Q3）：Host 编译期不引用 Server.UI，运行期经 <see cref="UIBridgeLocator"/> 反射发现实现。

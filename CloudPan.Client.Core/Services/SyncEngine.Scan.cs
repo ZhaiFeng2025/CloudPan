@@ -1,9 +1,9 @@
-using CloudPan.Client.Models;
-using CloudPan.Shared;
+using CloudPan.Client.Core.Models;
+using CloudPan.Contract;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace CloudPan.Client.Services;
+namespace CloudPan.Client.Core.Services;
 
 /// <summary>SyncEngine 部分实现：全量/增量同步与本地扫描（兜底通道）。</summary>
 public partial class SyncEngine
@@ -307,7 +307,7 @@ public partial class SyncEngine
             foreach (var snapshot in batch)
             {
                 // 跳过 CloudOnly 文件（不含本地副本，不纳入删除检测，由用户按需下载）
-                if (snapshot.State == (int)CloudPan.Shared.FileState.CloudOnly)
+                if (snapshot.State == (int)CloudPan.Contract.FileState.CloudOnly)
                 {
                     continue;
                 }
@@ -315,7 +315,7 @@ public partial class SyncEngine
                 if (!localFiles.Contains(snapshot.Path))
                 {
                     // 本地已删除的文件 → 入队删除
-                    if (snapshot.Type == (int)CloudPan.Shared.FileType.File)
+                    if (snapshot.Type == (int)CloudPan.Contract.FileType.File)
                     {
                         _logger.LogInformation("全量扫描检测到本地删除: {Path}", snapshot.Path);
                         await EnqueueLocalChangeAsync(snapshot.Path, SyncOperation.Delete);
@@ -326,7 +326,7 @@ public partial class SyncEngine
                 matchedLocalFiles.Add(snapshot.Path);
 
                 // 文件：大小对比 + 哈希对比
-                if (snapshot.Type == (int)CloudPan.Shared.FileType.File)
+                if (snapshot.Type == (int)CloudPan.Contract.FileType.File)
                 {
                     string fullPath = ToLocalPath(snapshot.Path);
                     long localSize = new FileInfo(fullPath).Length;

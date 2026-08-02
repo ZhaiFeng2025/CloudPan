@@ -1,5 +1,5 @@
-using CloudPan.Server.Services;
-using CloudPan.Shared;
+using CloudPan.Contract;
+using CloudPan.Server.Core;
 using Xunit;
 
 namespace CloudPan.Tests.Server.Services;
@@ -117,7 +117,7 @@ public class FileIndexServiceTests : Infrastructure.TestBase
         // 插入一个"老"墓碑（LastModified 为 40 天前）
         string oldTs = DateTime.UtcNow.AddDays(-40).ToString("O");
         var db = dbFactory.CreateDbContext();
-        db.FileEntries.Add(new CloudPan.Server.Models.FileEntry
+        db.FileEntries.Add(new CloudPan.Infrastructure.Models.FileEntry
         {
             Path = "/old-tomb.txt",
             Type = (int)FileType.File,

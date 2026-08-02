@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace CloudPan.Shared;
+namespace CloudPan.Contract;
 
 /// <summary>
 /// .syncignore 文件解析器。

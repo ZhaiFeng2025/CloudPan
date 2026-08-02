@@ -20,7 +20,7 @@ public static class ErrorResponseGenerator
         sb.AppendLine();
         sb.AppendLine("#nullable enable");
         sb.AppendLine();
-        sb.AppendLine("namespace CloudPan.Shared;");
+        sb.AppendLine("namespace CloudPan.Contract;");
         sb.AppendLine();
 
         var errorDef = spec.Api.ErrorResponse;

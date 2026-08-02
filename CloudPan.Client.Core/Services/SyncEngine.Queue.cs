@@ -1,9 +1,9 @@
-using CloudPan.Client.Models;
-using CloudPan.Shared;
+using CloudPan.Client.Core.Models;
+using CloudPan.Contract;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace CloudPan.Client.Services;
+namespace CloudPan.Client.Core.Services;
 
 /// <summary>SyncEngine 部分实现：传输队列处理（队列消费、进度上报、重试退避）。</summary>
 public partial class SyncEngine

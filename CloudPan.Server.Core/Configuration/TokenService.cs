@@ -1,11 +1,12 @@
 using System.Security.Cryptography;
 using System.Text;
-using CloudPan.Server.Data;
+using CloudPan.Infrastructure.Persistence;
+using CloudPan.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 
-namespace CloudPan.Server.Services;
+namespace CloudPan.Server.Core;
 
 /// <summary>
 /// Token 轮换服务。副作用顺序即一致性策略：

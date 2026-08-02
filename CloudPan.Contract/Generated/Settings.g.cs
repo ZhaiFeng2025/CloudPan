@@ -5,7 +5,7 @@
 
 #nullable enable
 
-namespace CloudPan.Shared;
+namespace CloudPan.Contract;
 
 /// <summary>设置值类型。由 shared-spec.json → settings.items.type 驱动。</summary>
 public enum SettingType

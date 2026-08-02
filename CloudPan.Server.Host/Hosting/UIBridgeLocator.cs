@@ -2,7 +2,7 @@ using System.Reflection;
 using System.Runtime.Loader;
 using Serilog;
 
-namespace CloudPan.Server.Hosting;
+namespace CloudPan.Server.Host.Hosting;
 
 /// <summary>
 /// 可选 UI 桥定位器（T-015 / R-Q3）：发现并实例化 IHostUIBridge 实现。

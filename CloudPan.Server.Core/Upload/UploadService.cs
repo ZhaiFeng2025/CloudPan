@@ -1,10 +1,11 @@
-using CloudPan.Server.Data;
-using CloudPan.Server.Models;
-using CloudPan.Shared;
+using CloudPan.Contract;
+using CloudPan.Infrastructure.Models;
+using CloudPan.Infrastructure.Persistence;
+using CloudPan.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace CloudPan.Server.Services;
+namespace CloudPan.Server.Core;
 
 /// <summary>上传编排中目标文件写入失败（存储不可用），Message 为可直接展示的错误信息。</summary>
 public sealed class UploadStorageException : Exception

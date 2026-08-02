@@ -1,7 +1,8 @@
 using System.Text;
-using CloudPan.Server.Data;
-using CloudPan.Server.Services;
-using CloudPan.Shared;
+using CloudPan.Contract;
+using CloudPan.Infrastructure.Persistence;
+using CloudPan.Infrastructure.Storage;
+using CloudPan.Server.Core;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 

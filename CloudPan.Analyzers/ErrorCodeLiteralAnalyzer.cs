@@ -64,7 +64,7 @@ public sealed class ErrorCodeLiteralAnalyzer : DiagnosticAnalyzer
 
         // 仅当字面量确实对应 HttpErrorCode 中的错误码时才报告，
         // 避免误报 HTTP 方法（"POST"）、环境变量名（"DROPBOX_HOME"）、UDP 协议串（"CLOUDPAN_DISCOVER"）等非错误码字符串
-        var httpErrorCode = context.Compilation.GetTypeByMetadataName("CloudPan.Shared.HttpErrorCode");
+        var httpErrorCode = context.Compilation.GetTypeByMetadataName("CloudPan.Contract.HttpErrorCode");
         if (httpErrorCode == null || httpErrorCode.GetMembers(text).IsEmpty)
         {
             return;

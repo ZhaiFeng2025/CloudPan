@@ -1,13 +1,12 @@
-using CloudPan.Client.Models;
-using CloudPan.Client.Services;
-using CloudPan.Client.UI;
-using CloudPan.Shared;
+using CloudPan.Client.Core.Models;
+using CloudPan.Client.Core.Services;
+using CloudPan.Contract;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
 
-namespace CloudPan.Client;
+namespace CloudPan.Client.UI;
 
 /// <summary>客户端入口：托盘常驻 + 管理窗口。</summary>
 public static class Program

@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace CloudPan.Server.Services;
+namespace CloudPan.Infrastructure.Configuration;
 
 /// <summary>
 /// 服务端启动期设置（端口/同步根目录）。与运行时设置（AppConfig 表）不同：

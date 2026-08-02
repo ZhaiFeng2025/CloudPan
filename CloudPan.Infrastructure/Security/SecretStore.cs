@@ -6,7 +6,7 @@ using System.Security.Principal;
 // 业务代码必须经 SecretStore.ReadToken/WriteToken 存取 Token，不得绕过本服务。
 #pragma warning disable CP200
 
-namespace CloudPan.Server.Services;
+namespace CloudPan.Infrastructure.Security;
 
 /// <summary>
 /// Token 机密存取服务。

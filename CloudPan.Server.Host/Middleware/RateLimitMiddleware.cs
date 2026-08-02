@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
-using CloudPan.Shared;
+using CloudPan.Contract;
 
-namespace CloudPan.Server.Middleware;
+namespace CloudPan.Server.Host.Middleware;
 
 /// <summary>
 /// 速率限制中间件——基于可信设备 ID（context.Items["DeviceId"]）或 RemoteIpAddress 兜底。

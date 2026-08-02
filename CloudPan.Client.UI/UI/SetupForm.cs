@@ -3,7 +3,8 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
-using CloudPan.Shared;
+using CloudPan.Contract;
+using CloudPan.Infrastructure.Design;
 
 namespace CloudPan.Client.UI;
 

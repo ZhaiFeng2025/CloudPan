@@ -1,5 +1,5 @@
 using System.Security.Cryptography;
-using CloudPan.Server.Services;
+using CloudPan.Infrastructure.Security;
 using Xunit;
 
 namespace CloudPan.Tests.Infrastructure;

@@ -1,8 +1,8 @@
-using CloudPan.Client.Models;
-using CloudPan.Shared;
+using CloudPan.Client.Core.Models;
+using CloudPan.Contract;
 using Microsoft.EntityFrameworkCore;
 
-namespace CloudPan.Client.Services;
+namespace CloudPan.Client.Core.Services;
 
 /// <summary>文件浏览项——供文件浏览视图（列表/网格）渲染，数据源为 /api/tree 快照（RemoteSnapshots 本地缓存）+ 本地文件系统。</summary>
 public sealed record FileBrowseItem(

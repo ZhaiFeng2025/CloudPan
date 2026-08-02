@@ -1,8 +1,9 @@
-using CloudPan.Server.Data;
-using CloudPan.Server.Hosting;
-using CloudPan.Server.Middleware;
-using CloudPan.Server.Services;
-using CloudPan.Shared;
+using CloudPan.Infrastructure.Configuration;
+using CloudPan.Infrastructure.Persistence;
+using CloudPan.Infrastructure.Storage;
+using CloudPan.Server.Core;
+using CloudPan.Server.Host.Hosting;
+using CloudPan.Server.Host.Middleware;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 using Serilog;

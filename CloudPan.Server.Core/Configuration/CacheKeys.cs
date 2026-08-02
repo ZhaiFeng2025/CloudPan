@@ -1,4 +1,4 @@
-namespace CloudPan.Server.Services;
+namespace CloudPan.Server.Core;
 
 /// <summary>
 /// 内存缓存键常量。Token 哈希缓存由 TokenAuthMiddleware 与 WebSocketHandler 共享，

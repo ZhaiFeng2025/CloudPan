@@ -1,10 +1,11 @@
 using System.Security.Cryptography;
 using System.Text;
-using CloudPan.Server.Models;
-using CloudPan.Shared;
+using CloudPan.Contract;
+using CloudPan.Infrastructure.Models;
+using CloudPan.Infrastructure.Storage;
 using SkiaSharp;
 
-namespace CloudPan.Server.Services;
+namespace CloudPan.Server.Core;
 
 /// <inheritdoc />
 public class ThumbnailService : IThumbnailService

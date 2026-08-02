@@ -1,6 +1,6 @@
-using CloudPan.Server.Models;
+using CloudPan.Infrastructure.Models;
 
-namespace CloudPan.Server.Services;
+namespace CloudPan.Server.Core;
 
 /// <summary>创建分享链接结果。</summary>
 public sealed record ShareCreateResult(bool Success, string? ShareId, string? ExpiresAt, int? MaxDownloads, DomainError? Error = null);

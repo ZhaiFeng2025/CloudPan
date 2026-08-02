@@ -1,9 +1,9 @@
-using CloudPan.Server;
-using CloudPan.Server.Services;
-using CloudPan.Shared;
+using CloudPan.Contract;
+using CloudPan.Server.Core;
+using CloudPan.Server.Host;
 using Microsoft.AspNetCore.Mvc;
 
-namespace CloudPan.Server.Controllers;
+namespace CloudPan.Server.Host.Controllers;
 
 /// <summary>
 /// Web 管理面板——localhost 只读视图。

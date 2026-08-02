@@ -5,7 +5,7 @@
 
 #nullable enable
 
-namespace CloudPan.Shared;
+namespace CloudPan.Contract;
 
 /// <summary>
 /// API 端点认证模式。由 shared-spec.json → endpoints[].auth 驱动。

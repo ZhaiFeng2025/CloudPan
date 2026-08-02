@@ -1,7 +1,7 @@
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
-using CloudPan.Shared;
+using CloudPan.Contract;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
 

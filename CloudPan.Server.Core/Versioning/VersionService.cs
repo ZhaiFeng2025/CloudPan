@@ -1,7 +1,7 @@
-using CloudPan.Server.Data;
+using CloudPan.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
-namespace CloudPan.Server.Services;
+namespace CloudPan.Server.Core;
 
 /// <summary>
 /// 全局版本号分配服务。

@@ -7,7 +7,7 @@ using System.Text.Json.Serialization;
 
 #nullable enable
 
-namespace CloudPan.Shared;
+namespace CloudPan.Contract;
 
 /// <summary>
 /// GET /api/files/tree 响应包装

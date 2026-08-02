@@ -1,4 +1,4 @@
-namespace CloudPan.Server.Services;
+namespace CloudPan.Server.Core;
 
 /// <summary>缩略图结果。Success 时 CachePath 为已生成缓存的绝对路径。</summary>
 public sealed record ThumbnailResult(bool Success, string? CachePath, DomainError? Error = null);

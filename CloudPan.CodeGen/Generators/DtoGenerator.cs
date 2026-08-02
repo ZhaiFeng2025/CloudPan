@@ -20,7 +20,7 @@ public static class DtoGenerator
         sb.AppendLine();
         sb.AppendLine("#nullable enable");
         sb.AppendLine();
-        sb.AppendLine("namespace CloudPan.Shared;");
+        sb.AppendLine("namespace CloudPan.Contract;");
         sb.AppendLine();
 
         foreach (var (entityName, entity) in spec.Entities)

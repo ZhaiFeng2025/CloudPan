@@ -1,6 +1,6 @@
-using CloudPan.Shared;
+using CloudPan.Contract;
 
-namespace CloudPan.Server.Services;
+namespace CloudPan.Server.Core;
 
 /// <summary>
 /// 审计日志写入服务接口。

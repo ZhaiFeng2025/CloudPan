@@ -1,7 +1,8 @@
 using System.Text.Json;
-using CloudPan.Shared;
+using CloudPan.Contract;
+using CloudPan.Infrastructure.Storage;
 
-namespace CloudPan.Server.Services;
+namespace CloudPan.Server.Core;
 
 /// <inheritdoc />
 public class TrashService : ITrashService

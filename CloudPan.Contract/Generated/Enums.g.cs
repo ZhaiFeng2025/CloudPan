@@ -5,7 +5,7 @@
 
 #nullable enable
 
-namespace CloudPan.Shared;
+namespace CloudPan.Contract;
 
 /// <summary>
 /// 文件同步状态。服务端使用 0-3,7；客户端瞬态 4-5 仅客户端本地使用。值 6 保留（原设计为 Locked，P3 文件锁定功能启用后占用）

@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 
 #nullable enable
 
-namespace CloudPan.Server.Models;
+namespace CloudPan.Infrastructure.Models;
 
 /// <summary>
 /// 服务端文件索引。每行一个文件或目录。Path 为主键。

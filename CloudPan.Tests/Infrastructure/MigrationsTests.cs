@@ -1,6 +1,6 @@
-using CloudPan.Client.Models;
-using CloudPan.Server.Data;
-using CloudPan.Server.Models;
+using CloudPan.Client.Core.Models;
+using CloudPan.Infrastructure.Models;
+using CloudPan.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 

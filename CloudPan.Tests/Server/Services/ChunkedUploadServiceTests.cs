@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
-using CloudPan.Server.Services;
+using CloudPan.Infrastructure.Storage;
+using CloudPan.Server.Core;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 

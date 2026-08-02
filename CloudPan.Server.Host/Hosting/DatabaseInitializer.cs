@@ -1,14 +1,14 @@
 using System.Security.Cryptography;
-using CloudPan.Server.Data;
-using CloudPan.Server.Models;
-using CloudPan.Server.Services;
-using CloudPan.Shared;
+using CloudPan.Infrastructure.Models;
+using CloudPan.Infrastructure.Persistence;
+using CloudPan.Infrastructure.Security;
+using CloudPan.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace CloudPan.Server.Hosting;
+namespace CloudPan.Server.Host.Hosting;
 
 /// <summary>
 /// 数据库与同步根初始化：建库、完整性检查、WAL、种子数据、家庭 Token 生成。

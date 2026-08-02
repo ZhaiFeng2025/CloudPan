@@ -1,6 +1,6 @@
 using System.Security.Principal;
-using CloudPan.Server.Hosting;
-using CloudPan.Server.Services;
+using CloudPan.Infrastructure.Configuration;
+using CloudPan.Server.Host.Hosting;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Serilog;

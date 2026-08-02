@@ -1,4 +1,4 @@
-namespace CloudPan.Server.Middleware;
+namespace CloudPan.Server.Host.Middleware;
 
 /// <summary>
 /// 请求关联 ID 中间件——每个请求生成唯一标识，添加到响应头和日志上下文。

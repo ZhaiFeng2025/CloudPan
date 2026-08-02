@@ -1,4 +1,4 @@
-using CloudPan.Shared;
+using CloudPan.Infrastructure.Design;
 
 namespace CloudPan.Client.UI;
 

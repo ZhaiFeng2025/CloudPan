@@ -1,4 +1,4 @@
-namespace CloudPan.Server.Services;
+namespace CloudPan.Server.Core;
 
 /// <summary>历史版本记录信息（列表展示）。</summary>
 public sealed record VersionRecordInfo(int Version, string Hash, long Size, string Timestamp, string DeviceId, int? RestoredFromVersion);

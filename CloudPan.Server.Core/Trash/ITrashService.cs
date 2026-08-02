@@ -1,4 +1,4 @@
-namespace CloudPan.Server.Services;
+namespace CloudPan.Server.Core;
 
 /// <summary>回收站条目（列表展示用）。</summary>
 public sealed record TrashItem(string OriginalPath, string TrashFileName, long FileSize, bool IsDirectory, string DeletedAt, int AgeDays);

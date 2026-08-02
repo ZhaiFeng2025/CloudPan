@@ -1,7 +1,7 @@
-using CloudPan.Server.Data;
+using CloudPan.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
-namespace CloudPan.Server.Services;
+namespace CloudPan.Server.Core;
 
 /// <inheritdoc />
 public class ServerStatusService : IServerStatusService

@@ -20,7 +20,7 @@ public static class ManifestGenerator
           .AppendLine();
         sb.AppendLine("#nullable enable");
         sb.AppendLine();
-        sb.AppendLine("namespace CloudPan.Shared;");
+        sb.AppendLine("namespace CloudPan.Contract;");
         sb.AppendLine();
 
         // 1. AuthMode 枚举

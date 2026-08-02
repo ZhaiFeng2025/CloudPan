@@ -1,6 +1,7 @@
 using System.Drawing.Drawing2D;
-using CloudPan.Client.Services;
-using CloudPan.Shared;
+using CloudPan.Client.Core.Services;
+using CloudPan.Contract;
+using CloudPan.Infrastructure.Design;
 
 namespace CloudPan.Client.UI;
 

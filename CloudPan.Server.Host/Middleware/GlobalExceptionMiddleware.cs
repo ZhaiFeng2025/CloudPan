@@ -1,8 +1,8 @@
 using System.Data.Common;
 using System.Net.Sockets;
-using CloudPan.Shared;
+using CloudPan.Contract;
 
-namespace CloudPan.Server.Middleware;
+namespace CloudPan.Server.Host.Middleware;
 
 /// <summary>
 /// 全局异常处理中间件——捕获所有未处理异常，返回统一 JSON 错误体。

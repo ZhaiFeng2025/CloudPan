@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace CloudPan.Client.Services;
+namespace CloudPan.Client.Core.Services;
 
 /// <summary>
 /// 客户端设置——JSON 持久化，保存到 .cloudpan/settings.json。

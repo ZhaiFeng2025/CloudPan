@@ -1,12 +1,13 @@
 using System.Net;
 using System.Security.Cryptography;
-using CloudPan.Server.Data;
-using CloudPan.Server.Services;
-using CloudPan.Shared;
+using CloudPan.Contract;
+using CloudPan.Infrastructure.Models;
+using CloudPan.Infrastructure.Persistence;
+using CloudPan.Server.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
-namespace CloudPan.Server.Middleware;
+namespace CloudPan.Server.Host.Middleware;
 
 /// <summary>
 /// Token 认证中间件。
@@ -121,7 +122,7 @@ public class TokenAuthMiddleware
             var device = await db.Devices.FindAsync(deviceId);
             if (device == null)
             {
-                db.Devices.Add(new Models.Device
+                db.Devices.Add(new Device
                 {
                     Id = deviceId,
                     Name = $"设备-{deviceId[..Math.Min(8, deviceId.Length)]}",

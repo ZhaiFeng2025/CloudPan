@@ -1,4 +1,4 @@
-namespace CloudPan.Server.Services;
+namespace CloudPan.Server.Core;
 
 /// <summary>
 /// 家庭共享 Token 管理服务。轮换是唯一在线更新 Token 的入口（DatabaseInitializer 仅在首次初始化生成）。

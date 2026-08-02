@@ -2,8 +2,9 @@ using System.Diagnostics;
 using System.Drawing.Drawing2D;
 using System.Net.NetworkInformation;
 using System.Security.Principal;
-using CloudPan.Server.Services;
-using CloudPan.Shared;
+using CloudPan.Contract;
+using CloudPan.Infrastructure.Design;
+using CloudPan.Infrastructure.Security;
 
 namespace CloudPan.Server.UI;
 

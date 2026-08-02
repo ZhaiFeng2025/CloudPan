@@ -3,13 +3,14 @@ using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using CloudPan.Server.Data;
-using CloudPan.Shared;
+using CloudPan.Contract;
+using CloudPan.Infrastructure.Models;
+using CloudPan.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 
-namespace CloudPan.Server.Services;
+namespace CloudPan.Server.Core;
 
 /// <summary>
 /// WebSocket 连接管理器。
@@ -407,7 +408,7 @@ public class WebSocketHandler : IWebSocketHandler, IDisposable
             else
             {
                 // 自动注册
-                db.Devices.Add(new Models.Device
+                db.Devices.Add(new Device
                 {
                     Id = deviceId,
                     Name = $"设备-{deviceId[..Math.Min(8, deviceId.Length)]}",
