@@ -397,7 +397,7 @@
       "title": "上传冲突检测 BaseVersion 接线",
       "dimension": "function",
       "priority": "P1",
-      "status": "acceptance",
+      "status": "done",
       "batch": 1,
       "findingId": "F-06",
       "dependsOn": [],
@@ -423,7 +423,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "上传入队记录 BaseVersion = snapshot.Version（本地上一次已同步版本），ProcessUploadAsync 携带给服务端复用既有 409 冲突流程（直传 FilesController.Upload / 分块 ChunkedUploadService.FinalizeAsync，baseVersion>0 且服务端版本更高即返回 409；HandleUploadConflictAsync 保存冲突副本）。改动文件：CloudPan.Client.Core/Services/SyncEngine.Changes.cs（EnqueueLocalChangeAsync 上传入队赋值 BaseVersion = snapshot?.Version）；CloudPan.Tests/Client/Services/MockApiClient.cs（UploadAsync 模拟服务端冲突检测——baseVersion>0 且当前版本更高抛 HttpRequestException(Conflict)，对齐 Controller/ChunkedUploadService 语义）；CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 3 用例：EnqueueLocalChange_上传_记录BaseVersion为快照版本、EnqueueLocalChange_新文件上传_BaseVersion为空、ProcessUpload_双设备并发编辑_第二次上传409_Conflict冲突提示——覆盖双设备并发编辑→第二次上传 409→ConflictDetected 冲突提示→队列项保留等待用户决策；Dispose 退订事件处理器满足 CP300）。验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Conflict 3/3 通过（含新增客户端 409 用例）；全量 dotnet test CloudPan.Tests -c Release 161/161 通过（原 158 + 新增 3）。",
+      "note": "上传入队记录 BaseVersion = snapshot.Version（本地上一次已同步版本），ProcessUploadAsync 携带给服务端复用既有 409 冲突流程（直传 FilesController.Upload / 分块 ChunkedUploadService.FinalizeAsync，baseVersion>0 且服务端版本更高即返回 409；HandleUploadConflictAsync 保存冲突副本）。改动文件：CloudPan.Client.Core/Services/SyncEngine.Changes.cs（EnqueueLocalChangeAsync 上传入队赋值 BaseVersion = snapshot?.Version）；CloudPan.Tests/Client/Services/MockApiClient.cs（UploadAsync 模拟服务端冲突检测——baseVersion>0 且当前版本更高抛 HttpRequestException(Conflict)，对齐 Controller/ChunkedUploadService 语义）；CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 3 用例：EnqueueLocalChange_上传_记录BaseVersion为快照版本、EnqueueLocalChange_新文件上传_BaseVersion为空、ProcessUpload_双设备并发编辑_第二次上传409_Conflict冲突提示——覆盖双设备并发编辑→第二次上传 409→ConflictDetected 冲突提示→队列项保留等待用户决策；Dispose 退订事件处理器满足 CP300）。验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Conflict 3/3 通过（含新增客户端 409 用例）；全量 dotnet test CloudPan.Tests -c Release 161/161 通过（原 158 + 新增 3）。\n【验收结论 2026-08-02】task-verifier 独立裁决：通过。验收标准①『dotnet test --filter Conflict』实测 3/3 通过（Failed 0 / Passed 3 / Skipped 0）；验收标准②『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error。独立核查改动真实性：SyncEngine.Changes.cs:157-167 上传入队赋值 baseVersion = snapshot?.Version（F-06 注释标注）、:198 存入 SyncQueueItem.BaseVersion；SyncEngine.Transfers.cs:32 UploadChunkedAsync 携带 item.BaseVersion ?? 0 给服务端、:34-68 catch HttpRequestException(Conflict) 构建 ConflictInfo 加入 _pendingConflicts 并触发 ConflictDetected（冲突提示）且返回 false 保留队列项等待用户决策——409 冲突处理闭环真实存在；MockApiClient.cs:55-63 按 baseVersion>0 且当前版本更高抛 409，语义对齐服务端；SyncEngineTests.cs 3 用例断言 BaseVersion==快照版本 / 新文件上传为空 / 冲突事件触发，其中 ProcessUpload_双设备并发编辑_第二次上传409_Conflict冲突提示 完整覆盖『并发编辑→第二次上传 409→冲突提示』验收场景。两条自动标准全过，无手动项。",
       "updatedAt": "2026-08-02"
     },
     {
@@ -431,7 +431,7 @@
       "title": "分享下载端点补过期校验",
       "dimension": "function",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 1,
       "findingId": "F-07",
       "dependsOn": [],
@@ -450,8 +450,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "过期校验补在领域服务（F-02 下沉载体）：SharingService.PrepareDownloadAsync 在密码校验前新增过期校验——复用与 GetShareInfoAsync（SharePage 同一来源）一致的解析逻辑（CultureInfo.InvariantCulture + DateTimeStyles.AdjustToUniversal，ISO 8601 'Z' 后缀解析为 Utc 避免时区偏移误判），过期返回 HttpErrorCode.BAD_REQUEST/「分享链接已过期」（与 SharePage 一致），且过期分享不再放行下载、不递增下载计数。Controller（ShareController.ShareDownload）本就只做适配，未改动。\n改动文件：CloudPan.Server.Core/Sharing/SharingService.cs（PrepareDownloadAsync 加过期校验）；CloudPan.Tests/Server/Services/SharingServiceTests.cs（新增 ShareDownload_过期分享_返回错误、ShareDownload_未过期分享_正常下载 两用例——方法名用 ShareDownload 前缀，使 FQN 含 'Share' 子串可被验收命令 --filter Share 命中，类名 SharingServiceTests 拼写为 Sharing 不含子串 Share）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Share 10/10 通过（含新增 ShareDownload_过期分享_返回错误：断言 !Success、Content 为 null、错误码 BAD_REQUEST、消息『分享链接已过期』；以及未过期分享正常下载对照用例）；全量 dotnet test CloudPan.Tests -c Release 163/163 通过（原 161 + 新增 2）。",
+      "updatedAt": "2026-08-02"
     },
     {
       "id": "T-008",

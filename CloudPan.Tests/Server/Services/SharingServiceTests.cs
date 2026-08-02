@@ -102,6 +102,34 @@ public class SharingServiceTests : Infrastructure.TestBase
     }
 
     [Fact]
+    public async Task ShareDownload_过期分享_返回错误()
+    {
+        var (svc, _) = await CreateServiceAsync();
+        var created = await svc.CreateShareAsync("/test.txt", null, DateTime.UtcNow.AddHours(-1).ToString("O"), null, "dev-1");
+
+        var result = await svc.PrepareDownloadAsync(created.ShareId!, null);
+
+        Assert.False(result.Success);
+        Assert.Null(result.Content);
+        Assert.Equal(HttpErrorCode.BAD_REQUEST.Code, result.Error!.Code.Code);
+        Assert.Equal("分享链接已过期", result.Error!.Message);
+    }
+
+    [Fact]
+    public async Task ShareDownload_未过期分享_正常下载()
+    {
+        var (svc, _) = await CreateServiceAsync();
+        var created = await svc.CreateShareAsync("/test.txt", null, DateTime.UtcNow.AddHours(1).ToString("O"), null, "dev-1");
+
+        var result = await svc.PrepareDownloadAsync(created.ShareId!, null);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Content);
+        using var reader = new StreamReader(result.Content!);
+        Assert.Equal("hello", await reader.ReadToEndAsync());
+    }
+
+    [Fact]
     public async Task PrepareDownload_密码错误_返回错误()
     {
         var (svc, _) = await CreateServiceAsync();

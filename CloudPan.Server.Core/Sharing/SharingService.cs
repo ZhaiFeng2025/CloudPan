@@ -139,6 +139,18 @@ public class SharingService : ISharingService
                 Error: new DomainError(HttpErrorCode.NOT_FOUND, "分享链接不存在", "分享链接不存在或已失效"));
         }
 
+        // 过期校验（与 SharePage/GetShareInfoAsync 一致）：ISO 8601 "Z" 后缀解析为 Utc，
+        // 避免本地时区偏移导致比较错误；过期分享不再放行下载，也不递增下载计数
+        bool expired = !string.IsNullOrEmpty(share.ExpiresAt)
+            && DateTime.TryParse(share.ExpiresAt, CultureInfo.InvariantCulture,
+                DateTimeStyles.AdjustToUniversal, out var expires)
+            && expires < DateTime.UtcNow;
+        if (expired)
+        {
+            return new ShareDownloadResult(false,
+                Error: new DomainError(HttpErrorCode.BAD_REQUEST, "分享链接已过期", "分享链接已过期"));
+        }
+
         // 密码校验
         if (!string.IsNullOrEmpty(share.PasswordHash))
         {
