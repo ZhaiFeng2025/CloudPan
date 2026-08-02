@@ -1,0 +1,114 @@
+[
+  {
+    "dimension": "simplicity",
+    "severity": "P0",
+    "location": "CloudPan.Client.Core/Services/ApiClient.cs:455-529（使用于 :79/98/226/283/318）",
+    "problem": "客户端手工重复定义 7 个 API 响应 DTO（FileTreeApiResponse/UploadApiResponse/UploadDataDto/ChunkApiResponse/ChunkApiData/ChunkStatusResponse/ChunkStatusData），而 CloudPan.Contract/Generated/ApiResponses.g.cs 已从 spec api.responses 生成 FileTreeResponse/UploadResponse/ChunkUploadResponse。客户端不用生成类型自抄一份，且形状已漂移（手工 UploadApiResponse 缺 ok 包装、ChunkApiData 多出 Status/IsComplete 字段）。",
+    "why": "直接违反 CLAUDE.md 规则 0（最高优先级）：所有可从契约推导的代码必须从契约生成，禁止手工翻译。已实际发生结构漂移。",
+    "suggestion": "删除 ApiClient 尾部手工 DTO，改消费 Generated 类型；契约形状不足就先补 shared-spec.json api.responses 再重跑 CodeGen。"
+  },
+  {
+    "dimension": "simplicity",
+    "severity": "P0",
+    "location": "shared-spec.json:450-485 config 段 vs CloudPan.Contract/Generated/ContractManifest.g.cs:102-118 SpecConfig",
+    "problem": "spec config 契约断链：约 15 个 config 键未生成进 SpecConfig，而是硬编码重复或零引用——chunkSize/chunkedUploadThreshold/queuePriorityThreshold 在 ApiClient.cs:222-223 与 SyncEngine.cs:57 硬编码为 10_485_760/4_194_304/1_048_576；conflictSuffixPattern 在 FilesController.cs:233 硬编码；websocketReconnectMaxBackoffSeconds 已生成但 WebSocketClient.cs:32 又手写 ReconnectDelays；tokenEntropy/tokenLength/maxVersionsDefault/scanIntervalMinutes/chunkedUploadTimeoutMinutes/maxRetryCount/retryBackoffMs 在 C# 零引用。",
+    "why": "契约驱动核心场景失效：改 spec 值不传导到代码，同一常量两端各维护一份必然漂移，正是规则 0 禁止的重复定义。",
+    "suggestion": "扩展 ManifestGenerator 为有消费者的 config 键生成常量并由代码引用；零消费者键从 spec 删除或先接线。"
+  },
+  {
+    "dimension": "simplicity",
+    "severity": "P1",
+    "location": "CloudPan.Server.UI/DesignTokens.cs:1-254 与 CloudPan.Client.UI/UI/DesignTokens.cs:1-254",
+    "problem": "两端 DesignTokens.cs 254 行逐字节完全相同（namespace 同为 CloudPan.Shared，各编译一份）。文件头注释谎称从 shared-spec.json designTokens.theme 契约生成，但 spec 中不存在 designTokens 段——实为手工抄写。",
+    "why": "同份设计令牌两份拷贝，改一处忘一处即视觉漂移；假契约生成注释掩盖手工重复，正是规则 0 要消灭的不一致。",
+    "suggestion": "DesignTokens 移入两端共同引用项目（Contract 或 Infrastructure，仅依赖 System.Drawing）删掉一份；修正注释或把真实设计值迁入 spec 由 CodeGen 生成。"
+  },
+  {
+    "dimension": "simplicity",
+    "severity": "P1",
+    "location": "CloudPan.Server.UI/ServerIcons.cs:12-311 与 CloudPan.Client.UI/UI/CloudPanIcon.cs:11-311",
+    "problem": "两文件各 311 行，BuildIcoBytes/RenderBitmap/DrawCloud/DrawCloudHighlights/DrawBadge/BitmapToIcoData 六个方法逐行同源，仅入口与主题色不同（BlueTheme+Create vs GreenTheme+CreateServer）。ServerIcons.cs:10 自认绘制逻辑与 Client 的 CloudPanIcon 同源，约 280 行重复。",
+    "why": "重复实现累积成维护负担：改图标绘制需同步两文件，任一端漏改即渲染漂移。",
+    "suggestion": "抽取单一 IconFactory（参数：主题色、徽章字符）放共享项目，两处仅留一行入口。"
+  },
+  {
+    "dimension": "simplicity",
+    "severity": "P1",
+    "location": "CloudPan.Client.Core/Services/ApiClient.cs:176-182; SyncEngine.Queue.cs:226-233 vs CloudPan.Infrastructure/Storage/FileStorageService.cs:72-77",
+    "problem": "文件 SHA-256 计算三处实现：Infrastructure 标准实现 FileStorageService.ComputeHashAsync，客户端又在 ApiClient 与 SyncEngine.Queue 各抄一份（同为 SHA256.Create+ComputeHashAsync+ToHexString）。Client.Core 已引用 Infrastructure 却重复实现。",
+    "why": "违反 CLAUDE.md 规则 4（基础设施单一实现）：哈希等两端共性设施必须位于 Infrastructure。未来调整哈希策略需同步三处。",
+    "suggestion": "删除客户端两份私有方法，统一调 FileStorageService.ComputeHashAsync（或把纯文件哈希上提 Contract 共享工具）。"
+  },
+  {
+    "dimension": "simplicity",
+    "severity": "P1",
+    "location": "CloudPan.Client.UI/UI/MainWindow.cs:1773; UI/SetupForm.cs:1022; CloudPan.Server.UI/ServerInstaller.cs:931; UI/SettingsForm.cs:625",
+    "problem": "四个超大类远超单类 ≤400 量化判据：MainWindow 含 BuildLayout ~300 行、ShowErrorPopup ~138 行、ShowConflictResolution ~160 行，并嵌套 GlowDot/ProgressBarWithText/FadePanel 三个自定义控件；SetupForm 混合布局/校验/UDP 发现三组职责。而 SyncEngine 已按 partial 拆分成功（Queue/Transfers/Scan/Conflicts/Changes）。",
+    "why": "God class 混合布局/事件/渲染/弹窗，任何 UI 改动都需在超长文件中定位，维护成本最高。",
+    "suggestion": "不引入新抽象，沿用 SyncEngine partial 先例：MainWindow 拆 Layout/Status/Conflicts/Errors，嵌套控件拆独立文件；SetupForm 拆 Layout/Validation/Discovery；SettingsForm 按 Tab 拆文件。"
+  },
+  {
+    "dimension": "simplicity",
+    "severity": "P1",
+    "location": "CloudPan.Client.UI/CloudPan.Client.UI.csproj:29-32 + UI/Program.cs:510（ClientDbFactory 在 :502-504）",
+    "problem": "客户端 UI 壳直接引用 EF Core 包（Microsoft.EntityFrameworkCore.Sqlite、SQLitePCLRaw）并承载 510 行 DI 组合根，Program.cs 手写 ClientDbFactory、注册全部服务。CLAUDE.md 定位该层为只渲染壳。",
+    "why": "分层纪律弱化：数据库工厂与依赖注册属基础设施/组合逻辑却落在 UI 壳内，UI 项目背负 EF 依赖，阻碍后续 headless 复用。",
+    "suggestion": "ClientDbFactory 与注册逻辑下沉 Client.Core（提供组合辅助），Program.cs 收敛为薄入口（<150 行），移除 UI csproj 不再需要的 EF/SQLite 包。"
+  },
+  {
+    "dimension": "simplicity",
+    "severity": "P2",
+    "location": "CloudPan.Client.UI/UI/DesignTokens.cs:98-180（CloudPanEffects）与 :232-253（FontSpec 预设）",
+    "problem": "推测性死代码：CloudPanEffects 的 ShadowInfo/ShadowSm/Md/Lg/Xl/ShadowElevated（WinForms 无阴影支持，注释自认供后续渲染层使用）、Duration* 动画时长、OverlayAlpha/DisabledOpacity/HoverOpacity，以及 FontSpec 预设（Title/Subtitle/Body 等）在两端仅定义，全库唯一被引用的是 CornerRadiusMd（ServerWindow.cs:358,364）。约 80 行 × 两份。",
+    "why": "违背 YAGNI：为未证实需求（自定义阴影渲染层）预写设计令牌，且因两端重复翻倍，WinForms 永不渲染阴影。",
+    "suggestion": "删除未引用的 Shadow/Duration/Opacity 与 FontSpec 预设常量，只保留真实使用的 CornerRadiusMd 与 FontFamily/Size*。"
+  },
+  {
+    "dimension": "simplicity",
+    "severity": "P2",
+    "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs:12,53-57,74-80",
+    "problem": "行数门禁被架空：IsExcluded 排除含 UI 段全部文件（MainWindow/SetupForm/SettingsForm/ServerInstaller/Program 整体免检），serviceControllerFiles 白名单又开 1000 行上限，实测无文件能触发 ≤400 目标；注释残留 SyncEngine.cs(1431行) 旧信息（现已拆 partial，SyncEngine.cs 仅 256 行）。",
+    "why": "量化判据（单类 ≤400）在架构测试里被制度性放宽，规则 8 对 UI 层完全失效，超大文件无人守卫只会继续膨胀。",
+    "suggestion": "分阶段收紧：先取消 UI 段整体豁免、设 UI 文件 ≤800 暂态上限，随拆分逐批降至 400；删除白名单与旧注释。"
+  },
+  {
+    "dimension": "simplicity",
+    "severity": "P2",
+    "location": "shared-spec.json:451(httpPort),458(port),374(baseUrl),410(websocket endpoint) 与 CloudPan.Contract/Generated/Settings.g.cs:58",
+    "problem": "spec 内部端口冗余：httpPort 与 port 两个键同为 8443；api.baseUrl/websocket.endpoint 又硬编码 :8443；Settings.g.cs 把 port 默认值做成字符串 8443。同一事实（监听端口）在 spec 内出现 4 处。",
+    "why": "契约自身不单一：改端口需同步改多处 spec 字段仍会漂移，defaultRef 在生成物里退化成字符串常量。",
+    "suggestion": "删除重复的 config.port（保留 httpPort 为唯一来源），CodeGen 中 port 默认值由 defaultRef 引用 httpPort 生成数字常量而非字面量。"
+  },
+  {
+    "dimension": "simplicity",
+    "severity": "P2",
+    "location": "CloudPan.Server.Host/Hosting/UdpDiscoveryHostedService.cs:31",
+    "problem": "UDP 发现响应硬编码版本号 0.2.0，与实际 v1.0.0/v1.1.0 发布版本不符，客户端 Discovery 解析到的版本永远过期；与 spec 中 server_version/AppConfig 预置键无接线。",
+    "why": "硬编码陈旧事实替代真实来源，发现响应给出误导性版本信息。",
+    "suggestion": "从服务端实际版本（AssemblyInformationalVersion 或 SpecConfig.server_version）注入该字段。"
+  },
+  {
+    "dimension": "simplicity",
+    "severity": "P3",
+    "location": "CloudPan.Server.Host/CloudPan.Server.Host.csproj:31",
+    "problem": "Microsoft.Extensions.Hosting.WindowsServices 引用 10.0.10，全仓其余包均 8.0.x。虽可编译，但版本跨度大，依赖图存在隐性不一致风险。",
+    "why": "版本不一致是隐性维护负担，暗示未经审视复制的高版本包，升级链路需单独追踪。",
+    "suggestion": "确认 UseWindowsService 所需最低版本，统一为 8.0.x 对齐全仓；无法降级则注释说明原因。"
+  },
+  {
+    "dimension": "simplicity",
+    "severity": "P3",
+    "location": "CloudPan.Infrastructure/Security/SecretStore.cs:9,17-18",
+    "problem": "命名空间 CloudPan.Server.Services 与 Infrastructure 项目位置不一致；GetTokenPath 手工拼接 .cloudpan/token.txt，而 ContractManifest.g.cs:114 已生成 SpecConfig.TokenFileName=token.txt 常量，spec config 的 hiddenDir 也未参与路径。",
+    "why": "SecretStore 已是两端共用单一实现，但命名空间误导归属、路径常量未从契约取用，属轻微契约断链。",
+    "suggestion": "命名空间改 CloudPan.Infrastructure.Security；路径改用 SpecConfig.TokenFileName（及待生成的 hiddenDir 常量）拼接。"
+  },
+  {
+    "dimension": "simplicity",
+    "severity": "P3",
+    "location": "CloudPan.Server.Core/FileIndex/IFileIndexService.cs; Versioning/IVersionService.cs; SyncLog/ISyncLogService.cs; CloudPan.Infrastructure/Storage/IFileStorageService.cs",
+    "problem": "四个服务接口均单实现（FileIndexService/VersionService/SyncLogService/FileStorageService），无第二实现、无 mock 替代（测试直接 new 具体类），DI 注册处接口绑单类。",
+    "why": "单场景接口属样板化抽象，违背抽象层 ≥2 场景判据；但属分层架构常见做法、风险低，故为远期优化。",
+    "suggestion": "暂不强制删除（分层规约倾向接口化）；若后续确无测试替换/多实现需求，可收敛为具体类直接注册。"
+  }
+]

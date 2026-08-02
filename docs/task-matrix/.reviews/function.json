@@ -1,0 +1,122 @@
+[
+  {
+    "dimension": "function",
+    "severity": "P1",
+    "location": "CloudPan.Server.Core/FileIndex/FileIndexService.cs:121-171; CloudPan.Client.Core/Services/SyncEngine.Scan.cs:129; SyncEngine.Changes.cs:21",
+    "problem": "服务端删除直接 RemoveRange 物理移除 FileEntry 行，无墓碑；FileState.Deleting 全服务端从未设置。客户端增量拉取 GetFileTreeAsync(sinceVersion) 只查现存行，已删除路径不会出现在树里；ApplyRemoteChangesAsync 的 Deleting 分支是死代码；WS file_deleted 的 path 参数在 OnWsFileDeleted 被忽略。客户端对服务端已删除文件永远保留本地副本。",
+    "why": "双向同步缺删除方向，设备间永久分歧；被删文件在另一设备编辑后会以 baseVersion=0 重传复活。",
+    "suggestion": "服务端删除改软删除/墓碑（Deleting 状态保留后再物理清理），客户端按 path 处理删除事件或树中 Deleting 项。"
+  },
+  {
+    "dimension": "function",
+    "severity": "P1",
+    "location": "CloudPan.Client.Core/Services/SyncEngine.Changes.cs:142-148; SyncEngine.Transfers.cs:32; CloudPan.Server.Host/Controllers/FilesController.cs:96-103",
+    "problem": "全库 grep 确认 BaseVersion 只为 Download 队列项赋值；Upload 入队项恒为 null，ProcessUploadAsync 传 ?? 0，服务端 if (baseVersion > 0) 因此跳过冲突检测，HandleUploadConflictAsync 实际不可达。",
+    "why": "声明功能冲突处理对最常见的双设备并发编辑失效，变 last-writer-wins 静默覆盖，用户得不到冲突提示。",
+    "suggestion": "上传入队时记录 BaseVersion = snapshot.Version，复用服务端现有 409 冲突流程。"
+  },
+  {
+    "dimension": "function",
+    "severity": "P1",
+    "location": "CloudPan.Server.Host/Controllers/ShareController.cs:177-220",
+    "problem": "SharePage 检查了 ExpiresAt，但 ShareDownload 端点只校验密码与下载次数，漏了过期检查，过期分享经 /share/{id}/download 仍可下载。",
+    "why": "分享过期/撤销是安全边界承诺，过期继续可下载等于功能与安全同时失效。",
+    "suggestion": "ShareDownload 补上与 SharePage 一致的过期判断，过期返回错误。"
+  },
+  {
+    "dimension": "function",
+    "severity": "P2",
+    "location": "CloudPan.Client.UI/Program.cs:291-302,490-496; Client.Core/Models/ClientDbContext.cs:8-10",
+    "problem": "客户端 DB 用 EnsureCreated()，无 Migrations；PRAGMA quick_check 只查物理一致性不查 schema。客户端新增列/表时（spec 已加 SyncQueue.TargetPath），旧库 quick_check 通过但 EF 查询报 no such column 崩溃，且不会触发重建提示。",
+    "why": "无升级路径的本地持久化阻碍长期演进，v1.0 后第一次加列即炸。",
+    "suggestion": "引入 EF Migrations，或 EnsureCreated 前做 schema 版本比对并给受控重建流程。"
+  },
+  {
+    "dimension": "function",
+    "severity": "P2",
+    "location": "CloudPan.Server.Host/Hosting/DatabaseInitializer.cs:44-63",
+    "problem": "兼容层仅补建 Device 表；EnsureCreated 对已存在旧库不补建后期新增的 Share/ChunkedUpload/SyncLog 等表，alpha 用户升级后访问相关端点抛 no such table 500。",
+    "why": "服务端升级路径同样脆弱，DB 与代码 schema 不一致逐步浮现为偶发 500。",
+    "suggestion": "兼容层按契约一次性补齐缺表/缺列，或迁移到 EF Migrations。"
+  },
+  {
+    "dimension": "function",
+    "severity": "P2",
+    "location": "CloudPan.Server.Host/Controllers/ThumbnailsController.cs:56-62,104-115",
+    "problem": "缩略图缓存 key 仅 path+width 哈希，文件更新后返回旧缩略图（无失效机制）；未命中时请求线程同步 SkiaSharp 解码全尺寸原图，相册网格并发数千张无队列/去重/限流，CPU 拉满。",
+    "why": "海量小文件（相册）是知识库点名的边界场景；旧图误导+大图解码拖垮服务器。",
+    "suggestion": "缓存 key 加入文件 version/hash；缩略图生成走受限并发队列并限制并发数。"
+  },
+  {
+    "dimension": "function",
+    "severity": "P2",
+    "location": "CloudPan.Server.Core/FileIndex/FileIndexService.cs:196-200",
+    "problem": "SQLite REPLACE(Path,'/a/','/b/') 前缀替换会替换行内所有匹配段。移动 /photos → /backup/photos 时，/photos/photos/img.jpg 变成 /backup/photos/backup/photos/img.jpg（应为 /backup/photos/photos/img.jpg）。",
+    "why": "目录重命名是 v1.0 声明功能，嵌套同名目录是真实场景；索引路径错乱导致客户端新文件重传+原文件消失。",
+    "suggestion": "用按长度裁剪的字符串拼接（newPath + 剩余后缀）而非 REPLACE。"
+  },
+  {
+    "dimension": "function",
+    "severity": "P2",
+    "location": "CloudPan.Server.Host/Controllers/FilesController.ChunkedUpload.cs:175-184",
+    "problem": "服务端先把 chunk 追加到临时文件，再更新 ReceivedChunks JSON，两步间若崩溃则临时文件已有该块字节但列表未记录；客户端重发同块→临时文件重复字节→合并后 SHA-256 校验永久失败，大文件同步卡死。",
+    "why": "断点续传是分块上传核心卖点，崩溃恢复路径不收敛会让大文件无法完成同步。",
+    "suggestion": "块数据写入先持久化记录再落盘（或按块索引 seek 定位写入并原子更新位图），保证幂等；或合并前用已接收块集合+文件长度交叉校验。"
+  },
+  {
+    "dimension": "function",
+    "severity": "P2",
+    "location": "CloudPan.Server.Host/Controllers/FilesController.ChunkedUpload.cs:365-374",
+    "problem": "FinalizeChunkedUploadAsync 中 DB 事务提交后单独执行 IOFile.Move 覆盖目标；若 Move 失败（文件被锁），DB 索引已指向新 hash/version，磁盘文件仍是旧内容，临时文件被删。客户端 snapshot 已更新为新 hash（与本地一致），因此永不重传，该文件成为索引与内容不一致的毒化状态，下载哈希校验必失败。",
+    "why": "违反 CLAUDE.md 7.1 的 DB+FS 一致性要求，失败恢复路径不收敛。",
+    "suggestion": "Move 失败时将 FileEntry 回滚到旧 hash/version（或事务内先落盘再提交），确保索引永远反映真实内容。"
+  },
+  {
+    "dimension": "function",
+    "severity": "P2",
+    "location": "CloudPan.Contract/Generated/Settings.g.cs vs CloudPan.Server.UI/SettingsPage.cs:13-190 + CloudPan.Server.Host/Program.cs:72",
+    "problem": "SpecSettings.Keys/ServerSettingDef 已由 CodeGen 生成，但 SettingsPage 完全手工写死三个设置项（键名/标签/端口校验），未引用 SpecSettings；ISettingsService/SettingsService 注册了但生产代码从未使用（仅测试引用），token_hash 由 TokenService 直写。契约与实现脱节。",
+    "why": "违反 CLAUDE.md 规则 0（契约即代码），改 spec 不驱动 UI，后续加设置项会两处漂移。",
+    "suggestion": "SettingsPage 改为遍历 SpecSettings.All 生成表单；运行时设置统一走 ISettingsService。"
+  },
+  {
+    "dimension": "function",
+    "severity": "P2",
+    "location": "CloudPan.Client.Core/Services/SyncEngine.Scan.cs:347-355",
+    "problem": "FullScanCoreAsync 第 3 步枚举本地文件时没有 CloudOnly 检查：CloudOnly 快照被 continue 跳过（不进 matchedLocalFiles），于是本地仍存在的已取消勾选文件被当作新文件入队上传；上传后 ProcessUploadAsync 又把快照置回 Synced。此后任何远端版本变更→打回 CloudOnly→下次扫描重传→振荡，选择性同步对曾同步过再取消的目录失效。",
+    "why": "选择性同步是竞品标配；此 bug 让用户取消勾选后目录仍被同步，浪费带宽与版本。",
+    "suggestion": "第 3 步枚举时跳过 State==CloudOnly 的快照对应本地文件；取消勾选时可选地清理本地副本。"
+  },
+  {
+    "dimension": "function",
+    "severity": "P2",
+    "location": "CloudPan.Server.UI/SettingsPage.cs:388-411",
+    "problem": "修改同步根后新目录创建全新 DB + 全新 Token；已配置的 Windows 客户端仍指向旧目录且持旧 Token → 全部 401/失联。设置页警告了旧数据不迁移、重启生效，但未引导所有客户端需重新配置新地址/新 Token，用户切完根目录后所有设备静默断连。",
+    "why": "家庭场景改同步根是低频但真实操作；失败路径（客户端重配置）无引导，体验割裂。",
+    "suggestion": "保存时提示并列出影响面（所有设备需重配+新 Token），或提供迁移旧库选项（复制 .cloudpan）。"
+  },
+  {
+    "dimension": "function",
+    "severity": "P3",
+    "location": "CloudPan.Server.Host/Hosting/UdpDiscoveryHostedService.cs:29-31",
+    "problem": "UDP 发现响应 serverInfo JSON 硬编码 version=0.2.0，与实际 v1.0/v1.1 不符；host 用 Environment.MachineName，部分家庭网络无法解析主机名时发现失败。",
+    "why": "硬编码陈旧版本误导客户端；主机名解析失败影响发现。",
+    "suggestion": "版本从 SpecConfig/程序集读取；host 优先使用本机局域网 IP。"
+  },
+  {
+    "dimension": "function",
+    "severity": "P3",
+    "location": "CloudPan.Client.Core/Services/SyncEngine.cs:87; SyncEngine.Queue.cs:212-219 vs shared-spec.json config.maxRetryCount/retryBackoffMs",
+    "problem": "客户端 MaxRetryCount=20 与 spec maxRetryCount=10 不一致，退避序列也不一致，重试参数与契约漂移。",
+    "why": "同一常量双源必然漂移，违反契约单一事实来源。",
+    "suggestion": "客户端重试上限与退避序列从 SpecConfig 读取，消除双源。"
+  },
+  {
+    "dimension": "function",
+    "severity": "P3",
+    "location": "CloudPan.Client.UI/UI/SelectiveSyncPanel.cs:20-30",
+    "problem": "paths.Count == 0 ? new List<string>{\"/\"} : paths 使取消全选后仍全量同步，用户无法表达不同步任何目录。",
+    "why": "选择性同步缺少显式全不同步状态，空集合隐式回退为全选。",
+    "suggestion": "提供显式同步全部/同步无状态，而不是空集合隐式回退。"
+  }
+]

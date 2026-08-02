@@ -6,7 +6,7 @@
 
 - `/mission` — 自循环，默认处理上限 **1000 个任务**（硬性兜底；实际以收敛/质量护栏为准）
 - `/mission N` — 本轮处理上限 N 个任务
-- `/mission --produce` — 只调 task-producer 补批
+- `/mission --produce` — 只补批（分发四维审查 → task-producer 产出，不执行）
 - `/mission --verify` — 只验收全部 `acceptance` 任务
 - 用户说"启动任务集群 / 自循环 / 继续任务"
 
@@ -24,7 +24,7 @@
 ## 主循环（单次 /mission 内自动进行）
 
 ### Step 0 初始化
-- 读 `docs/task-matrix/tasks.json`，校验 `schemaVersion=2`；不存在 → 先调 producer 产生第一批
+- 读 `docs/task-matrix/tasks.json`，校验 `schemaVersion=2`；不存在 → 先执行 Step 2 补批产生第一批
 - 输出：初始 U（未完成）、可领取数、本轮上限 N
 
 ### Step 1 处理一波（wave）
@@ -36,9 +36,33 @@
 4. **每 20 个任务输出 checkpoint**：已处理 X/N、done/打回/待确认数、当前 U——供你随时中断
 
 ### Step 2 补批（自循环关键）
-本波可领取清空后：若 **U < 3** → 调 `task-producer` 补批
-- 0 新任务 → **收敛**，进入 Step 3
-- 有新任务 → 回到 Step 1 继续（**循环直到命中终止条件**）
+本波可领取清空后：若 **U < 3** → 补批：
+
+1. **指挥层直接分发四维审查子 Agent**（并行，subagent_type: general-purpose），每个把发现写入 `docs/task-matrix/.reviews/{dimension}.json`——分发 Prompt 见下方「审查子 Agent 分发模板」与「维度→知识库映射」
+2. 等四个维度审查全部完成（**指挥层接收结果，不嵌套**）
+3. 调 `task-producer`（subagent_type: task-producer）：从 `.reviews/` 读取 → 汇总去重 → 产出 `tasks.json`（schema v2）+ 渲染批次文档
+4. 新批次 0 任务 → **收敛**，进入 Step 3；有新任务 → 回到 Step 1 继续
+
+**审查子 Agent 分发模板**（发给每个维度审查子 Agent，替换「{维度}」「{知识库}」）：
+```
+你是 /mission 派出的「{维度}」维度审查 Agent。
+背景：自托管家庭云盘（C#/.NET8 WinForms + Kotlin Android + ASP.NET Core 8 + SQLite）。
+第一步（必做）：先 Read 「{知识库}」，按其审查问题清单逐条扫描。
+第二步：全库扫描（不是 git diff），发现阻碍「最佳架构/合理功能/最佳UX/简洁技术」使命的具体问题。
+要求：
+1. 先读 CLAUDE.md 了解约束
+2. 每条发现：{ "dimension": "{维度}", "severity": "P0|P1|P2|P3", "location": "file:line", "problem": "现状与问题", "why": "为什么阻碍使命", "suggestion": "方向性建议" }
+3. 只读，禁止修改任何源码文件
+4. 把全部发现（≤15 条，按严重度排序）写入 `docs/task-matrix/.reviews/{维度}.json`（JSON 数组），最终回复附简要总结
+```
+
+**维度→知识库映射**：
+| 维度 | 知识库 |
+|---|---|
+| architecture | `.claude/knowledge/architecture-kb.md` |
+| function | `.claude/knowledge/feature-kb.md` + `.claude/knowledge/clouddrive-kb.md`（产品形态参照） |
+| ux | `.claude/knowledge/ux-kb.md` + `.claude/knowledge/clouddrive-kb.md` + `.claude/knowledge/visual-design-kb.md` |
+| simplicity | `.claude/knowledge/simplicity-kb.md` |
 
 ### Step 3 收尾
 - 重渲染 `docs/task-matrix/INDEX.md`（契约 → 视图，逐字一致）
@@ -75,6 +99,7 @@
 ## 维护约定
 
 - **契约（tasks.json）唯一事实来源**；INDEX/批次文档为渲染视图，禁止手改
+- **审查交接用 `.reviews/*.json`**：四维审查由指挥层直接分发（producer 不自行分发，防嵌套回传死锁）；结果落盘后 producer 只读汇总
 - `problem` 任务先由 task-producer 回炉，不得由执行者直接修
 - 跨任务不得改契约非本任务字段
 - 集群 Agent：`.claude/agents/task-producer.md` / `task-executor.md` / `task-verifier.md`；知识库：`.claude/knowledge/`

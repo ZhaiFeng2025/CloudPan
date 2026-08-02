@@ -582,7 +582,7 @@
       "title": "缩略图缓存 key 加入版本 + 受限生成队列",
       "dimension": "function",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 1,
       "findingId": "F-12",
       "dependsOn": [],
@@ -602,7 +602,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "缓存 key 加入文件版本/哈希 + 缩略图并发生成限流（F-12）。改动落在 T-002 下沉后的领域服务 CloudPan.Server.Core/Thumbnails/ThumbnailService.cs（Controller 只做适配，未改动）。\\n①缓存 key：由原 SHA-256(path|w) 扩展为 SHA-256(path|w|索引version|索引hash|磁盘长度|最后写入刻度) 前 16 hex——文件更新（索引版本提升/哈希变化，或未入索引文件磁盘内容变化）后 key 变化，旧缩略图自动失效。注入 IFileIndexService 取索引 version/hash（每请求一次 PK 查询），未入索引时兜底磁盘元数据指纹（FileInfo 长度+最后写入刻度）。\\n②受限并发队列：未命中缓存的生成（SkiaSharp 解码/缩放为 CPU 密集）经 SemaphoreSlim(MaxConcurrentGenerations=3) 门限流，避免相册并发解码拉满 CPU；门内双检避免等待期间已生成而重复解码；缓存写盘改原子写（先写 .tmp 再 File.Move overwrite），防并发生成同一缩略图时 File.Create 互踩（原实现无门限并发下同图并发必抛 IOException→500）。\\n改动文件：CloudPan.Server.Core/Thumbnails/ThumbnailService.cs（重写，ctor 增加可选 IFileIndexService 参数，DI 可解析，旧测试单参构造不变）；CloudPan.Tests/Server/Services/ThumbnailServiceTests.cs（新增 4 用例）。\\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Thumbnail 8/8 通过（含验收用例 GetThumbnail_文件更新后_缓存key变化：v1→v2 版本+hash 变化且磁盘文件未变，断言两次 CachePath 不同——隔离出 version/hash 为唯一差异）；全量 dotnet test CloudPan.Tests -c Release 175/175 通过（原 171 + 新增 4：文件更新 key 变化/未入索引重写 key 变化/同图并发共享同一缓存/多图并发全部生成成功）。",
+      "note": "缓存 key 加入文件版本/哈希 + 缩略图并发生成限流（F-12）。改动落在 T-002 下沉后的领域服务 CloudPan.Server.Core/Thumbnails/ThumbnailService.cs（Controller 只做适配，未改动）。\\n①缓存 key：由原 SHA-256(path|w) 扩展为 SHA-256(path|w|索引version|索引hash|磁盘长度|最后写入刻度) 前 16 hex——文件更新（索引版本提升/哈希变化，或未入索引文件磁盘内容变化）后 key 变化，旧缩略图自动失效。注入 IFileIndexService 取索引 version/hash（每请求一次 PK 查询），未入索引时兜底磁盘元数据指纹（FileInfo 长度+最后写入刻度）。\\n②受限并发队列：未命中缓存的生成（SkiaSharp 解码/缩放为 CPU 密集）经 SemaphoreSlim(MaxConcurrentGenerations=3) 门限流，避免相册并发解码拉满 CPU；门内双检避免等待期间已生成而重复解码；缓存写盘改原子写（先写 .tmp 再 File.Move overwrite），防并发生成同一缩略图时 File.Create 互踩（原实现无门限并发下同图并发必抛 IOException→500）。\\n改动文件：CloudPan.Server.Core/Thumbnails/ThumbnailService.cs（重写，ctor 增加可选 IFileIndexService 参数，DI 可解析，旧测试单参构造不变）；CloudPan.Tests/Server/Services/ThumbnailServiceTests.cs（新增 4 用例）。\\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Thumbnail 8/8 通过（含验收用例 GetThumbnail_文件更新后_缓存key变化：v1→v2 版本+hash 变化且磁盘文件未变，断言两次 CachePath 不同——隔离出 version/hash 为唯一差异）；全量 dotnet test CloudPan.Tests -c Release 175/175 通过（原 171 + 新增 4：文件更新 key 变化/未入索引重写 key 变化/同图并发共享同一缓存/多图并发全部生成成功）。\n【验收结论 2026-08-03】task-verifier 独立裁决：通过。验收标准『dotnet test --filter Thumbnail』实测 8/8 通过（Failed 0 / Passed 8 / Skipped 0），关键用例 GetThumbnail_文件更新后_缓存key变化：注入真实 FileIndexService，v1(version=1/hash-v1) 生成缩略图成功，磁盘文件未变仅索引 version→2 且 hash→hash-v2，断言两次 CachePath 不同（Assert.NotEqual）——隔离出 version/hash 为唯一差异，直接覆盖『文件更新后缩略图 key 变化』；配套用例未入索引重写 key 变化（磁盘指纹兜底）、同图并发共享同一缓存（门内双检）、多图并发 20 张全部生成成功（受限队列）。附加标准『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error。独立核查代码路径：ThumbnailService.GetThumbCachePathAsync 缓存 key=SHA-256(path|w|索引version|索引hash|磁盘长度|最后写入刻度) 前 16 hex，文件更新后 key 变化旧图失效（满足 requirement①缓存 key 加入文件 version/hash）；GetThumbnailAsync 未命中缓存经 SemaphoreSlim(MaxConcurrentGenerations=3) 门限流、门内双检避免重复解码、finally Release 配对（满足 requirement②受限并发队列并限制并发数），缓存写盘原子写 .tmp→File.Move overwrite。单条自动标准通过，无手动项。",
       "updatedAt": "2026-08-03"
     },
     {

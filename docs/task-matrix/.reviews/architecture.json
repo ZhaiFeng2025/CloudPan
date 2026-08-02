@@ -1,0 +1,122 @@
+[
+  {
+    "dimension": "architecture",
+    "severity": "P0",
+    "location": "CloudPan.Server.Host/Controllers/FilesController.cs:105-132",
+    "problem": "Upload 先 AtomicWriteAsync 用新内容覆盖目标文件(:110)，再在事务中 StoreVersionAsync(:132) 存档旧版本；StoreVersionAsync(FileStorageService.cs:246) 读取实时文件=新内容，被当作旧版本写入 .versions/，而 VersionRecord.Hash 记的是旧哈希。普通上传路径的版本历史整体损坏，回滚任意历史版本得到最新内容。分块上传路径(先存档后 Move)顺序正确，证明此缺陷为普通上传独有。",
+    "why": "版本化编排逻辑放在 Controller 而非 Core 领域服务，顺序不变量无人守卫、不可单测，直接造成数据损坏，违背版本历史核心功能。",
+    "suggestion": "在 Server.Core 建上传编排服务封装先存档→后覆盖→再更新索引的原子不变量，Controller 只做适配，并补集成测试。"
+  },
+  {
+    "dimension": "architecture",
+    "severity": "P0",
+    "location": "CloudPan.Server.Host/Controllers/{FilesController,ShareController:53-67,TrashController:64-116,VersionsController:86-194,ThumbnailsController:56-115,AdminController:35-111}",
+    "problem": "所有文件类 Controller 直接注入 IDbContextFactory 手写事务/FindAsync/裸 SQL(ShareController.cs:207)/IOFile.Move+Copy/Directory.Move，并手拼 .cloudpan/.trash、.cloudpan/.versions、.cloudpan/.thumbnails 路径。违反 CLAUDE.md §8.3 与 R-A3（Controller 只做 HTTP 适配）。重构只搬了项目与文件，未搬领域逻辑。",
+    "why": "硬性规则系统性违反；领域逻辑无法脱离 ASP.NET 单测，DB+FS 组合一致性靠 Controller 手写事务自保，P0#1 即其直接后果。",
+    "suggestion": "按 spec 3.2.3 将 Sharing/Trash/ChunkedUpload/Restore 事务收敛为 Server.Core 领域服务（ISharingService/ITrashService 等），Controller 退化为参数绑定与状态码适配。"
+  },
+  {
+    "dimension": "architecture",
+    "severity": "P1",
+    "location": "CloudPan.Server.Host/CloudPan.Server.Host.csproj:23; Program.cs:127(TrayAppRunner.RunAsync); DatabaseInitializer.cs:5,122,127; ArchitectureDependencyTests.cs:24",
+    "problem": "Host 编译期引用 Server.UI 并直接调用其方法/写其静态属性，架构测试白名单显式放行 Host→UI。R-Q3 要求 Host 不引用 UI 时编译通过、Kestrel 正常服务，当前 headless 必须携带 WinForms 程序集，无法达成。",
+    "why": "UI 未成为可选模块，headless/服务形态(ADR-3)被焊死，直接冲突目标架构 R-Q3。",
+    "suggestion": "Host 定义可选 IHostUIBridge，TrayAppRunner 移入 Host；架构测试移除 Host→UI 并把 Host 独立编译纳入门禁。"
+  },
+  {
+    "dimension": "architecture",
+    "severity": "P1",
+    "location": "CloudPan.Server.Host/Hosting/DatabaseInitializer.cs:42,48-58; CloudPan.Infrastructure/Persistence/CloudPanDbContext.cs:8-10; CloudPan.Client.UI/Program.cs:293-294,494; Client.Core/Models/ClientDbContext.cs:8-9",
+    "problem": "服务端 EnsureCreated + 手写 CREATE TABLE IF NOT EXISTS Device 兼容层，客户端 EnsureCreated 同款，两端 DbContext 注释均自认未启用 EF Core Migrations。ADR-5 已明确 Migrations 替换 EnsureCreated，被正式拒绝的方案仍在长期使用。",
+    "why": "schema 无法演进，数据库结构变更=数据风险；过渡态被当终态。",
+    "suggestion": "补 dotnet ef migrations add 初始迁移（Server+Client 各一套），DatabaseInitializer 改 Migrate() 并删除兼容层。"
+  },
+  {
+    "dimension": "architecture",
+    "severity": "P1",
+    "location": "全仓命名空间：Contract→CloudPan.Shared、Infrastructure→CloudPan.Server.Data/Models/Services、Server.Core→CloudPan.Server.Services、Server.Host→CloudPan.Server.Controllers、Client.Core→CloudPan.Client.Services",
+    "problem": "文件夹/项目已拆四层，但全部代码命名空间仍是旧扁平；grep 全仓无任何 CloudPan.Contract.*/CloudPan.Infrastructure.*/CloudPan.Server.Core.* 引用；契约层产物命名为 CloudPan.Shared，语义误导为全共享。",
+    "why": "层归属无法从命名空间判定，导航/审查/Analyzer 命名空间规则全部失效，四层架构停留在表面。",
+    "suggestion": "按项目机械化批量重命名命名空间（CloudPan.Contract/Infrastructure/Server.Core/Server.Host），CodeGen 同步生成产物命名空间。"
+  },
+  {
+    "dimension": "architecture",
+    "severity": "P1",
+    "location": "CloudPan.Client.Core/Services/ApiClient.cs(529); CloudPan.Server.Core/WebSocket/WebSocketHandler.cs(483); CloudPan.Client.Core/Services/SyncEngine.Scan.cs(435); FilesController 三 partial(316+218+451=985)",
+    "problem": "三个 Core 单类文件超 R-A9 的 400 行上限；FilesController 靠 partial 文件拆分而非逻辑拆分，类总行数超限两倍（架构文档 §5 验收明确 FilesController <400）。",
+    "why": "职责过载、可测性差，违反 R-A9 与验收标准。",
+    "suggestion": "ApiClient/WebSocketHandler 拆模块，FilesController 移出领域逻辑后自然瘦身。"
+  },
+  {
+    "dimension": "architecture",
+    "severity": "P2",
+    "location": "CloudPan.Client.Core/Models/ClientDbContext.cs:69-101; CloudPan.CodeGen/Generators/EntityGenerator.cs:13-17",
+    "problem": "spec 的 SyncQueue/RemoteSnapshot/SyncCursor 被生成器 ClientOnlyTables 显式排除，客户端手写 SyncQueueItem/SyncCursorState 替代且类名与 spec 不一致，无例外理由注释；--verify 因生成器本就不产这些实体而通过，掩盖规则 0 缺口。",
+    "why": "契约驱动规则 0 的例外未按 CLAUDE.md 要求在代码中注明理由，客户端表结构漂移无法自动校验。",
+    "suggestion": "让 CodeGen 生成客户端实体并供 Client.Core 引用，或在 ClientDbContext 头部注明本地表、不跨进程的例外理由。"
+  },
+  {
+    "dimension": "architecture",
+    "severity": "P2",
+    "location": "CloudPan.Analyzers/CloudPan.Analyzers.csproj（无任何项目引用它）",
+    "problem": "CP001-CP304 Analyzer 从未接入任何项目，CP100 路由校验等从未运行；当前仅靠 Tests 的 ArchitectureDependencyTests 编译期门禁，且其白名单放行了 Host→UI。",
+    "why": "R-Q4 机器守护只覆盖项目引用维度，代码级契约/路由/生命周期规则无守护。",
+    "suggestion": "以 OutputItemType=Analyzer 注入 Host/UI/Core 各项目并验证 CP100 生效。"
+  },
+  {
+    "dimension": "architecture",
+    "severity": "P2",
+    "location": "CloudPan.Contract/（仅 Generated+SyncIgnoreParser，无 Protocol/ 目录）; SyncEngine.cs:54,115; IApiClient.cs(在 Client.Core)",
+    "problem": "R-A7 要求传输协议抽象定义在 Contract、业务逻辑不得直接依赖具体 HTTP/WS 类型；实际 Contract 无 ISyncTransport，SyncEngine 直接依赖具体 WebSocketClient，IApiClient 落在 Client.Core。",
+    "why": "传输实现替换/双端协议一致性无契约层锚点。",
+    "suggestion": "在 Contract 定义 ISyncTransport/IApiClient 端口，Client.Core 实现，SyncEngine 面向接口。"
+  },
+  {
+    "dimension": "architecture",
+    "severity": "P2",
+    "location": "CloudPan.Client.UI/Program.cs(510 行)",
+    "problem": "组合根承载 DPAPI Token 加解密、健康检查、版本检查、DI 构建、崩溃处理、DB 完整性重建，远超薄组合根原则（服务端 Program.cs 143 行已达标，客户端未解决）。",
+    "why": "启动行为改动必须触碰巨型组合根（架构文档 1.1 明确的病灶之一）。",
+    "suggestion": "初始化流程抽为 Client.Core 的 BootstrapService（返回 DI 容器与运行时上下文），Program.cs 仅做托管与渲染入口。"
+  },
+  {
+    "dimension": "architecture",
+    "severity": "P2",
+    "location": "CloudPan.Server.Host/Controllers/TrashController.cs:68,175-180; FilesController.cs:271-304",
+    "problem": "MetaFileName 用户输入直接 Path.Combine 入 trashDir（存在路径穿越读取元数据文件的可能）；FilesController.Download 未显式调 ValidatePath，依赖索引查找兜底。R-A5 统一防线存在未覆盖点。",
+    "why": "路径安全统一防线不完整，纵深防御不一致。",
+    "suggestion": "Trash 元数据文件名白名单/Path.GetFileName 归一；Download 显式 ValidatePath。"
+  },
+  {
+    "dimension": "architecture",
+    "severity": "P2",
+    "location": "CloudPan.Client.UI/UI/MainWindow.cs(1773)+SetupForm.cs(1022)+ServerInstaller.cs(931)+SettingsPage.cs(427)",
+    "problem": "WinForms 壳文件远超可维护规模，MainWindow 单类 1773 行。",
+    "why": "虽不违反 Core 的 R-A9，但与简洁技术/最佳 UX 使命冲突，改 UI 风险高。",
+    "suggestion": "按面板/对话框拆分，渲染逻辑与事件处理分离。"
+  },
+  {
+    "dimension": "architecture",
+    "severity": "P3",
+    "location": "CloudPan.Server.Host/Program.cs:65-66",
+    "problem": "AddSingleton(typeof(int), httpPort) 与 AddSingleton(syncRoot) 类型化裸值注册，任何对 int 的 DI 解析都返回端口，语义歧义且脆弱。",
+    "why": "DI 反模式，易被误用。",
+    "suggestion": "定义 ServerOptions 单例承载 SyncRoot/HttpPort。"
+  },
+  {
+    "dimension": "architecture",
+    "severity": "P3",
+    "location": "CloudPan.Server.Host/Controllers/HealthController.cs:74-84",
+    "problem": "/api/version 硬编码 version=1.0.0 与假 downloadUrl（github.com/cloudpan/releases/latest 不存在），与 v1.1.0 契约版本不符，会误导客户端自动更新检测。",
+    "why": "版本/发布信息应从契约或程序集派生而非硬编码，避免多端漂移。",
+    "suggestion": "版本取 ContractManifest/程序集版本，downloadUrl 置空或指向真实地址。"
+  },
+  {
+    "dimension": "architecture",
+    "severity": "P3",
+    "location": "CloudPan.Client.Core/Services/FileWatcherService.cs:62-79,175-177",
+    "problem": "OnWatcherError 调 Start() 重建 _scanTimer 但不先 Dispose 旧计时器，每次 watcher 错误重启泄漏一个 5 分钟定时器。",
+    "why": "违反 CLAUDE.md 7.4 资源生命周期，长跑后定时器堆积。",
+    "suggestion": "Start() 开头 _scanTimer?.Dispose() 再重建。"
+  }
+]
