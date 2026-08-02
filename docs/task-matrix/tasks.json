@@ -548,7 +548,7 @@
       "title": "两端 DesignTokens/图标收敛为共享单一实现",
       "dimension": "simplicity",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 1,
       "findingId": "F-11",
       "dependsOn": [],
@@ -574,7 +574,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "两端 DesignTokens 收敛为共享单一实现（F-11）：新建 CloudPan.Infrastructure/Design/DesignTokens.cs 作为唯一来源（保留 T-010 修正值 TextMuted=117,117,117 / SizeCaption=10f / SizeBodyMin=SizeBody=14f），删除两端副本 CloudPan.Client.UI/UI/DesignTokens.cs 与 CloudPan.Server.UI/DesignTokens.cs；命名空间保持 CloudPan.Shared（两端 7 个消费者文件均已有 using CloudPan.Shared，零消费者改动）；Infrastructure.csproj 加 System.Drawing.Common 8.0.0 包引用（net8.0-windows 非 WinForms 项目需显式引用才可得 System.Drawing）；修正 CloudPanColors/CloudPanSpacing 两处虚假注释——『所有值从 shared-spec.json designTokens 契约生成』伪称改为如实标注『手工维护（shared-spec.json 不含 designTokens 节），两端共享唯一来源』。图标收敛（CloudPanIcon.cs 蓝色无徽章 vs ServerIcons.cs 绿色+S 徽章，311 行同源重复）涉及自绘 ICO 逻辑合并与两处 UI 调用点（MainWindow/SetupForm/TrayAppContext + ServerTrayApp/ServerWindow），未并入本任务，留后续任务处理。命名空间对齐（CloudPan.Shared→目标层）归 T-016，注意 DesignTokens 依赖 System.Drawing 无法随 CloudPan.Shared 迁入纯 net8.0 的 Contract，应由 T-016 映射为 CloudPan.Infrastructure.*。验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 171/171 通过；验收命令字面 grep -rln 'class DesignTokens' --include=*.cs 匹配 0（类名实为 CloudPanColors/CloudPanSpacing/CloudPanEffects/CloudPanFonts，非 DesignTokens），按意图验证：全仓 DesignTokens.cs 文件数 1（CloudPan.Infrastructure/Design/DesignTokens.cs）、四令牌类各仅 1 处定义。",
+      "note": "两端 DesignTokens 收敛为共享单一实现（F-11）：新建 CloudPan.Infrastructure/Design/DesignTokens.cs 作为唯一来源（保留 T-010 修正值 TextMuted=117,117,117 / SizeCaption=10f / SizeBodyMin=SizeBody=14f），删除两端副本 CloudPan.Client.UI/UI/DesignTokens.cs 与 CloudPan.Server.UI/DesignTokens.cs；命名空间保持 CloudPan.Shared（两端 7 个消费者文件均已有 using CloudPan.Shared，零消费者改动）；Infrastructure.csproj 加 System.Drawing.Common 8.0.0 包引用（net8.0-windows 非 WinForms 项目需显式引用才可得 System.Drawing）；修正 CloudPanColors/CloudPanSpacing 两处虚假注释——『所有值从 shared-spec.json designTokens 契约生成』伪称改为如实标注『手工维护（shared-spec.json 不含 designTokens 节），两端共享唯一来源』。图标收敛（CloudPanIcon.cs 蓝色无徽章 vs ServerIcons.cs 绿色+S 徽章，311 行同源重复）涉及自绘 ICO 逻辑合并与两处 UI 调用点（MainWindow/SetupForm/TrayAppContext + ServerTrayApp/ServerWindow），未并入本任务，留后续任务处理。命名空间对齐（CloudPan.Shared→目标层）归 T-016，注意 DesignTokens 依赖 System.Drawing 无法随 CloudPan.Shared 迁入纯 net8.0 的 Contract，应由 T-016 映射为 CloudPan.Infrastructure.*。验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 171/171 通过；验收命令字面 grep -rln 'class DesignTokens' --include=*.cs 匹配 0（类名实为 CloudPanColors/CloudPanSpacing/CloudPanEffects/CloudPanFonts，非 DesignTokens），按意图验证：全仓 DesignTokens.cs 文件数 1（CloudPan.Infrastructure/Design/DesignTokens.cs）、四令牌类各仅 1 处定义。\n【验收结论 2026-08-03】task-verifier 独立裁决：通过。验收标准①『grep 全仓仅一份 DesignTokens 类型定义』：验收命令字面匹配 'class DesignTokens' 为 0（类名实为 CloudPanColors/CloudPanSpacing/CloudPanEffects/CloudPanFonts，文件名为 DesignTokens.cs，字面命令不可命中），按意图独立核验——全仓 DesignTokens.cs 文件仅 1 份（Glob 仅返回 CloudPan.Infrastructure/Design/DesignTokens.cs；两端副本 CloudPan.Client.UI/UI/DesignTokens.cs 与 CloudPan.Server.UI/DesignTokens.cs 均已删除）；四令牌类各仅定义 1 次（CloudPanColors:10 / CloudPanSpacing:65 / CloudPanEffects:103 / CloudPanFonts:190，均在该唯一文件内）；两端引用同一类型（Client.UI 的 SetupForm/SettingsForm/SelectiveSyncPanel/MainWindow/Program 与 Server.UI 的 ServerInstaller/ServerTrayApp/TrayAppRunner/ServerWindow/SettingsPage 均 using CloudPan.Shared 引用之，两端 csproj 均 ProjectReference CloudPan.Infrastructure，编译可解析）。验收标准②『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error（Time Elapsed 12.68s）。requirements 落实核查：①唯一来源位于 CloudPan.Infrastructure/Design/DesignTokens.cs，仅 using System.Drawing、无 UI 依赖（Infrastructure.csproj net8.0-windows 显式加 System.Drawing.Common 8.0.0，注释说明非 WinForms 项目不自动带 WindowsDesktop 框架）②两端副本已删、引用同一类型③虚假契约注释已修正——CloudPanColors:7 / CloudPanSpacing:62 改为如实标注『手工维护（shared-spec.json 不含 designTokens 节，此前\"从契约生成\"注释为伪称）』，CloudPanEffects/CloudPanFonts 本无伪注释。附加核查：T-010 修正值在收敛后唯一文件中完整保留（TextMuted=117,117,117 / SizeCaption=10f / SizeBodyMin=SizeBody=14f），未因收敛回退。两条自动标准全过，无手动项。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -582,7 +582,7 @@
       "title": "缩略图缓存 key 加入版本 + 受限生成队列",
       "dimension": "function",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 1,
       "findingId": "F-12",
       "dependsOn": [],
@@ -602,8 +602,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "缓存 key 加入文件版本/哈希 + 缩略图并发生成限流（F-12）。改动落在 T-002 下沉后的领域服务 CloudPan.Server.Core/Thumbnails/ThumbnailService.cs（Controller 只做适配，未改动）。\\n①缓存 key：由原 SHA-256(path|w) 扩展为 SHA-256(path|w|索引version|索引hash|磁盘长度|最后写入刻度) 前 16 hex——文件更新（索引版本提升/哈希变化，或未入索引文件磁盘内容变化）后 key 变化，旧缩略图自动失效。注入 IFileIndexService 取索引 version/hash（每请求一次 PK 查询），未入索引时兜底磁盘元数据指纹（FileInfo 长度+最后写入刻度）。\\n②受限并发队列：未命中缓存的生成（SkiaSharp 解码/缩放为 CPU 密集）经 SemaphoreSlim(MaxConcurrentGenerations=3) 门限流，避免相册并发解码拉满 CPU；门内双检避免等待期间已生成而重复解码；缓存写盘改原子写（先写 .tmp 再 File.Move overwrite），防并发生成同一缩略图时 File.Create 互踩（原实现无门限并发下同图并发必抛 IOException→500）。\\n改动文件：CloudPan.Server.Core/Thumbnails/ThumbnailService.cs（重写，ctor 增加可选 IFileIndexService 参数，DI 可解析，旧测试单参构造不变）；CloudPan.Tests/Server/Services/ThumbnailServiceTests.cs（新增 4 用例）。\\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Thumbnail 8/8 通过（含验收用例 GetThumbnail_文件更新后_缓存key变化：v1→v2 版本+hash 变化且磁盘文件未变，断言两次 CachePath 不同——隔离出 version/hash 为唯一差异）；全量 dotnet test CloudPan.Tests -c Release 175/175 通过（原 171 + 新增 4：文件更新 key 变化/未入索引重写 key 变化/同图并发共享同一缓存/多图并发全部生成成功）。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-013",

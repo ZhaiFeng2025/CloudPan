@@ -6,14 +6,14 @@ using Xunit;
 namespace CloudPan.Tests.Server.Services;
 
 /// <summary>
-/// ThumbnailService 单元测试——缩略图生成与类型判定（脱离 ASP.NET，直接注入领域服务）。
+/// ThumbnailService 单元测试——缩略图生成、类型判定、缓存 key 失效与并发生成限流（脱离 ASP.NET，直接注入领域服务）。
 /// </summary>
 public class ThumbnailServiceTests : Infrastructure.TestBase
 {
-    private async Task<string> WriteTestImageAsync(string fileName)
+    private async Task<string> WriteTestImageAsync(string fileName, int width = 100, int height = 80)
     {
-        // 用 SkiaSharp 生成一张 100x80 红色 PNG
-        using SKBitmap bmp = new SKBitmap(100, 80);
+        // 用 SkiaSharp 生成一张红色 PNG
+        using SKBitmap bmp = new SKBitmap(width, height);
         using SKCanvas canvas = new SKCanvas(bmp);
         canvas.Clear(SKColors.Red);
         using SKImage img = SKImage.FromBitmap(bmp);
@@ -72,5 +72,77 @@ public class ThumbnailServiceTests : Infrastructure.TestBase
         Assert.True(first.Success);
         Assert.True(second.Success);
         Assert.Equal(first.CachePath, second.CachePath);
+    }
+
+    [Fact]
+    public async Task GetThumbnail_文件更新后_缓存key变化()
+    {
+        // 验收场景：文件更新（索引版本/hash 变化）后旧缩略图失效，缓存 key 变化
+        await WriteTestImageAsync("photo.png");
+        var index = new FileIndexService(CreateServerDbFactory());
+        var svc = new ThumbnailService(new FileStorageService(TempDir), index);
+
+        // v1：先生成缩略图
+        await index.UpsertFileAsync("/photo.png", FileType.File, "hash-v1", 100,
+            DateTime.UtcNow.ToString("O"), 1);
+        var first = await svc.GetThumbnailAsync("/photo.png", 200);
+        Assert.True(first.Success);
+
+        // 文件更新：版本号提升 + hash 变化（磁盘文件未变，隔离出 version/hash 为唯一差异）
+        await index.UpsertFileAsync("/photo.png", FileType.File, "hash-v2", 120,
+            DateTime.UtcNow.ToString("O"), 2);
+        var second = await svc.GetThumbnailAsync("/photo.png", 200);
+
+        Assert.True(second.Success);
+        Assert.NotEqual(first.CachePath, second.CachePath);
+    }
+
+    [Fact]
+    public async Task GetThumbnail_未入索引文件重写_缓存key变化()
+    {
+        // 未入索引的文件：磁盘元数据指纹兜底，内容更新后同样使旧缓存失效
+        await WriteTestImageAsync("rewrite.png", 100, 80);
+        var svc = new ThumbnailService(new FileStorageService(TempDir));
+
+        var first = await svc.GetThumbnailAsync("/rewrite.png", 200);
+        Assert.True(first.Success);
+
+        // 重写为不同内容（不同尺寸，保证长度变化）
+        await WriteTestImageAsync("rewrite.png", 50, 40);
+        var second = await svc.GetThumbnailAsync("/rewrite.png", 200);
+
+        Assert.True(second.Success);
+        Assert.NotEqual(first.CachePath, second.CachePath);
+    }
+
+    [Fact]
+    public async Task GetThumbnail_同一图片并发请求_共享同一缓存()
+    {
+        // 并发门内双检：同一缩略图并发请求只产生一个缓存文件
+        await WriteTestImageAsync("shared.png");
+        var svc = new ThumbnailService(new FileStorageService(TempDir));
+
+        var tasks = Enumerable.Range(0, 8).Select(_ => svc.GetThumbnailAsync("/shared.png", 100));
+        var results = await Task.WhenAll(tasks);
+
+        Assert.All(results, r => Assert.True(r.Success));
+        Assert.Single(results.Select(r => r.CachePath).Distinct());
+    }
+
+    [Fact]
+    public async Task GetThumbnail_多图并发_全部生成成功()
+    {
+        // 受限并发队列：多图并发经并发门限流后全部生成成功、缓存互不串扰
+        var svc = new ThumbnailService(new FileStorageService(TempDir));
+
+        var tasks = Enumerable.Range(1, 20).Select(async i =>
+        {
+            await WriteTestImageAsync($"img_{i:D2}.png");
+            return await svc.GetThumbnailAsync($"/img_{i:D2}.png", 100);
+        });
+        var results = await Task.WhenAll(tasks);
+
+        Assert.All(results, r => Assert.True(r.Success));
+        Assert.Equal(20, results.Select(r => r.CachePath).Distinct().Count());
     }
 }
