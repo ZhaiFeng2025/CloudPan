@@ -750,7 +750,7 @@
       "title": "文件哈希计算收敛为单一实现",
       "dimension": "simplicity",
       "priority": "P1",
-      "status": "acceptance",
+      "status": "done",
       "batch": 2,
       "findingId": "F-17",
       "dependsOn": [],
@@ -775,7 +775,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "文件哈希收敛为单一实现（F-17/T-017）：新建 CloudPan.Contract/FileHasher.cs（静态 FileHasher.ComputeSha256Async，全仓唯一 SHA256.Create()），服务端与客户端共用；FileStorageService.ComputeHashAsync 委托 FileHasher（IFileStorageService API 不变，服务端 10+ 调用点零改动）；删除客户端两份私有实现——ApiClient.cs（DownloadAsync 下载校验 + UploadChunkedAsync 大文件哈希 2 处调用点）与 SyncEngine.Queue.cs（Changes.cs:175 / Scan.cs:342 / Transfers.cs×5 共 7 处调用点改为 FileHasher.ComputeSha256Async），ApiClient 移除 using System.Security.Cryptography。路径语义保持等价：客户端所有调用点传入路径已经 ToLocalPath/NormalizePath 规范化（含 \\\\?\\ 长路径前缀），原私有方法内部 NormalizePath 为幂等冗余，Contract 工具直接 File.OpenRead 行为一致。改动文件：新增 CloudPan.Contract/FileHasher.cs；修改 CloudPan.Infrastructure/Storage/FileStorageService.cs、CloudPan.Client.Core/Services/{ApiClient,SyncEngine.Queue,SyncEngine.Changes,SyncEngine.Scan,SyncEngine.Transfers}.cs。验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 186/186 通过；验收命令 grep -rc 'SHA256.Create()' --include=*.cs | grep -v ':0' 仅 1 行（CloudPan.Contract/FileHasher.cs:16）；grep 客户端私有 ComputeSha256Async 定义无匹配；dotnet run --project CloudPan.CodeGen -- --verify 7 项全部一致。",
+      "note": "文件哈希收敛为单一实现（F-17/T-017）：新建 CloudPan.Contract/FileHasher.cs（静态 FileHasher.ComputeSha256Async，全仓唯一 SHA256.Create()），服务端与客户端共用；FileStorageService.ComputeHashAsync 委托 FileHasher（IFileStorageService API 不变，服务端 10+ 调用点零改动）；删除客户端两份私有实现——ApiClient.cs（DownloadAsync 下载校验 + UploadChunkedAsync 大文件哈希 2 处调用点）与 SyncEngine.Queue.cs（Changes.cs:175 / Scan.cs:342 / Transfers.cs×5 共 7 处调用点改为 FileHasher.ComputeSha256Async），ApiClient 移除 using System.Security.Cryptography。路径语义保持等价：客户端所有调用点传入路径已经 ToLocalPath/NormalizePath 规范化（含 \\\\?\\ 长路径前缀），原私有方法内部 NormalizePath 为幂等冗余，Contract 工具直接 File.OpenRead 行为一致。改动文件：新增 CloudPan.Contract/FileHasher.cs；修改 CloudPan.Infrastructure/Storage/FileStorageService.cs、CloudPan.Client.Core/Services/{ApiClient,SyncEngine.Queue,SyncEngine.Changes,SyncEngine.Scan,SyncEngine.Transfers}.cs。验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 186/186 通过；验收命令 grep -rc 'SHA256.Create()' --include=*.cs | grep -v ':0' 仅 1 行（CloudPan.Contract/FileHasher.cs:16）；grep 客户端私有 ComputeSha256Async 定义无匹配；dotnet run --project CloudPan.CodeGen -- --verify 7 项全部一致。\n【验收结论 2026-08-03】task-verifier 独立裁决：通过。验收标准①『grep -rc ''SHA256.Create()'' --include=*.cs | grep -v '':0'' 仅 1 行』实测 grep -rc 输出仅 ./CloudPan.Contract/FileHasher.cs:1 一行，其余文件均无匹配——全仓 SHA-256 创建唯一收敛于 FileHasher；验收标准②『dotnet test CloudPan.Tests -c Release』实测 Passed 186 / Failed 0 / Skipped 0（总 186）。附加标准全过：『grep -rn ''ComputeSha256Async'' CloudPan.Client.Core/』——9 处调用点（ApiClient.cs×2、SyncEngine.Changes.cs×1、SyncEngine.Scan.cs×1、SyncEngine.Transfers.cs×5）全部为 FileHasher.ComputeSha256Async 静态调用，无任何客户端私有定义残留；『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error（10 项目全编译）；『dotnet run --project CloudPan.CodeGen -- --verify』7 项全部一致，校验通过。独立复核改动真实性：CloudPan.Contract/FileHasher.cs 为全仓唯一实现（SHA256.Create() 于 :16，ComputeSha256Async 返回 64 字符小写 hex，File.OpenRead 语义与客户端规范化路径等价）；FileStorageService.cs:73-74 ComputeHashAsync 委托 FileHasher（IFileStorageService API 不变，服务端调用点零改动）；客户端 ApiClient.cs 与 SyncEngine.Queue.cs grep 'private.*Sha256|SHA256.HashData|ComputeHash' 无残留私有实现，Client.Core 无 'using System.Security.Cryptography'。requirements 全部落实：①删除 ApiClient 与 SyncEngine.Queue 私有 SHA-256 方法 ②改为调用 FileHasher（纯文件哈希上提 CloudPan.Contract 共享工具）。goal『SHA-256 计算全仓单一实现，调整哈希策略只改一处』达成。两条自动标准全过，无手动项。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -818,7 +818,7 @@
       "title": "目录重命名索引前缀替换修复",
       "dimension": "function",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 2,
       "findingId": "F-19",
       "dependsOn": [],
@@ -838,7 +838,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "目录重命名索引前缀替换修复（F-19/T-019）：FileIndexService.MoveAsync 目录分支 SQL 由 REPLACE(Path, oldPrefix, newPrefix) 改为按前缀长度裁剪的字符串拼接（newPrefix || SUBSTR(Path, oldPrefix.Length+1)）。SQLite REPLACE 会替换行内所有匹配段——嵌套同名目录重命名后路径错乱（/photos/photos/img.jpg → /backup/photos/backup/photos/img.jpg），SUBSTR 仅保留前缀之后的剩余部分，结果正确（/backup/photos/photos/img.jpg）。\n改动文件：CloudPan.Server.Core/FileIndex/FileIndexService.cs（MoveAsync 目录分支 SQL，注释说明 REPLACE 缺陷）；CloudPan.Tests/Server/Services/FileIndexServiceTests.cs（新增 Move_目录_嵌套同名子目录路径正确——/photos 下建同名子目录 /photos 及 /photos/photos/img.jpg，移到 /backup/photos 后断言路径为 /backup/photos/photos/img.jpg，旧 REPLACE 实现下该用例断言 NotNull 失败）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Index 17/17 通过（含新增嵌套同名目录用例）；全量 dotnet test CloudPan.Tests -c Release 187/187 通过（原 186 + 新增 1）。",
+      "note": "目录重命名索引前缀替换修复（F-19/T-019）：FileIndexService.MoveAsync 目录分支 SQL 由 REPLACE(Path, oldPrefix, newPrefix) 改为按前缀长度裁剪的字符串拼接（newPrefix || SUBSTR(Path, oldPrefix.Length+1)）。SQLite REPLACE 会替换行内所有匹配段——嵌套同名目录重命名后路径错乱（/photos/photos/img.jpg → /backup/photos/backup/photos/img.jpg），SUBSTR 仅保留前缀之后的剩余部分，结果正确（/backup/photos/photos/img.jpg）。\n改动文件：CloudPan.Server.Core/FileIndex/FileIndexService.cs（MoveAsync 目录分支 SQL，注释说明 REPLACE 缺陷）；CloudPan.Tests/Server/Services/FileIndexServiceTests.cs（新增 Move_目录_嵌套同名子目录路径正确——/photos 下建同名子目录 /photos 及 /photos/photos/img.jpg，移到 /backup/photos 后断言路径为 /backup/photos/photos/img.jpg，旧 REPLACE 实现下该用例断言 NotNull 失败）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Index 17/17 通过（含新增嵌套同名目录用例）；全量 dotnet test CloudPan.Tests -c Release 187/187 通过（原 186 + 新增 1）。\n【验收结论 2026-08-03】task-verifier 独立裁决：通过。验收标准『dotnet test --filter Index』实测 17/17 通过（Failed 0 / Passed 17 / Skipped 0）；其中关键用例 Move_目录_嵌套同名子目录路径正确（按 FQN --filter 单独精确运行 1/1 通过）完整覆盖验收场景『嵌套同名目录重命名』：建 /photos 及同名子目录 /photos/photos、文件 /photos/photos/img.jpg，MoveAsync(/photos→/backup/photos, isDirectory:true) 后断言 /photos/photos/img.jpg 与 /photos 均不存在、/backup/photos/photos/img.jpg 存在且 Version=4——该用例在旧 REPLACE 实现下必失败（路径内两处 /photos/ 段均被替换为错乱路径），SUBSTR 前缀裁剪后结果正确。独立核查代码路径：FileIndexService.MoveAsync 目录分支 SQL 已由 REPLACE(Path,oldPrefix,newPrefix) 改为 Path = newPrefix || SUBSTR(Path, oldPrefix.Length+1) WHERE Path LIKE oldPrefix+'%'（SQLite SUBSTR 1 基索引，前缀长度+1 即剩余部分起点，FileIndexService.cs:213-215），注释明确标注 REPLACE 缺陷（/photos/photos/img.jpg → /backup/photos/backup/photos/img.jpg 错乱）；目录自身条目由前一条精确 Path 匹配 UPDATE 处理（/photos→/backup/photos），子项经 LIKE 前缀匹配全部更新；/photos2/ 类兄弟目录因前缀含尾斜杠 '/photos/' 不被误匹配。附加标准『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error（10 项目全编译）。requirements 全部落实：①REPLACE 改为按长度裁剪字符串拼接（newPath + Path.Substring(oldPath.Length) 的 SQL 等价实现 SUBSTR）②补单测覆盖 /photos/photos/img.jpg → /backup/photos/photos/img.jpg。单条自动标准通过，无手动项。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -846,7 +846,7 @@
       "title": "分块上传崩溃恢复幂等化",
       "dimension": "function",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 2,
       "findingId": "F-20",
       "dependsOn": [],
@@ -866,8 +866,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "分块上传崩溃恢复幂等化（F-20/T-020）：块写入由 FileMode.Append 追加改为按块索引 seek 定位写入——块 i 固定落在 [i*ChunkSize, (i+1)*ChunkSize) 区间（与客户端 ApiClient.UploadChunkedAsync 切块语义一致），保持『先落字节、后更位图』顺序；崩溃窗口（字节已落盘但位图未更新）下客户端重发同块覆盖同位置而非追加，不产生重复字节，合并后 SHA-256 必然一致。合并前新增交叉校验：位图声称全块已收但临时文件长度 < (TotalChunks-1)*ChunkSize（非末块缺失）时重置会话让客户端从头重传，避免永久失败。\n改动文件：CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.cs（ReceiveChunkAsync 块写入 seek 定位 + FinalizeAsync 合并前交叉校验）；CloudPan.Tests/Server/Services/ChunkedUploadServiceTests.cs（两块/幂等跳过测试对齐真实 4MB 定长切块语义；新增崩溃恢复测试 ReceiveChunk_崩溃后重发同块_合并SHA256一致——模拟块 1 字节已落盘位图未更新→客户端重发同块→合并 SHA-256 与完整文件一致）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter ChunkedUpload 6/6 通过（含新增崩溃恢复用例）；全量 dotnet test CloudPan.Tests -c Release 188/188 通过（原 187 + 1）；架构测试 10/10 通过；dotnet run --project CloudPan.CodeGen -- --verify 7 项全部一致。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-021",

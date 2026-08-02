@@ -139,9 +139,13 @@ public class ChunkedUploadService : IChunkedUploadService
                 received.Count == totalChunks);
         }
 
-        // 写入块数据（追加到临时文件）
-        await using (FileStream fs = new FileStream(record.TempPath, FileMode.Append, FileAccess.Write, FileShare.None))
+        // 写入块数据（按块索引 seek 定位写入：块 i 固定落在 [i*ChunkSize, (i+1)*ChunkSize) 区间，与客户端切块语义一致）
+        // 崩溃恢复幂等：若字节已落盘但位图未更新（两步间崩溃），客户端重发同块时覆盖同位置而非追加 → 不产生重复字节，
+        // 合并后 SHA-256 必然与完整文件一致。保持『先落字节、后更位图』顺序：唯一崩溃窗口被 seek 覆盖收敛。
+        long chunkOffset = (long)chunkIndex * SpecConfig.ChunkSize;
+        await using (FileStream fs = new FileStream(record.TempPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.None))
         {
+            fs.Seek(chunkOffset, SeekOrigin.Begin);
             await chunkContent.CopyToAsync(fs);
             await fs.FlushAsync();
         }
@@ -180,7 +184,20 @@ public class ChunkedUploadService : IChunkedUploadService
         CloudPanDbContext db, ChunkedUpload record, string path,
         string fileHash, int baseVersion, string? lastModified, string deviceId)
     {
-        // a. 校验完整文件 SHA-256
+        // a. 交叉校验：位图声称全块已收，但临时文件长度不足以容纳全部非末块（非末块均为满 ChunkSize）
+        //    → 磁盘数据缺失（异常损坏），重置会话让客户端从头重传，避免合并后 SHA-256 永久失败
+        long fileLength = new FileInfo(record.TempPath).Length;
+        long minExpectedLength = (record.TotalChunks - 1) * (long)SpecConfig.ChunkSize;
+        if (fileLength < minExpectedLength)
+        {
+            SafeDeleteTemp(record.TempPath);
+            db.ChunkedUploads.Remove(record);
+            await db.SaveChangesAsync();
+            return new ChunkErrorOutcome(new DomainError(HttpErrorCode.BAD_REQUEST,
+                "分块会话数据不完整", "上传会话已损坏，请重新上传"));
+        }
+
+        // b. 校验完整文件 SHA-256
         string actualHash = await _storage.ComputeHashAsync(record.TempPath);
         if (!string.Equals(actualHash, fileHash, StringComparison.OrdinalIgnoreCase))
         {
@@ -192,7 +209,7 @@ public class ChunkedUploadService : IChunkedUploadService
                 "文件校验失败，请重新上传"));
         }
 
-        // b. 冲突检测
+        // c. 冲突检测
         if (baseVersion > 0)
         {
             var existing = await _index.GetByPathAsync(path);
@@ -235,7 +252,7 @@ public class ChunkedUploadService : IChunkedUploadService
             }
         }
 
-        // c. 存档旧版本 + 分配版本号 + 原子写入
+        // d. 存档旧版本 + 分配版本号 + 原子写入
         //    顺序：FS 准备（存档/计算哈希，不覆盖目标）→ DB 事务（FileEntry + VersionRecord + 清理）→ 成功后原子移动
         //    DB 失败时目标文件保持原状可恢复；catch 清理孤儿存档（FS 副作用）
 
