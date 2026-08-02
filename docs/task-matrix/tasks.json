@@ -929,16 +929,16 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "设置页改由 SpecSettings 契约驱动（F-22/T-022）。①SettingsPage 重写为遍历 SpecSettings.All 按 SettingGroup 分组渲染表单——键名/标签/校验（Type/Min/Max/IsPath）/持久化通道（Startup→ServerSettingsFile，AppConfig→ISettingsService）均来自设置定义，删除手写三设置项常量（服务端口/同步根目录/家庭共享 Token 的标签、1-65535 端口校验、重启提示等硬编码）；分区显示名（网络/存储/安全）为 spec groups.label 未进生成产物的 UI 本地映射。②token_hash 写入收敛到 ISettingsService：TokenService 注入 ISettingsService，RotateAsync 的 DB 写改经 SetStringAsync(SpecSettings.Keys.TokenHash, hash)（原直写 ExecuteSqlRaw），移除 IDbContextFactory 依赖；ISettingsService 接口注释同步（不再声明 token_hash 不在此读写）。③TokenServiceTests 构造改为注入 SettingsService。\\n改动文件：CloudPan.Server.UI/SettingsPage.cs（重写）；CloudPan.Server.Core/Configuration/TokenService.cs（token_hash 写收敛 ISettingsService）；CloudPan.Server.Core/Configuration/ISettingsService.cs（注释）；CloudPan.Tests/Server/Services/TokenServiceTests.cs（CreateService 注入 SettingsService）；docs/task-matrix/tasks.json（状态推进）。\\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 189/189 通过（TokenServiceTests 4/4、架构 CodeQuality 行数门禁全绿）；验收①dotnet run --project CloudPan.CodeGen -- --verify 7 项全部一致；验收②grep -n 'SpecSettings' CloudPan.Server.UI/SettingsPage.cs 有匹配（9 处）。备注：SettingsPage.cs 压缩至 477 行以满足 CodeQualityTests 行数门禁（上限 500，原 429 行版本重写后超限已收敛）；DatabaseInitializer 首次初始化 token_hash 种子写入保持原样（启动期引导路径，非运行时设置，不在本次收敛范围）。",
+      "note": "设置页改由 SpecSettings 契约驱动（F-22/T-022）。①SettingsPage 重写为遍历 SpecSettings.All 按 SettingGroup 分组渲染表单——键名/标签/校验（Type/Min/Max/IsPath）/持久化通道（Startup→ServerSettingsFile，AppConfig→ISettingsService）均来自设置定义，删除手写三设置项常量（服务端口/同步根目录/家庭共享 Token 的标签、1-65535 端口校验、重启提示等硬编码）；分区显示名（网络/存储/安全）为 spec groups.label 未进生成产物的 UI 本地映射。②token_hash 写入收敛到 ISettingsService：TokenService 注入 ISettingsService，RotateAsync 的 DB 写改经 SetStringAsync(SpecSettings.Keys.TokenHash, hash)（原直写 ExecuteSqlRaw），移除 IDbContextFactory 依赖；ISettingsService 接口注释同步（不再声明 token_hash 不在此读写）。③TokenServiceTests 构造改为注入 SettingsService。\\n改动文件：CloudPan.Server.UI/SettingsPage.cs（重写）；CloudPan.Server.Core/Configuration/TokenService.cs（token_hash 写收敛 ISettingsService）；CloudPan.Server.Core/Configuration/ISettingsService.cs（注释）；CloudPan.Tests/Server/Services/TokenServiceTests.cs（CreateService 注入 SettingsService）；docs/task-matrix/tasks.json（状态推进）。\\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 189/189 通过（TokenServiceTests 4/4、架构 CodeQuality 行数门禁全绿）；验收①dotnet run --project CloudPan.CodeGen -- --verify 7 项全部一致；验收②grep -n 'SpecSettings' CloudPan.Server.UI/SettingsPage.cs 有匹配（9 处）。备注：SettingsPage.cs 压缩至 477 行以满足 CodeQualityTests 行数门禁（上限 500，原 429 行版本重写后超限已收敛）；DatabaseInitializer 首次初始化 token_hash 种子写入保持原样（启动期引导路径，非运行时设置，不在本次收敛范围）。\n【验收结论 2026-08-03】task-verifier 独立裁决：通过。验收标准①『dotnet run --project CloudPan.CodeGen -- --verify』实测 7 项全部一致（枚举/DTO/实体/清单/错误响应/API响应/设置），『✅ 校验通过』；验收标准②『grep -n ''SpecSettings'' CloudPan.Server.UI/SettingsPage.cs 有匹配』实测 9 处匹配。附加标准『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error（10 项目全编译，Time Elapsed 10.34s）。独立核查：SpecSettings 类定义于 CloudPan.Contract/Generated/Settings.g.cs:44（文件头 AUTO-GENERATED from shared-spec.json v1.1.0），SpecSettings.All 为 ServerSettingDef[]（:56）——SettingsPage.cs 遍历 SpecSettings.All 按 SettingGroup 分组渲染表单（键名/标签/校验/持久化通道均来自设置定义，:70/:393 foreach、:131/:143 引用 SpecSettings.Keys.Port/SyncRoot 生成键），确为契约驱动非手工三常量，符合 requirement①『删除手写三设置项常量』；requirement② token_hash 写入收敛——TokenService.cs:14 注释明示『token_hash 写入统一经 ISettingsService（运行时设置唯一通道，规则 0/T-022）』，:54 await _settingsService.SetStringAsync(SpecSettings.Keys.TokenHash, tokenHash)，无 ExecuteSqlRaw 直写、无 IDbContextFactory 依赖残留，与执行者记录一致。两条自动标准全过，无手动项。",
       "updatedAt": "2026-08-03",
-      "status": "acceptance"
+      "status": "done"
     },
     {
       "id": "T-023",
       "title": "选择性同步取消勾选振荡修复",
       "dimension": "function",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 2,
       "findingId": "F-23",
       "dependsOn": [],
@@ -958,8 +958,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "F-23 振荡修复：FullScanCoreAsync 第 2 步跳过 CloudOnly 快照时记录 cloudOnlyPaths 集合，第 3 步枚举本地新文件时跳过 State==CloudOnly 快照对应的本地残留副本——取消勾选后仍存在的本地文件不再当新文件上传（原路径：上传→ProcessUploadAsync 置回 Synced→下次增量同步按 IsPathSelected=false 打回 CloudOnly→下次扫描重传，形成振荡浪费带宽与版本）。\\n改动文件：CloudPan.Client.Core/Services/SyncEngine.Scan.cs（新增 cloudOnlyPaths 集合 + 第 3 步跳过，注释标注 F-23）；CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 FullScan_取消勾选CloudOnly本地残留副本_不重传不振荡）；docs/task-matrix/tasks.json（状态推进）。\\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Sync 38/38 通过（含新增 CloudOnly 振荡用例，FQN 单独精确运行 1/1 通过，断言第一次/第二次全量扫描均不入队上传且快照保持 CloudOnly——覆盖『取消勾选后本地文件不重传、不振荡』）；全量 dotnet test CloudPan.Tests -c Release 190/190 通过（原 189 + 新增 1）。\\n备注：取消勾选当前经设置页保存→重启客户端生效（TrayAppContext.OpenSettings 提示『部分更改需要重启客户端后生效』），本地残留副本不自动清理，由本修复保证不再被上传与振荡；『取消勾选时可选地清理本地副本』留作后续可选增强，不在本任务范围内。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-024",

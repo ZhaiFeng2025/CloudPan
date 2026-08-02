@@ -233,6 +233,47 @@ public class SyncEngineTests : IDisposable
         Assert.Equal(0, count); // 全部被忽略
     }
 
+    [Fact]
+    public async Task FullScan_取消勾选CloudOnly本地残留副本_不重传不振荡()
+    {
+        // 场景（F-23）：/photos 目录已取消勾选，快照 State==CloudOnly，本地仍残留此前下载的副本
+        string filePath = Path.Combine(_syncRoot, "photos", "summer.jpg");
+        Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
+        await File.WriteAllTextAsync(filePath, "jpeg-data");
+
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.Add(new RemoteSnapshot
+            {
+                Path = "/photos/summer.jpg", Type = (int)FileType.File,
+                Size = 9, Version = 3, State = (int)FileState.CloudOnly, Hash = "cloud-hash"
+            });
+            await setupDb.SaveChangesAsync();
+        }
+
+        // 第一次全量扫描：CloudOnly 本地残留副本不应作为新文件入队上传
+        await _engine.FullScanAsync();
+        await using (var dbCheck = await _dbFactory.CreateDbContextAsync())
+        {
+            int uploadCount = await dbCheck.SyncQueue.CountAsync(q =>
+                q.FilePath == "/photos/summer.jpg" && q.Operation == (int)SyncOperation.Upload);
+            Assert.Equal(0, uploadCount); // 不入队上传
+
+            var snapshot = await dbCheck.RemoteSnapshots.FindAsync("/photos/summer.jpg");
+            Assert.NotNull(snapshot);
+            Assert.Equal((int)FileState.CloudOnly, snapshot!.State); // 快照保持 CloudOnly（未被上传置回 Synced）
+        }
+
+        // 第二次全量扫描：仍不入队上传 → 不振荡
+        await _engine.FullScanAsync();
+        await using (var dbCheck2 = await _dbFactory.CreateDbContextAsync())
+        {
+            int uploadCount = await dbCheck2.SyncQueue.CountAsync(q =>
+                q.FilePath == "/photos/summer.jpg" && q.Operation == (int)SyncOperation.Upload);
+            Assert.Equal(0, uploadCount);
+        }
+    }
+
     // ============================================================
     // 小文件优先排序测试
     // ============================================================

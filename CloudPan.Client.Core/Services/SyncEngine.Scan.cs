@@ -293,6 +293,8 @@ public partial class SyncEngine
         // 2. 分批加载远端快照（每次 1000 条），避免全量加载到内存
         const int batchSize = 1000;
         HashSet<string> matchedLocalFiles = new HashSet<string>();
+        // 选择性同步（F-23）：CloudOnly 快照路径集合——取消勾选后本地仍残留副本的文件不作为新文件上传
+        HashSet<string> cloudOnlyPaths = new HashSet<string>();
         int snapshotCount = 0;
 
         List<RemoteSnapshot> batch;
@@ -309,6 +311,8 @@ public partial class SyncEngine
                 // 跳过 CloudOnly 文件（不含本地副本，不纳入删除检测，由用户按需下载）
                 if (snapshot.State == (int)CloudPan.Contract.FileState.CloudOnly)
                 {
+                    // 记录该路径已取消勾选，供第 3 步跳过本地残留副本
+                    cloudOnlyPaths.Add(snapshot.Path);
                     continue;
                 }
 
@@ -357,6 +361,13 @@ public partial class SyncEngine
         foreach (string path in localFiles)
         {
             if (matchedLocalFiles.Contains(path))
+            {
+                continue;
+            }
+
+            // 选择性同步（F-23）：跳过 State==CloudOnly 快照对应的本地文件——取消勾选后本地残留副本
+            // 若当新文件上传会置回 Synced→下次增量同步打回 CloudOnly→下次扫描重传，形成振荡
+            if (cloudOnlyPaths.Contains(path))
             {
                 continue;
             }
