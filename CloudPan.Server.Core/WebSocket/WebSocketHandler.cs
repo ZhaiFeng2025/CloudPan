@@ -1,13 +1,8 @@
 using System.Collections.Concurrent;
 using System.Net.WebSockets;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using CloudPan.Contract;
-using CloudPan.Infrastructure.Models;
-using CloudPan.Infrastructure.Persistence;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 
 namespace CloudPan.Server.Core;
@@ -15,12 +10,12 @@ namespace CloudPan.Server.Core;
 /// <summary>
 /// WebSocket 连接管理器。
 /// 管理设备连接池、认证、心跳、广播和在线状态。
+/// 认证（Token 校验与设备注册）经 ITokenService（F-25/T-025 单一事实来源），与 HTTP 中间件共用。
 /// </summary>
 public class WebSocketHandler : IWebSocketHandler, IDisposable
 {
     private readonly ConcurrentDictionary<string, WebSocketConnection> _connections = new();
-    private readonly IDbContextFactory<CloudPanDbContext> _dbFactory;
-    private readonly IMemoryCache _cache;
+    private readonly ITokenService _tokenService;
     private readonly ILogger<WebSocketHandler> _logger;
     private readonly System.Threading.Timer _heartbeatTimer;
 
@@ -31,12 +26,10 @@ public class WebSocketHandler : IWebSocketHandler, IDisposable
     public int ActiveConnectionCount => _connections.Count;
 
     public WebSocketHandler(
-        IDbContextFactory<CloudPanDbContext> dbFactory,
-        IMemoryCache cache,
+        ITokenService tokenService,
         ILogger<WebSocketHandler> logger)
     {
-        _dbFactory = dbFactory;
-        _cache = cache;
+        _tokenService = tokenService;
         _logger = logger;
         _heartbeatTimer = new System.Threading.Timer(CheckHeartbeats, null, PingInterval, PingInterval);
     }
@@ -102,19 +95,9 @@ public class WebSocketHandler : IWebSocketHandler, IDisposable
             return;
         }
 
-        // 4. 验证 Token
-        string tokenHash = ComputeSha256(token);
-        string? storedHash = await _cache.GetOrCreateAsync(CacheKeys.TokenHash, async entry =>
-        {
-            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
-            await using var db = await _dbFactory.CreateDbContextAsync();
-            return await db.AppConfigs
-                .Where(c => c.Key == "token_hash")
-                .Select(c => c.Value)
-                .FirstOrDefaultAsync();
-        });
-
-        if (storedHash == null || !string.Equals(tokenHash, storedHash, StringComparison.OrdinalIgnoreCase))
+        // 4. 验证 Token（经 ITokenService 单一实现：SHA-256 比对 + 5 分钟内存缓存，与 HTTP 中间件一致）
+        TokenValidationResult validation = await _tokenService.ValidateTokenAsync(token);
+        if (validation != TokenValidationResult.Valid)
         {
             await SendJsonAsync(socket, new { type = WebSocketEvent.AuthError, message = "Token 无效" });
             await CloseSafeAsync(socket, WebSocketCloseStatus.PolicyViolation, "invalid token");
@@ -398,27 +381,8 @@ public class WebSocketHandler : IWebSocketHandler, IDisposable
     {
         try
         {
-            await using var db = await _dbFactory.CreateDbContextAsync();
-            var device = await db.Devices.FindAsync(deviceId);
-            if (device != null)
-            {
-                device.Online = online ? 1 : 0;
-                device.LastSeen = DateTime.UtcNow.ToString("O");
-            }
-            else
-            {
-                // 自动注册
-                db.Devices.Add(new Device
-                {
-                    Id = deviceId,
-                    Name = $"设备-{deviceId[..Math.Min(8, deviceId.Length)]}",
-                    Person = null,
-                    LastSeen = DateTime.UtcNow.ToString("O"),
-                    Online = online ? 1 : 0,
-                    RegisteredAt = DateTime.UtcNow.ToString("O")
-                });
-            }
-            await db.SaveChangesAsync();
+            // 设备自动注册 + LastSeen/Online 维护收敛到 ITokenService（T-025 单一事实来源）
+            await _tokenService.EnsureDeviceAsync(deviceId, online);
         }
         catch (Exception ex)
         {
@@ -453,12 +417,6 @@ public class WebSocketHandler : IWebSocketHandler, IDisposable
         {
             _logger.LogWarning(ex, "WebSocket 关闭连接失败: {Status}/{Desc}", status, description);
         }
-    }
-
-    private static string ComputeSha256(string input)
-    {
-        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(input));
-        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     public void Dispose()

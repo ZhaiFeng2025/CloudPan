@@ -1,11 +1,6 @@
 using System.Net;
-using System.Security.Cryptography;
 using CloudPan.Contract;
-using CloudPan.Infrastructure.Models;
-using CloudPan.Infrastructure.Persistence;
 using CloudPan.Server.Core;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 
 namespace CloudPan.Server.Host.Middleware;
 
@@ -13,6 +8,8 @@ namespace CloudPan.Server.Host.Middleware;
 /// Token 认证中间件。
 /// 认证模式由端点元数据（EndpointAuthAttribute）驱动，未标注的端点回退到 SpecEndpoints 契约表：
 /// AuthMode.Public/Message 跳过 HTTP 头检查（WebSocket 为消息级认证）；AuthMode.Localhost 仅允许回环地址访问。
+/// Token 校验与设备注册收敛到 ITokenService（F-25/T-025 单一事实来源），本中间件只做 HTTP 头解析与适配，
+/// 不再直碰 DbContext/内存缓存/设备实体。
 /// </summary>
 public class TokenAuthMiddleware
 {
@@ -23,7 +20,7 @@ public class TokenAuthMiddleware
         _next = next;
     }
 
-    public async Task InvokeAsync(HttpContext context)
+    public async Task InvokeAsync(HttpContext context, ITokenService tokenService)
     {
         // 解析认证模式：优先读端点元数据，非控制器路由（如 /ws）回退 SpecEndpoints 契约表
         AuthMode mode = ResolveAuthMode(context);
@@ -69,21 +66,9 @@ public class TokenAuthMiddleware
             return;
         }
 
-        // 验证 token 哈希（内存缓存避免每次请求查 DB）
-        string tokenHash = ComputeSha256(token);
-        var cache = context.RequestServices.GetRequiredService<IMemoryCache>();
-        string? storedHash = await cache.GetOrCreateAsync(CacheKeys.TokenHash, async entry =>
-        {
-            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
-            var dbFactory = context.RequestServices.GetRequiredService<IDbContextFactory<CloudPanDbContext>>();
-            await using var db = await dbFactory.CreateDbContextAsync();
-            return await db.AppConfigs
-                .Where(c => c.Key == "token_hash")
-                .Select(c => c.Value)
-                .FirstOrDefaultAsync();
-        });
-
-        if (storedHash == null)
+        // 验证 Token（经 ITokenService 单一实现：SHA-256 比对 + 5 分钟内存缓存，与 WebSocket 认证一致）
+        TokenValidationResult validation = await tokenService.ValidateTokenAsync(token);
+        if (validation == TokenValidationResult.NotInitialized)
         {
             // Token 未配置——拒绝所有认证请求
             await context.WriteErrorAsync(HttpErrorCode.SERVICE_UNAVAILABLE,
@@ -92,8 +77,7 @@ public class TokenAuthMiddleware
             return;
         }
 
-        // 使用 Ordinal 比较——十六进制哈希统一 lowercase，无需 IgnoreCase
-        if (!string.Equals(tokenHash, storedHash, StringComparison.Ordinal))
+        if (validation == TokenValidationResult.Invalid)
         {
             await context.WriteErrorAsync(HttpErrorCode.UNAUTHORIZED,
                 "Token 无效",
@@ -101,14 +85,11 @@ public class TokenAuthMiddleware
             return;
         }
 
-        // 提取设备 ID（放在 HttpContext.Items 中供控制器使用）
-        var dbFactory = context.RequestServices.GetRequiredService<IDbContextFactory<CloudPanDbContext>>();
-        await using var db = await dbFactory.CreateDbContextAsync();
+        // 提取设备 ID（放在 HttpContext.Items 中供控制器使用）；格式校验/自动注册/LastSeen 收敛在 ITokenService
         string? deviceId = context.Request.Headers["X-Device-Id"].FirstOrDefault();
         if (!string.IsNullOrEmpty(deviceId))
         {
-            // 校验 Device ID 格式
-            if (deviceId.Length > 64 || !System.Text.RegularExpressions.Regex.IsMatch(deviceId, @"^[a-zA-Z0-9_-]+$"))
+            if (!await tokenService.EnsureDeviceAsync(deviceId))
             {
                 await context.WriteErrorAsync(HttpErrorCode.INVALID_DEVICE_ID,
                     "Device ID 格式无效：长度 1-64，仅允许字母、数字、下划线和短横",
@@ -117,77 +98,9 @@ public class TokenAuthMiddleware
             }
 
             context.Items["DeviceId"] = deviceId;
-
-            // 自动注册未知设备 + 更新 LastSeen（Online 状态由 WebSocket 管理）
-            var device = await db.Devices.FindAsync(deviceId);
-            if (device == null)
-            {
-                db.Devices.Add(new Device
-                {
-                    Id = deviceId,
-                    Name = $"设备-{deviceId[..Math.Min(8, deviceId.Length)]}",
-                    Person = null,
-                    LastSeen = DateTime.UtcNow.ToString("O"),
-                    Online = 0, // HTTP 请求不表示实时在线（WebSocket 管理）
-                    RegisteredAt = DateTime.UtcNow.ToString("O")
-                });
-            }
-            else
-            {
-                device.LastSeen = DateTime.UtcNow.ToString("O");
-                // Online 由 WebSocket 连接/断开管理，不在 HTTP 请求中更新
-            }
-            try
-            {
-                await db.SaveChangesAsync();
-            }
-            catch (DbUpdateException ex)
-            {
-                // 仅唯一约束冲突（并发竞态：另一请求已注册该设备）可重试；
-                // 其他约束违反（外键、非空等）不可重试，直接抛出。
-                if (!IsUniqueConstraintViolation(ex))
-                {
-                    throw;
-                }
-
-                // 并发竞态：另一请求已先行注册该设备。
-                // 关键：当前 db 仍跟踪 Add 失败的实体（状态=Added），FindAsync 会优先返回
-                // 变更追踪器中的该失败实体而非数据库中的真值，导致二次 INSERT 冲突。
-                // 必须使用全新的 DbContext 执行重试查询。
-                var logger = context.RequestServices
-                    .GetRequiredService<ILogger<TokenAuthMiddleware>>();
-                logger.LogWarning("设备 {DeviceId} 注册并发冲突（正常竞态条件），使用新 DbContext 查询", deviceId);
-                await using var freshDb = await dbFactory.CreateDbContextAsync();
-                var freshDevice = await freshDb.Devices.FindAsync(deviceId);
-                if (freshDevice != null)
-                {
-                    freshDevice.LastSeen = DateTime.UtcNow.ToString("O");
-                    await freshDb.SaveChangesAsync();
-                }
-            }
         }
 
         await _next(context);
-    }
-
-    /// <summary>判断 DbUpdateException 是否由唯一约束/主键冲突触发（可重试），而非外键/非空等不可重试约束。</summary>
-    private static bool IsUniqueConstraintViolation(DbUpdateException ex)
-    {
-        // SQLite 错误码 19 = SQLITE_CONSTRAINT（含 UNIQUE 和 PRIMARY KEY）
-        // 在 Microsoft.Data.Sqlite 中内部异常包含 "UNIQUE constraint failed" 或 SQLite 错误码 19
-        var inner = ex.InnerException;
-        while (inner != null)
-        {
-            string msg = inner.Message;
-            if (msg.Contains("UNIQUE constraint failed", StringComparison.OrdinalIgnoreCase)
-                || msg.Contains("SQLITE_CONSTRAINT", StringComparison.OrdinalIgnoreCase)
-                || msg.Contains("constraint failed", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-            inner = inner.InnerException;
-        }
-        return false;
     }
 
     /// <summary>
@@ -239,14 +152,6 @@ public class TokenAuthMiddleware
 
         return IPAddress.IsLoopback(ip)
             || (ip.IsIPv4MappedToIPv6 && IPAddress.IsLoopback(ip.MapToIPv4()));
-    }
-
-    /// <summary>计算 SHA-256（64 字符十六进制）。</summary>
-    private static string ComputeSha256(string input)
-    {
-        byte[] bytes = System.Text.Encoding.UTF8.GetBytes(input);
-        byte[] hash = SHA256.HashData(bytes);
-        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 }
 

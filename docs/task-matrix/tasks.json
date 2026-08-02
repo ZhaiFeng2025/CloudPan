@@ -1105,7 +1105,7 @@
       "title": "Token 验证与设备注册收敛为 Server.Core 单一服务",
       "dimension": "architecture",
       "priority": "P1",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 3,
       "findingId": "F-25",
       "dependsOn": [],
@@ -1136,8 +1136,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "【执行记录 2026-08-03】Token 验证与设备注册收敛为 Server.Core 单一服务（F-25/T-025）：认证与设备注册单一事实来源，消除 HTTP 与 WS 认证行为分叉。\n①ITokenService 新增 ValidateTokenAsync（返回 TokenValidationResult{Valid/Invalid/NotInitialized}，SHA-256 比对 + 5 分钟内存缓存，token_hash 读取经 ISettingsService，与 T-022 写通道对齐）与 EnsureDeviceAsync（deviceId 格式校验/自动注册/LastSeen 维护，可选 online 参数：HTTP 传 null 不更新 Online、WS 传 true/false；并发注册竞态唯一约束冲突用全新 DbContext 重试收敛，CLAUDE.md 7.3）。\n②TokenAuthMiddleware 只做 HTTP 头解析与适配：InvokeAsync 参数注入 ITokenService，解析 Authorization 头 + X-Device-Id 头并把 deviceId 写入 context.Items；不再直碰 DbContext/IMemoryCache/CacheKeys，删除 ComputeSha256/IsUniqueConstraintViolation/设备自动注册代码。NotInitialized→503、Invalid→401、设备格式非法→400 INVALID_DEVICE_ID。\n③WebSocketHandler 注入 ITokenService：Token 校验改经 ValidateTokenAsync（与 HTTP 中间件同一实现）；UpdateDeviceOnlineAsync 委托 EnsureDeviceAsync（保留原防御性 try/catch 容错）；删除本文件 ComputeSha256/_cache/_dbFactory 重复实现。\n④循环依赖处理：TokenService 原注入 IWebSocketHandler，WebSocketHandler 现注入 ITokenService 构成构造期循环——TokenService 改经 IServiceProvider 延迟解析 IWebSocketHandler（仅 RotateAsync 踢连接时用），构造期无循环（WS/文件控制器集成测试在真实 DI 容器验证通过）。\n改动文件：CloudPan.Server.Core/Configuration/{ITokenService,TokenService}.cs；CloudPan.Server.Host/Middleware/TokenAuthMiddleware.cs；CloudPan.Server.Core/WebSocket/WebSocketHandler.cs；CloudPan.Tests/Server/Services/{TokenServiceTests,TokenAuthMiddlewareTests}.cs。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；全量 dotnet test CloudPan.Tests -c Release 211/211 通过（原 201 + 新增 10）；验收①架构测试 --filter Architecture 10/10；验收② grep -n 'token_hash' CloudPan.Server.Host/Middleware/TokenAuthMiddleware.cs 无匹配（exit 1）；验收③ --filter TokenService 14/14（含 HTTP/WS 一致性用例 ValidateTokenAsync_同一Token_HTTP与WS两路径共用校验_结果一致、设备注册幂等用例 EnsureDeviceAsync_重复调用_幂等不抛异常）；WS/文件控制器集成测试 23/23；CodeGen --verify 7 项一致。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-026",
@@ -1222,7 +1222,7 @@
       "title": "行数门禁修复 + MainWindow/SetupForm 拆 partial",
       "dimension": "simplicity",
       "priority": "P1",
-      "status": "acceptance",
+      "status": "done",
       "batch": 3,
       "findingId": "F-28",
       "dependsOn": [],
@@ -1253,7 +1253,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "冲突取舍（producer）：门禁阈值『放宽』vs『严格拆分』——选严格方向：移除 UI 豁免后按 1000 门禁拆分 MainWindow/SetupForm，其余 UI 类纳入门禁后随批次下调阈值。\n【执行记录 2026-08-03】\nCodeQualityTests.cs：移除 IsExcluded 的『UI』段豁免使 serviceControllerFiles 白名单真实生效（注：Server.UI 路径段为 Server.UI 非『UI』本不受豁免影响，本次将 Client.UI 全部纳入门禁）；删除过期注释 SyncEngine.cs(1431行) 与 MaxSyncEngineLines=1500 死特殊阈值（SyncEngine 已拆 1431→257 行）；新增 FileBrowserView.cs（733 行）入白名单——其不在原白名单，移除豁免后按 MaxOtherLines=500 上限必炸，属『UI 类按 1000 行门禁纳入』的必需项（≤1000 行不拆分，与 SettingsForm/ServerInstaller/ServerWindow 同处理）。\nMainWindow（2522 行）拆为 11 个 partial 文件：MainWindow.cs（字段/构造/事件绑定/关闭行为，183 行）+ MainWindow.{Layout,Status,Conflicts,Errors,Log,Browser,Trash,Share,Versions,Controls}.cs（145-390 行）；SetupForm（1023 行）拆为 4 个 partial 文件：SetupForm.cs（字段/构造/表单控制，212 行）+ SetupForm.{Layout,Validation,Discovery}.cs（146-377 行）。纯结构移动不改行为：方法体逐字搬运，仅主文件类声明加 partial、各 partial 文件补 using 与部分类 XML 文档注释（XML 文档门禁要求每个 partial 声明上方有 ///）。\n改动文件：CloudPan.Tests/Architecture/CodeQualityTests.cs；CloudPan.Client.UI/UI/MainWindow.cs（改 partial+精简）；新增 CloudPan.Client.UI/UI/MainWindow.{Layout,Status,Conflicts,Errors,Log,Browser,Trash,Share,Versions,Controls}.cs；CloudPan.Client.UI/UI/SetupForm.cs（改 partial+精简）；新增 CloudPan.Client.UI/UI/SetupForm.{Layout,Validation,Discovery}.cs。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release --filter CodeQuality 2/2 通过（含行数门禁与 public 类型 XML 文档两测）；全量 dotnet test CloudPan.Tests -c Release 201/201 通过；验收 grep -rln 'partial class MainWindow' CloudPan.Client.UI/UI/ 匹配 11 个文件（≥2）；方法签名完整性核查：MainWindow 66 / SetupForm 31 个签名零缺失（git HEAD 原文比对）。门禁阈值保持 1000 未下调，逐批下调至 400 为后续批次职责；T-031/T-032/T-033/T-036 依赖本拆分后的 UI 类进行改版（拆分前置意义所在）。",
+      "note": "冲突取舍（producer）：门禁阈值『放宽』vs『严格拆分』——选严格方向：移除 UI 豁免后按 1000 门禁拆分 MainWindow/SetupForm，其余 UI 类纳入门禁后随批次下调阈值。\n【执行记录 2026-08-03】\nCodeQualityTests.cs：移除 IsExcluded 的『UI』段豁免使 serviceControllerFiles 白名单真实生效（注：Server.UI 路径段为 Server.UI 非『UI』本不受豁免影响，本次将 Client.UI 全部纳入门禁）；删除过期注释 SyncEngine.cs(1431行) 与 MaxSyncEngineLines=1500 死特殊阈值（SyncEngine 已拆 1431→257 行）；新增 FileBrowserView.cs（733 行）入白名单——其不在原白名单，移除豁免后按 MaxOtherLines=500 上限必炸，属『UI 类按 1000 行门禁纳入』的必需项（≤1000 行不拆分，与 SettingsForm/ServerInstaller/ServerWindow 同处理）。\nMainWindow（2522 行）拆为 11 个 partial 文件：MainWindow.cs（字段/构造/事件绑定/关闭行为，183 行）+ MainWindow.{Layout,Status,Conflicts,Errors,Log,Browser,Trash,Share,Versions,Controls}.cs（145-390 行）；SetupForm（1023 行）拆为 4 个 partial 文件：SetupForm.cs（字段/构造/表单控制，212 行）+ SetupForm.{Layout,Validation,Discovery}.cs（146-377 行）。纯结构移动不改行为：方法体逐字搬运，仅主文件类声明加 partial、各 partial 文件补 using 与部分类 XML 文档注释（XML 文档门禁要求每个 partial 声明上方有 ///）。\n改动文件：CloudPan.Tests/Architecture/CodeQualityTests.cs；CloudPan.Client.UI/UI/MainWindow.cs（改 partial+精简）；新增 CloudPan.Client.UI/UI/MainWindow.{Layout,Status,Conflicts,Errors,Log,Browser,Trash,Share,Versions,Controls}.cs；CloudPan.Client.UI/UI/SetupForm.cs（改 partial+精简）；新增 CloudPan.Client.UI/UI/SetupForm.{Layout,Validation,Discovery}.cs。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release --filter CodeQuality 2/2 通过（含行数门禁与 public 类型 XML 文档两测）；全量 dotnet test CloudPan.Tests -c Release 201/201 通过；验收 grep -rln 'partial class MainWindow' CloudPan.Client.UI/UI/ 匹配 11 个文件（≥2）；方法签名完整性核查：MainWindow 66 / SetupForm 31 个签名零缺失（git HEAD 原文比对）。门禁阈值保持 1000 未下调，逐批下调至 400 为后续批次职责；T-031/T-032/T-033/T-036 依赖本拆分后的 UI 类进行改版（拆分前置意义所在）。\n【验收结论 2026-08-03】task-verifier 独立裁决：通过。三条自动验收标准全过，无手动项。①『dotnet test --filter CodeQuality』实测 2/2 通过（Failed 0 / Passed 2 / Skipped 0，含行数门禁与 public 类型 XML 文档两测）。②『grep -rln ''partial class MainWindow'' CloudPan.Client.UI/UI/ 匹配 ≥2 个文件』实测匹配 11 个文件（MainWindow.cs + Layout/Status/Conflicts/Errors/Log/Browser/Trash/Share/Versions/Controls），≥2 达标；SetupForm 亦拆为 4 个 partial（Layout/Validation/Discovery），partial 类声明一致（主文件 : Form，partial 文件无基类）。③『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error。独立核查改动真实性：CodeQualityTests.cs 的 IsExcluded 已移除 ''UI'' 段豁免（现仅排除 Generated/obj/bin/Analyzer），serviceControllerFiles 白名单真实生效且新增 FileBrowserView.cs（733 行，超 MaxOtherLines=500 必需）；过期注释 SyncEngine.cs(1431行) 与 MaxSyncEngineLines 死特殊阈值已删除；行数实测全部 UI 文件 ≤1000 行（MainWindow 各 partial 145-390、SetupForm 各 partial 147-377、SettingsForm 625、FileBrowserView 733、ServerInstaller 932、ServerWindow 510），且各 partial 文件名非白名单精确名按 MaxOtherLines=500 判据亦全过。requirements 落实核查：移除 UI 豁免✓、删除过期注释✓、MainWindow 拆 11 partial 每文件 ≤1000 行✓、SetupForm 拆 4 partial 每文件 ≤1000 行✓、SettingsForm/ServerInstaller/ServerWindow 纳入门禁不拆分✓（行数实测通过）。门禁阈值保持 1000 未下调、逐批下调至 400 为后续批次职责，符合 note 中 producer 冲突取舍。",
       "updatedAt": "2026-08-03"
     },
     {
