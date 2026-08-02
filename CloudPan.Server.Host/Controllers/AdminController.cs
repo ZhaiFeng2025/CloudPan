@@ -1,24 +1,24 @@
 using CloudPan.Server;
-using CloudPan.Server.Data;
+using CloudPan.Server.Services;
 using CloudPan.Shared;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace CloudPan.Server.Controllers;
 
 /// <summary>
 /// Web 管理面板——localhost 只读视图。
 /// 绑定 127.0.0.1 / ::1，公网不可达。
+/// 数据查询在 Server.Core IServerStatusService，本类只做 HTTP 适配。
 /// </summary>
 [ApiController]
 [EndpointAuth(AuthMode.Localhost)]
 public class AdminController : ControllerBase
 {
-    private readonly IDbContextFactory<CloudPanDbContext> _dbFactory;
+    private readonly IServerStatusService _status;
 
-    public AdminController(IDbContextFactory<CloudPanDbContext> dbFactory)
+    public AdminController(IServerStatusService status)
     {
-        _dbFactory = dbFactory;
+        _status = status;
     }
 
     /// <summary>GET /admin — 管理面板主页（仅 localhost）。</summary>
@@ -32,27 +32,7 @@ public class AdminController : ControllerBase
     [HttpGet("/admin/api/files")]
     public async Task<IActionResult> GetFiles([FromQuery] string? path = null, [FromQuery] int limit = 200)
     {
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        var query = db.FileEntries.AsQueryable();
-        if (!string.IsNullOrEmpty(path))
-        {
-            query = query.Where(f => f.Path.StartsWith(path));
-        }
-
-        var items = await query
-            .OrderBy(f => f.Path)
-            .Take(Math.Min(limit, 1000))
-            .Select(f => new
-            {
-                f.Path,
-                f.Type,
-                f.CurrentHash,
-                f.CurrentSize,
-                f.Version,
-                f.State,
-                f.LastModified
-            })
-            .ToListAsync();
+        var items = await _status.GetFilesAsync(path, limit);
         return Ok(new { data = items });
     }
 
@@ -60,19 +40,7 @@ public class AdminController : ControllerBase
     [HttpGet("/admin/api/devices")]
     public async Task<IActionResult> GetDevices()
     {
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        var items = await db.Devices
-            .OrderByDescending(d => d.LastSeen)
-            .Select(d => new
-            {
-                d.Id,
-                d.Name,
-                d.Person,
-                d.LastSeen,
-                d.Online,
-                d.RegisteredAt
-            })
-            .ToListAsync();
+        var items = await _status.GetDevicesAsync();
         return Ok(new { data = items });
     }
 
@@ -80,21 +48,7 @@ public class AdminController : ControllerBase
     [HttpGet("/admin/api/logs")]
     public async Task<IActionResult> GetLogs([FromQuery] int limit = 100)
     {
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        var items = await db.SyncLogs
-            .OrderByDescending(l => l.CreatedAt)
-            .Take(Math.Min(limit, 500))
-            .Select(l => new
-            {
-                l.Id,
-                l.FilePath,
-                l.Operation,
-                l.DeviceId,
-                l.Result,
-                l.Details,
-                l.CreatedAt
-            })
-            .ToListAsync();
+        var items = await _status.GetLogsAsync(limit);
         return Ok(new { data = items });
     }
 
@@ -102,12 +56,8 @@ public class AdminController : ControllerBase
     [HttpGet("/admin/api/stats")]
     public async Task<IActionResult> GetStats()
     {
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        int fileCount = await db.FileEntries.CountAsync();
-        int deviceCount = await db.Devices.CountAsync();
-        int onlineCount = await db.Devices.CountAsync(d => d.Online == 1);
-        int logCount = await db.SyncLogs.CountAsync();
-        return Ok(new { fileCount, deviceCount, onlineDeviceCount = onlineCount, logCount });
+        var s = await _status.GetStatsAsync();
+        return Ok(new { fileCount = s.FileCount, deviceCount = s.DeviceCount, onlineDeviceCount = s.OnlineDeviceCount, logCount = s.LogCount });
     }
 
     // ============================================================

@@ -1,17 +1,14 @@
 using CloudPan.Server;
-using CloudPan.Server.Data;
-using CloudPan.Server.Models;
 using CloudPan.Server.Services;
 using CloudPan.Shared;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using IOFile = System.IO.File;
 
 namespace CloudPan.Server.Controllers;
 
 /// <summary>
 /// 文件操作 API：上传、下载、文件树、删除、移动、创建文件夹、搜索。
-/// Phase 1b：上传前自动存档旧版本（版本历史）。
+/// 只做参数绑定与状态码适配——上传编排在 IUploadService、其余文件操作在 IFileOperationService，
+/// 删除/移动/建目录在 FilesController.FileOps.cs，分块上传在 FilesController.ChunkedUpload.cs。
 /// </summary>
 [ApiController]
 [Route("api/files")]
@@ -20,31 +17,25 @@ public partial class FilesController : ControllerBase
 {
     private readonly IFileStorageService _storage;
     private readonly IFileIndexService _index;
-    private readonly IVersionService _version;
     private readonly IUploadService _upload;
-    private readonly IDbContextFactory<CloudPanDbContext> _dbFactory;
-    private readonly ISyncLogService _syncLog;
+    private readonly IFileOperationService _fileOps;
+    private readonly IChunkedUploadService _chunkedUpload;
     private readonly IWebSocketHandler _wsHandler;
-    private readonly ILogger<FilesController> _logger;
 
     public FilesController(
         IFileStorageService storage,
         IFileIndexService index,
-        IVersionService version,
         IUploadService upload,
-        IDbContextFactory<CloudPanDbContext> dbFactory,
-        ISyncLogService syncLog,
-        IWebSocketHandler wsHandler,
-        ILogger<FilesController> logger)
+        IFileOperationService fileOps,
+        IChunkedUploadService chunkedUpload,
+        IWebSocketHandler wsHandler)
     {
         _storage = storage;
         _index = index;
-        _version = version;
         _upload = upload;
-        _dbFactory = dbFactory;
-        _syncLog = syncLog;
+        _fileOps = fileOps;
+        _chunkedUpload = chunkedUpload;
         _wsHandler = wsHandler;
-        _logger = logger;
     }
 
     /// <summary>
@@ -64,7 +55,7 @@ public partial class FilesController : ControllerBase
 
     /// <summary>
     /// POST /api/files/upload — 上传文件（multipart）。
-    /// Phase 1a：校验 baseVersion，版本不匹配时保存冲突副本。
+    /// 冲突检测在 Controller（读索引），上传编排（先存档旧版本→再原子覆盖→后更新索引）由 Server.Core UploadService 保证顺序。
     /// </summary>
     [HttpPost("upload")]
     [RequestSizeLimit(50_000_000)]
@@ -95,18 +86,25 @@ public partial class FilesController : ControllerBase
             return this.Error(HttpErrorCode.BAD_REQUEST, pathErr, "路径格式不正确");
         }
 
-        // 冲突检测：baseVersion > 0 且当前版本 > baseVersion → 冲突
+        string uploadDeviceId = HttpContext.Items["DeviceId"] as string ?? "unknown";
+
+        // 冲突检测：baseVersion > 0 且当前版本 > baseVersion → 冲突（冲突副本保存由 IFileOperationService 负责）
         if (baseVersion > 0)
         {
             var existing = await _index.GetByPathAsync(path);
             if (existing != null && existing.Version > baseVersion)
             {
-                return await HandleUploadConflictAsync(file, path, existing, lastModified, baseVersion);
+                await using var conflictStream = file.OpenReadStream();
+                var conflict = await _fileOps.HandleUploadConflictAsync(
+                    path, conflictStream, file.Length, lastModified, baseVersion, existing.Version, uploadDeviceId);
+
+                return this.Error(HttpErrorCode.CONFLICT,
+                    $"版本冲突：客户端基于 v{baseVersion}，服务端当前 v{conflict.CurrentVersion}",
+                    "文件已被其他设备修改，请刷新后重试",
+                    detail: $"currentVersion={conflict.CurrentVersion}, baseVersion={baseVersion}, conflictPath={conflict.ConflictPath}");
             }
         }
 
-        // 上传编排（先存档旧版本→再原子覆盖目标→后更新索引）由 Server.Core UploadService 保证顺序
-        string uploadDeviceId = HttpContext.Items["DeviceId"] as string ?? "unknown";
         await using var stream = file.OpenReadStream();
 
         UploadResult result;
@@ -135,49 +133,6 @@ public partial class FilesController : ControllerBase
         });
     }
 
-    /// <summary>上传冲突处理：保存冲突副本（_冲突_yyyyMMdd_HHmmss）。</summary>
-    private async Task<IActionResult> HandleUploadConflictAsync(
-        IFormFile file, string path, FileEntry existing, string? lastModified, int baseVersion)
-    {
-        int conflictVersion = await _version.NextVersionAsync();
-
-        // 生成冲突文件名
-        string nameWithoutExt = Path.GetFileNameWithoutExtension(path);
-        string ext = Path.GetExtension(path);
-        string suffix = DateTime.Now.ToString("_冲突_yyyyMMdd_HHmmss"); // spec: conflictSuffixPattern
-        string conflictPath = Path.GetDirectoryName(path)?.Replace('\\', '/') ?? "";
-        if (!conflictPath.EndsWith('/') && !string.IsNullOrEmpty(conflictPath))
-        {
-            conflictPath += "/";
-        }
-
-        conflictPath = conflictPath + nameWithoutExt + suffix + ext;
-        if (!conflictPath.StartsWith('/'))
-        {
-            conflictPath = "/" + conflictPath;
-        }
-
-        // 保存冲突副本
-        await using var stream = file.OpenReadStream();
-        await _storage.AtomicWriteAsync(conflictPath, stream, expectedHash: null);
-
-        string conflictHash = await _storage.ComputeHashAsync(_storage.GetAbsolutePath(conflictPath));
-        var conflictEntry = await _index.UpsertFileAsync(
-            conflictPath, FileType.File, conflictHash, file.Length,
-            lastModified ?? DateTime.UtcNow.ToString("O"), conflictVersion,
-            FileState.Conflict);
-
-        // 写入审计日志（冲突）
-        string conflictDeviceId = HttpContext.Items["DeviceId"] as string ?? "unknown";
-        await _syncLog.LogAsync(path, SyncOperation.Upload, conflictDeviceId, LogResult.Conflict,
-            $"客户端 v{baseVersion} vs 服务端 v{existing.Version}，冲突副本: {conflictEntry.Path}");
-
-        return this.Error(HttpErrorCode.CONFLICT,
-            $"版本冲突：客户端基于 v{baseVersion}，服务端当前 v{existing.Version}",
-            "文件已被其他设备修改，请刷新后重试",
-            detail: $"currentVersion={existing.Version}, baseVersion={baseVersion}, conflictPath={conflictEntry.Path}");
-    }
-
     /// <summary>
     /// GET /api/files/download?path=... — 下载文件。
     /// </summary>
@@ -189,32 +144,18 @@ public partial class FilesController : ControllerBase
             return this.Error(HttpErrorCode.BAD_REQUEST, "path 参数缺失", "请提供文件路径");
         }
 
-        var entry = await _index.GetByPathAsync(path);
-        if (entry == null)
+        var result = await _fileOps.DownloadAsync(path);
+        if (!result.Success)
         {
-            return this.Error(HttpErrorCode.NOT_FOUND, $"文件不存在: {path}", "文件未找到");
+            return this.Error(result.Error!.Code, result.Error.Message, result.Error.UserMessage);
         }
 
-        if (entry.Type == (int)FileType.Directory)
-        {
-            return this.Error(HttpErrorCode.BAD_REQUEST, "不能下载目录", "目录不能直接下载，请选择具体文件");
-        }
+        Response.Headers["X-File-Hash"] = result.Entry?.CurrentHash ?? "";
+        Response.Headers["X-File-Version"] = result.Entry?.Version.ToString() ?? "0";
+        Response.Headers["X-File-Size"] = result.Size.ToString();
+        Response.Headers["X-File-Modified"] = result.Entry?.LastModified ?? "";
 
-        if (!_storage.Exists(path))
-        {
-            return this.Error(HttpErrorCode.NOT_FOUND, $"文件不存在: {path}", "文件未找到");
-        }
-
-        string absolutePath = _storage.GetAbsolutePath(path);
-        var stream = _storage.OpenRead(path);
-        string fileName = Path.GetFileName(path);
-
-        Response.Headers["X-File-Hash"] = entry?.CurrentHash ?? "";
-        Response.Headers["X-File-Version"] = entry?.Version.ToString() ?? "0";
-        Response.Headers["X-File-Size"] = _storage.GetSize(path).ToString();
-        Response.Headers["X-File-Modified"] = entry?.LastModified ?? "";
-
-        return File(stream, "application/octet-stream", fileName);
+        return File(result.Content!, "application/octet-stream", result.FileName);
     }
 }
 

@@ -70,6 +70,14 @@ builder.Services.AddSingleton<IVersionService, VersionService>();
 builder.Services.AddSingleton<IUploadService, UploadService>();
 builder.Services.AddSingleton<ISyncLogService, SyncLogService>();
 builder.Services.AddSingleton<IWebSocketHandler, WebSocketHandler>();
+// 文件类领域服务（F-02 下沉：事务与 DB+FS 一致性收敛进 Server.Core）
+builder.Services.AddSingleton<ISharingService, SharingService>();
+builder.Services.AddSingleton<ITrashService, TrashService>();
+builder.Services.AddSingleton<IVersionHistoryService, VersionHistoryService>();
+builder.Services.AddSingleton<IThumbnailService, ThumbnailService>();
+builder.Services.AddSingleton<IFileOperationService, FileOperationService>();
+builder.Services.AddSingleton<IChunkedUploadService, ChunkedUploadService>();
+builder.Services.AddSingleton<IServerStatusService, ServerStatusService>();
 builder.Services.AddSingleton<ISettingsService, SettingsService>();
 builder.Services.AddSingleton<ITokenService, TokenService>();
 

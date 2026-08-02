@@ -1,27 +1,26 @@
 using CloudPan.Server;
-using CloudPan.Server.Data;
 using CloudPan.Server.Services;
 using CloudPan.Shared;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace CloudPan.Server.Controllers;
 
 /// <summary>
 /// 健康检查 + 证书指纹端点。无需认证。
+/// DB 查询在 Server.Core IServerStatusService，本类只做 HTTP 适配。
 /// </summary>
 [ApiController]
 [EndpointAuth(AuthMode.Public)]
 public class HealthController : ControllerBase
 {
     private readonly IVersionService _versionService;
-    private readonly IDbContextFactory<CloudPanDbContext> _dbFactory;
+    private readonly IServerStatusService _status;
     private readonly IConfiguration _configuration;
 
-    public HealthController(IVersionService versionService, IDbContextFactory<CloudPanDbContext> dbFactory, IConfiguration configuration)
+    public HealthController(IVersionService versionService, IServerStatusService status, IConfiguration configuration)
     {
         _versionService = versionService;
-        _dbFactory = dbFactory;
+        _status = status;
         _configuration = configuration;
     }
 
@@ -45,15 +44,8 @@ public class HealthController : ControllerBase
         long memMb = GC.GetTotalMemory(false) / 1_048_576;
         string memStatus = memMb > 500 ? "high" : "ok";
 
-        // DB 完整性（PRAGMA integrity_check 返回 "ok" 单行；ExecuteSqlRawAsync 不读取结果，必须用 SqlQueryRaw）
-        string dbStatus = "ok";
-        try
-        {
-            await using var db = await _dbFactory.CreateDbContextAsync();
-            var integrity = await db.Database.SqlQueryRaw<string>("PRAGMA integrity_check;").ToListAsync();
-            dbStatus = integrity.Count == 1 && integrity[0] == "ok" ? "ok" : "error";
-        }
-        catch { dbStatus = "error"; }
+        // DB 完整性（PRAGMA integrity_check，查询下沉到 IServerStatusService）
+        string dbStatus = await _status.CheckDbIntegrityAsync();
 
         return Ok(new
         {
@@ -222,11 +214,7 @@ public class HealthController : ControllerBase
     [EndpointAuth(AuthMode.Token)]
     public async Task<IActionResult> GetCertFingerprint()
     {
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        string? fp = await db.AppConfigs
-            .Where(c => c.Key == "cert_fingerprint")
-            .Select(c => c.Value)
-            .FirstOrDefaultAsync();
+        string? fp = await _status.GetCertFingerprintAsync();
         return Ok(new { fingerprint = fp ?? "" });
     }
 }

@@ -1,34 +1,23 @@
-using System.Security.Cryptography;
 using CloudPan.Server;
-using CloudPan.Server.Data;
-using CloudPan.Server.Models;
 using CloudPan.Server.Services;
 using CloudPan.Shared;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace CloudPan.Server.Controllers;
 
 /// <summary>
-/// 文件分享控制器。
+/// 文件分享控制器——只做参数绑定与状态码适配，领域逻辑（分享 CRUD/校验/下载计数递增）在 Server.Core ISharingService。
 /// /api/shares 需要 Token 认证；/share/{id} 公开访问（手机浏览器可直接打开）。
 /// </summary>
 [ApiController]
 [EndpointAuth(AuthMode.Token)]
 public class ShareController : ControllerBase
 {
-    private readonly IDbContextFactory<CloudPanDbContext> _dbFactory;
-    private readonly IFileStorageService _storage;
-    private readonly IFileIndexService _index;
+    private readonly ISharingService _sharing;
 
-    public ShareController(
-        IDbContextFactory<CloudPanDbContext> dbFactory,
-        IFileStorageService storage,
-        IFileIndexService index)
+    public ShareController(ISharingService sharing)
     {
-        _dbFactory = dbFactory;
-        _storage = storage;
-        _index = index;
+        _sharing = sharing;
     }
 
     /// <summary>
@@ -42,39 +31,23 @@ public class ShareController : ControllerBase
             return this.Error(HttpErrorCode.BAD_REQUEST, "filePath 不能为空", "文件路径不能为空");
         }
 
-        var entry = await _index.GetByPathAsync(request.FilePath);
-        if (entry == null)
-        {
-            return this.Error(HttpErrorCode.NOT_FOUND, $"文件不存在: {request.FilePath}", "文件不存在，无法创建分享链接");
-        }
-
         string deviceId = HttpContext.Items["DeviceId"] as string ?? "unknown";
-
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        Share share = new Share
+        var result = await _sharing.CreateShareAsync(
+            request.FilePath, request.Password, request.ExpiresAt, request.MaxDownloads, deviceId);
+        if (!result.Success)
         {
-            Id = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant(), // 32 hex
-            FilePath = request.FilePath,
-            PasswordHash = string.IsNullOrEmpty(request.Password)
-                ? null : SharePasswordHasher.Hash(request.Password),
-            ExpiresAt = request.ExpiresAt,
-            MaxDownloads = request.MaxDownloads,
-            UsedDownloads = 0,
-            CreatedAt = DateTime.UtcNow.ToString("O"),
-            CreatedBy = deviceId
-        };
-        db.Shares.Add(share);
-        await db.SaveChangesAsync();
+            return this.Error(result.Error!.Code, result.Error.Message, result.Error.UserMessage, result.Error.Detail);
+        }
 
         string baseUrl = $"{Request.Scheme}://{Request.Host}";
         return Ok(new
         {
             data = new
             {
-                shareId = share.Id,
-                url = $"{baseUrl}/share/{share.Id}",
-                expiresAt = share.ExpiresAt,
-                maxDownloads = share.MaxDownloads
+                shareId = result.ShareId,
+                url = $"{baseUrl}/share/{result.ShareId}",
+                expiresAt = result.ExpiresAt,
+                maxDownloads = result.MaxDownloads
             }
         });
     }
@@ -85,17 +58,13 @@ public class ShareController : ControllerBase
     [HttpDelete("/api/shares/{shareId}")]
     public async Task<IActionResult> RevokeShare(string shareId)
     {
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        var share = await db.Shares.FindAsync(shareId);
-        if (share == null)
+        var result = await _sharing.RevokeShareAsync(shareId);
+        if (!result.Success)
         {
-            return this.Error(HttpErrorCode.NOT_FOUND, "分享链接不存在", "分享链接不存在或已失效");
+            return this.Error(result.Error!.Code, result.Error.Message, result.Error.UserMessage);
         }
 
-        db.Shares.Remove(share);
-        await db.SaveChangesAsync();
-
-        return Ok(new { data = new { revoked = shareId } });
+        return Ok(new { data = new { revoked = result.ShareId } });
     }
 
     /// <summary>
@@ -105,53 +74,37 @@ public class ShareController : ControllerBase
     [EndpointAuth(AuthMode.Public)]
     public async Task<IActionResult> SharePage(string shareId, [FromQuery] string? password = null)
     {
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        var share = await db.Shares.FindAsync(shareId);
-        if (share == null)
+        var info = await _sharing.GetShareInfoAsync(shareId, password);
+        if (!info.Success)
         {
-            return this.Error(HttpErrorCode.NOT_FOUND, "分享链接不存在或已失效", "分享链接不存在或已失效");
+            return this.Error(info.Error!.Code, info.Error.Message, info.Error.UserMessage);
         }
 
         // 检查过期
-        if (!string.IsNullOrEmpty(share.ExpiresAt)
-            && DateTime.TryParse(share.ExpiresAt, out var expires)
-            && expires < DateTime.UtcNow)
+        if (info.Expired)
         {
             return this.Error(HttpErrorCode.BAD_REQUEST, "分享链接已过期", "分享链接已过期");
         }
 
         // 检查密码
-        if (!string.IsNullOrEmpty(share.PasswordHash))
+        if (info.RequiresPassword && !info.PasswordCorrect)
         {
             if (string.IsNullOrEmpty(password))
             {
-                return Content(
-                    "<html><body style='font-family:sans-serif;padding:2em;text-align:center'>" +
-                    "<h2>请输入访问密码</h2>" +
-                    "<form method='get'><input name='password' type='password' placeholder='密码'/>" +
-                    "<button type='submit'>确认</button></form></body></html>",
-                    "text/html; charset=utf-8");
+                return Content(PasswordFormHtml, "text/html; charset=utf-8");
             }
 
-            if (!SharePasswordHasher.Verify(password, share.PasswordHash))
-            {
-                return Content(
-                    "<html><body style='font-family:sans-serif;padding:2em;text-align:center'>" +
-                    "<h2 style='color:red'>密码错误</h2>" +
-                    "<a href='javascript:history.back()'>返回重试</a></body></html>",
-                    "text/html; charset=utf-8");
-            }
+            return Content(PasswordErrorHtml, "text/html; charset=utf-8");
         }
 
         // 检查下载次数
-        if (share.MaxDownloads.HasValue && share.UsedDownloads >= share.MaxDownloads.Value)
+        if (info.DownloadLimitReached)
         {
             return this.Error(HttpErrorCode.BAD_REQUEST, "下载次数已用完", "下载次数已用完，无法继续下载");
         }
 
-        string fileName = Path.GetFileName(share.FilePath);
-        long fileSize = _storage.Exists(share.FilePath)
-            ? _storage.GetSize(share.FilePath) : 0;
+        string fileName = info.FileName ?? "";
+        long fileSize = info.FileSize;
         string sizeStr = fileSize > 1_048_576
             ? $"{fileSize / 1_048_576.0:F1} MB"
             : $"{fileSize / 1024.0:F0} KB";
@@ -176,48 +129,25 @@ public class ShareController : ControllerBase
     [EndpointAuth(AuthMode.Public)]
     public async Task<IActionResult> ShareDownload(string shareId, [FromQuery] string? password = null)
     {
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        var share = await db.Shares.FindAsync(shareId);
-        if (share == null)
+        var result = await _sharing.PrepareDownloadAsync(shareId, password);
+        if (!result.Success)
         {
-            return this.Error(HttpErrorCode.NOT_FOUND, "分享链接不存在", "分享链接不存在或已失效");
+            return this.Error(result.Error!.Code, result.Error.Message, result.Error.UserMessage);
         }
 
-        // 密码校验
-        if (!string.IsNullOrEmpty(share.PasswordHash))
-        {
-            if (string.IsNullOrEmpty(password))
-            {
-                return this.Error(HttpErrorCode.UNAUTHORIZED, "需要密码", "该分享设置了访问密码，请输入密码后重试");
-            }
-
-            if (!SharePasswordHasher.Verify(password, share.PasswordHash))
-            {
-                return this.Error(HttpErrorCode.UNAUTHORIZED, "密码错误", "访问密码错误，请重新输入");
-            }
-        }
-
-        if (!_storage.Exists(share.FilePath))
-        {
-            return this.Error(HttpErrorCode.NOT_FOUND, "文件已被删除", "分享的文件已被删除，无法下载");
-        }
-
-        // 原子递增下载计数（条件 UPDATE：并发下防止突破 MaxDownloads 上限）。表名为单数 Share（契约 [Table("Share")]）
-        int updated = share.MaxDownloads.HasValue
-            ? await db.Database.ExecuteSqlRawAsync(
-                "UPDATE Share SET UsedDownloads = UsedDownloads + 1 WHERE Id = {0} AND UsedDownloads < {1}",
-                shareId, share.MaxDownloads.Value)
-            : await db.Database.ExecuteSqlRawAsync(
-                "UPDATE Share SET UsedDownloads = UsedDownloads + 1 WHERE Id = {0}", shareId);
-        if (updated == 0)
-        {
-            return this.Error(HttpErrorCode.BAD_REQUEST, "下载次数已用完", "下载次数已用完，无法继续下载");
-        }
-
-        var stream = _storage.OpenRead(share.FilePath);
-        string fileName = Path.GetFileName(share.FilePath);
-        return File(stream, "application/octet-stream", fileName);
+        return File(result.Content!, "application/octet-stream", result.FileName);
     }
+
+    private const string PasswordFormHtml =
+        "<html><body style='font-family:sans-serif;padding:2em;text-align:center'>" +
+        "<h2>请输入访问密码</h2>" +
+        "<form method='get'><input name='password' type='password' placeholder='密码'/>" +
+        "<button type='submit'>确认</button></form></body></html>";
+
+    private const string PasswordErrorHtml =
+        "<html><body style='font-family:sans-serif;padding:2em;text-align:center'>" +
+        "<h2 style='color:red'>密码错误</h2>" +
+        "<a href='javascript:history.back()'>返回重试</a></body></html>";
 }
 
 /// <summary>创建分享请求。</summary>
