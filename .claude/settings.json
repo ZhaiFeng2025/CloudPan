@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "command": "cd /e/XiaoFeng/云盘 && if git diff --name-only HEAD 2>/dev/null | grep -q '\\.cs$'; then echo ''; echo '🔨 检测到 .cs 文件变更，正在编译验证...'; dotnet build CloudPan.sln --nologo -v q 2>&1 | grep -E '(error CS|warning CS|Build succeeded|Build FAILED)'; echo ''; echo '💡 提示：提交前运行 /review 进行三维度代码审查'; fi",
+        "description": ".cs 文件变更后自动编译验证 + 审查提醒"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "command": "if echo \"$ARGUMENTS\" | grep -q 'git commit\\|git push'; then echo '⚠️  提交前建议：1) 运行 /check 确保编译和测试通过  2) 运行 /review 执行三维度代码审查'; fi",
+        "description": "git commit/push 前提醒运行审查"
+      }
+    ]
+  },
+  "model": "claude-sonnet-5",
+  "enableAllProjectMcpServers": true
+}

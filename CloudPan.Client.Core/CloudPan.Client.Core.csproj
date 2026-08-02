@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 客户端领域层：同步状态机/队列/传输客户端/客户端持久化。依赖方向：→ Infrastructure/Contract；不引用 WinForms（R-A2）。 -->
+  <PropertyGroup>
+    <!-- net8.0-windows：SettingsStore 使用 DPAPI（ProtectedData） -->
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CloudPan.Contract\CloudPan.Contract.csproj" />
+    <ProjectReference Include="..\CloudPan.Infrastructure\CloudPan.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.22" />
+    <!-- SQLite 原生库：自包含单文件发布必需，解决 DllNotFoundException -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.10" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
+  </ItemGroup>
+
+</Project>

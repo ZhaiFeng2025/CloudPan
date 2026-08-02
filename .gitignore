@@ -1,0 +1,67 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.vs/
+*.DotSettings
+*.csproj.user
+
+# Node / npm
+node_modules/
+package-lock.json
+
+# Android
+*.apk
+*.aab
+.idea/
+.gradle/
+local.properties
+build/
+
+# IDE
+.vs/
+.vscode/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# CloudPan runtime
+.cloudpan/
+.tmp
+
+# CloudPan 运行时目录（本地开发数据）
+CloudPan_Client/
+CloudPanSync/
+publish/
+
+# 开发临时文件（截图、调试脚本、自动生成的审计文件）
+capture.bat
+capture.ps1
+capture_screenshots.ps1
+gen_findings.js
+gen_findings.py
+out_params.json
+screenshots/
+scripts/
+generate_icon.csx
+
+# 测试输出
+CloudPan.Tests/TestResults/
+
+# 端到端审查测试产物（e2e-test.sh）
+.e2e-test/
+.e2e-test-console.log
+
+# BenchmarkDotNet 产物
+BenchmarkDotNet.Artifacts/
+
+# 构建日志
+build.log
+build_full.log
+
+CloudPan.Android/jdk/

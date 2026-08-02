@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <ItemGroup Condition="'$(MSBuildProjectName)' != 'CloudPan.CodeGen' and '$(MSBuildProjectName)' != 'CloudPan.Analyzers'">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)CloudPan.Analyzers/CloudPan.Analyzers.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)shared-spec.json" />
+  </ItemGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- CP301（匿名lambda订阅）和CP200（敏感数据写盘）在UI代码中大量使用，v1.0暂不阻塞Relase编译 -->
+    <!-- CP303（IDisposable未持有）为性能建议，不阻塞Release -->
+    <WarningsNotAsErrors>CP301;CP200;CP303</WarningsNotAsErrors>
+  </PropertyGroup>
+  <PropertyGroup>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+  <!-- 覆盖率目标（CloudPan.Tests）：dotnet test /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:CoverletOutput=TestResults/coverage/ -->
+  <!-- 输出：TestResults/coverage/*.cobertura.xml 与 *.json，可用 ReportGenerator 汇总 -->
+</Project>

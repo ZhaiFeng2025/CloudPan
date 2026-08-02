@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 基础设施层：两端共用（持久化/存储/安全）。依赖方向：→ Contract；被 Core/Host/UI 引用。 -->
+  <PropertyGroup>
+    <!-- net8.0-windows：SecretStore 使用 Windows ACL（FileSystemAccessRule）；产品 Windows-only -->
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CloudPan.Contract\CloudPan.Contract.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.22" />
+    <!-- SQLite 原生库：自包含单文件发布必需，解决 DllNotFoundException -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.10" />
+  </ItemGroup>
+
+</Project>

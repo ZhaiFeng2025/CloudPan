@@ -1,0 +1,63 @@
+[**/Generated/**]
+generated_code = true
+
+[**/CloudPan.Client/UI/**]
+dotnet_diagnostic.CP001.severity = none
+
+[*.cs]
+# CP001: 错误码字面量 → error
+dotnet_diagnostic.CP001.severity = error
+# CP002: 匿名错误对象 → error
+dotnet_diagnostic.CP002.severity = error
+
+[*.cs]
+# ================= csharp_style 设置 =================
+# 类型可显式推断时禁止 var（类型字面量明确可写）
+csharp_style_var_when_type_is_apparent = false:error
+# 内置类型（int、string、bool 等）禁止 var
+csharp_style_var_for_built_in_types = false:error
+# 其余情况（类型不明显时）默认给建议
+csharp_style_var_elsewhere = false:suggestion
+
+# ================= 命名规则 =================
+# public 成员 → PascalCase
+dotnet_naming_rule.public_members_should_be_pascal_case.severity = error
+dotnet_naming_rule.public_members_should_be_pascal_case.symbols = public_symbols
+dotnet_naming_rule.public_members_should_be_pascal_case.style = pascal_case_style
+dotnet_naming_symbols.public_symbols.applicable_kinds = namespace,class,struct,interface,enum,delegate,method,property,field,event,type_parameter
+dotnet_naming_symbols.public_symbols.applicable_accessibilities = public,internal,protected,protected_internal,private_protected
+dotnet_naming_style.pascal_case_style.capitalization = pascal_case
+
+# private 实例字段 → _camelCase（static/const 由下方 PascalCase 规则接管）
+dotnet_naming_rule.private_fields_should_begin_with_underscore.severity = error
+dotnet_naming_rule.private_fields_should_begin_with_underscore.symbols = private_fields
+dotnet_naming_rule.private_fields_should_begin_with_underscore.style = leading_underscore_style
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_style.leading_underscore_style.capitalization = camel_case
+dotnet_naming_style.leading_underscore_style.required_prefix = _
+
+# private static/const 字段 → PascalCase（符合微软常量命名约定；注意：excluded_modifiers 在此 Roslyn 版本下无效，靠规则优先级实现）
+dotnet_naming_rule.private_static_fields_should_be_pascal_case.severity = error
+dotnet_naming_rule.private_static_fields_should_be_pascal_case.symbols = private_static_fields
+dotnet_naming_rule.private_static_fields_should_be_pascal_case.style = pascal_case_style
+dotnet_naming_symbols.private_static_fields.applicable_kinds = field
+dotnet_naming_symbols.private_static_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_static_fields.required_modifiers = static
+
+# ================= 代码块大括号风格 =================
+# 左大括号放在新行（Allman 风格）
+csharp_new_line_before_open_brace = all
+# 强制 if/else/for/foreach 等代码块使用大括号
+csharp_prefer_braces = true:error
+
+# ================= using 排序规则 =================
+# System 命名空间排在最前
+dotnet_sort_system_directives_first = true
+# using 指令不按来源分组
+dotnet_separate_import_directive_groups = false
+# using 指令放在命名空间外部
+csharp_using_directive_placement = outside_namespace:suggestion
+
+# ================= 禁止未使用的 using =================
+dotnet_diagnostic.IDE0005.severity = error

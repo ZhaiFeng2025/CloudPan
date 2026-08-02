@@ -1,0 +1,43 @@
+is_global = true
+
+# ============================================================
+# CloudPan 契约强制分析器规则
+# Phase 1+ rules: 编译时强制，不可绕过
+# ============================================================
+
+# CP001: 禁止手写错误码字符串字面量（如 "BAD_REQUEST"）→ 必须引用 HttpErrorCode.*
+dotnet_diagnostic.CP001.severity = error
+
+# CP002: 禁止匿名对象/手写 JSON 作为错误响应体 → 必须使用 ApiErrors 工厂
+dotnet_diagnostic.CP002.severity = error
+
+# ============================================================
+# Phase 2 规则（预留，分析器已实现但暂不配置，避免误报）
+# ============================================================
+
+# CP100: 端点路由未在 spec 注册（Phase 2 启用 → error）
+# CP101: 端点认证声明与 spec 不符（Phase 2 启用 → error）
+# CP102: 控制器手写回环检查（Phase 2 启用 → error）
+
+# ============================================================
+# Phase 3-4 规则：当前全部 warning（分析器实现后立即生效；
+# CP302 规则语义为 error，启用时可按注释意图强化）
+# ============================================================
+
+# CP200: 敏感数据直接写盘（Phase 3）
+dotnet_diagnostic.CP200.severity = warning
+
+# CP201: 端口数字字面量（Phase 3）
+dotnet_diagnostic.CP201.severity = warning
+
+# CP300: 事件 += 无配对 -=（Phase 4）
+dotnet_diagnostic.CP300.severity = warning
+
+# CP301: 匿名 lambda 订阅（Phase 4）
+dotnet_diagnostic.CP301.severity = warning
+
+# CP302: 禁止 async Timer fire-and-forget（Phase 4，语义为 error，暂降级 warning）
+dotnet_diagnostic.CP302.severity = warning
+
+# CP303: IDisposable 局部变量未持有（Phase 4）
+dotnet_diagnostic.CP303.severity = warning

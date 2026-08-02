@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 服务端管理 UI（托盘/窗口/安装器），可选。依赖方向：→ Core/Infrastructure/Contract；FrameworkReference 提供 WebApplication 类型（避免与 Host 循环引用）。 -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <!-- WinForms 要求 OutputType 为 WindowsApplication；本项目作为库被 Host 引用，Main 为空入口（ProgramEntry.cs） -->
+    <OutputType>WinExe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CloudPan.Contract\CloudPan.Contract.csproj" />
+    <ProjectReference Include="..\CloudPan.Infrastructure\CloudPan.Infrastructure.csproj" />
+    <ProjectReference Include="..\CloudPan.Server.Core\CloudPan.Server.Core.csproj" />
+  </ItemGroup>
+
+  <!-- ServerTrayApp 依赖 WebApplication（Microsoft.AspNetCore.App 框架引用），不依赖 Host 项目本身，避免循环引用 -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Serilog" Version="4.3.0" />
+    <!-- IsServiceInstalled 使用 ServiceController 检查 Windows 服务安装状态 -->
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 服务端领域层：索引/版本/日志/WebSocket 处理。依赖方向：→ Infrastructure → Contract；不引用 ASP.NET（R-A2）。 -->
+  <PropertyGroup>
+    <!-- net8.0-windows：引用 Infrastructure（net8.0-windows）所需 -->
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CloudPan.Contract\CloudPan.Contract.csproj" />
+    <ProjectReference Include="..\CloudPan.Infrastructure\CloudPan.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 版本对齐 EF Core 8.0.22 传递依赖（8.0.1/8.0.2），避免 NU1605 降级 -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="8.0.1" />
+  </ItemGroup>
+
+</Project>

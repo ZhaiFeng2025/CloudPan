@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- 允许自定义 Main 作为基准入口（BenchmarkRunnerMain）；dotnet test 走 VSTest/testhost 不受影响 -->
+    <GenerateProgramFile>false</GenerateProgramFile>
+    <!-- Coverlet 覆盖率输出：Cobertura（CI 报告）+ JSON（本地查看） -->
+    <CoverletOutputFormat>cobertura,json</CoverletOutputFormat>
+    <CoverletOutput>./TestResults/coverage/</CoverletOutput>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector" Version="6.0.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.msbuild" Version="6.0.2">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.22" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.22" />
+    <!-- 性能基准：dotnet run -c Release 运行（Benchmarks/ 目录） -->
+    <PackageReference Include="BenchmarkDotNet" Version="0.14.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CloudPan.Contract\CloudPan.Contract.csproj" />
+    <ProjectReference Include="..\CloudPan.Infrastructure\CloudPan.Infrastructure.csproj" />
+    <ProjectReference Include="..\CloudPan.Server.Core\CloudPan.Server.Core.csproj" />
+    <ProjectReference Include="..\CloudPan.Server.Host\CloudPan.Server.Host.csproj" />
+    <ProjectReference Include="..\CloudPan.Client.Core\CloudPan.Client.Core.csproj" />
+    <ProjectReference Include="..\CloudPan.Client.UI\CloudPan.Client.UI.csproj" />
+  </ItemGroup>
+
+</Project>

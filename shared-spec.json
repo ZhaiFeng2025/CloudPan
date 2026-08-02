@@ -1,0 +1,482 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cloudpan-shared-spec",
+  "title": "CloudPan 共享定义",
+  "description": "所有枚举、实体、端点、字段名、错误码、配置值的唯一事实来源。所有代码和文档引用本文件，禁止各自重复定义。",
+  "version": "1.0.0",
+  "date": "2026-07-31",
+  "_changelog": [
+    { "version": "1.0.0", "date": "2026-07-31", "changes": [
+      "v1.0 正式发布——版本号统一为 1.0.0",
+      "运行时崩溃级 Bug 修复：FileWatcherService NRE、SyncIgnoreParser 未处理异常、GlobalExceptionMiddleware 运算符优先级、RateLimitMiddleware 锁内 await、ServerInstaller 命令注入",
+      "CLAuDE.md 更新为发布状态",
+      "硬编码端口改用 SpecPorts 常量"
+    ]},
+    { "version": "1.4.0", "date": "2026-07-31", "changes": [
+      "endpoints[].auth 从 boolean 升级为字符串枚举 (token|public|localhost|message)",
+      "补齐 11 个未注册端点：/admin×5 + /api/trash×3 + /api/version + /api/cert-fingerprint + /pair",
+      "HttpErrorCode 新增 INVALID_DEVICE_ID (400)",
+      "新增 api.errorResponse 统一错误体格式（消除控制器2字段 vs 中间件3字段不一致）",
+      "新增 api.responses 段：定义 5 个 API 响应包装类型",
+      "api.websocket 新增 authMode: message（明确 /ws 认证在首条消息，非 HTTP 头）",
+      "config: 新增 httpPort: 8443, udpDiscoveryPort: 8450",
+      "entities.SyncQueue.fields 新增 TargetPath (TEXT nullable, 客户端重命名目标)"
+    ]},
+    { "version": "1.3.0", "date": "2026-07-28", "changes": ["所有文件大小字段 csharpType: long，防止 >2GB 截断"] },
+    { "version": "1.0.0", "date": "2026-07-28", "changes": ["初始版本"] },
+    { "version": "1.1.0", "date": "2026-07-28", "changes": [
+      "FileState: 标注值 6 为 P3 文件锁定保留位",
+      "QueuePriority: 修正 High 阈值描述，关联 config.queuePriorityThreshold",
+      "Share: 新增 apiMapping、索引声明",
+      "SyncLog: 新增 apiMapping",
+      "VersionRecord: 新增 RestoredFromVersion 字段（回滚溯源）",
+      "新增 ChunkedUpload 实体（分块上传临时状态追踪）",
+      "config: 拆分 smallFileThreshold/largeFileThreshold 为 chunkedUploadThreshold + queuePriorityThreshold（语义独立）",
+      "config: 新增 rateLimitPerMinute、conflictSuffixPattern、chunkedUploadTimeoutMinutes、maxRetryCount、retryBackoffMs",
+      "config: 新增 _comments 段，含 syncignoreFormat 语法规范"
+    ]},
+    { "version": "1.2.0", "date": "2026-07-28", "changes": [
+      "新增 BackupStatus 枚举（Android 照片备份状态）",
+      "ChunkedUpload: 新增 DeviceId 字段 + idx_chunk_device 索引",
+      "api.rateLimit: 添加 _ref 指向 config.rateLimitPerMinute，消除重复定义",
+      "config: 新增 websocketReconnectMaxBackoffSeconds",
+      "config._comments: retryBackoffMs 标注仅用于 HTTP API（非 WebSocket）",
+      "Device.Online: 注释说明 Android 设备始终为 0（不使用 WebSocket）",
+      "BackupLog.Status: 描述引用 BackupStatus 枚举替代内联值",
+      "api.websocket: 心跳字段重命名为 pingIntervalSeconds/pongTimeoutSeconds；新增 _note 说明 Android"
+    ]}
+  ],
+
+  "enums": {
+    "FileState": {
+      "description": "文件同步状态。服务端使用 0-3,7；客户端瞬态 4-5 仅客户端本地使用。值 6 保留（原设计为 Locked，P3 文件锁定功能启用后占用）",
+      "values": [
+        { "name": "Synced",      "value": 0 },
+        { "name": "Modified",    "value": 1 },
+        { "name": "Deleting",    "value": 2 },
+        { "name": "CloudOnly",   "value": 3 },
+        { "name": "Downloading", "value": 4, "scope": "client-only" },
+        { "name": "Uploading",   "value": 5, "scope": "client-only" },
+        { "name": "Conflict",    "value": 7 }
+      ]
+    },
+    "FileType": {
+      "description": "文件类型",
+      "values": [
+        { "name": "File",      "value": 0 },
+        { "name": "Directory", "value": 1 }
+      ]
+    },
+    "SyncOperation": {
+      "description": "同步操作类型",
+      "values": [
+        { "name": "Upload",  "value": 0 },
+        { "name": "Download","value": 1 },
+        { "name": "Delete",  "value": 2 },
+        { "name": "Rename",  "value": 3 },
+        { "name": "Restore", "value": 4 }
+      ]
+    },
+    "QueuePriority": {
+      "description": "传输队列优先级。小文件优先传输以提升感知速度",
+      "values": [
+        { "name": "Normal", "value": 0 },
+        { "name": "High",   "value": 1, "note": "文件字节数 < queuePriorityThreshold（独立于分块/续传阈值）" }
+      ]
+    },
+    "LogResult": {
+      "description": "同步日志结果",
+      "values": [
+        { "name": "Success",  "value": 0 },
+        { "name": "Conflict", "value": 1 },
+        { "name": "Error",    "value": 2 }
+      ]
+    },
+    "BackupStatus": {
+      "description": "Android 照片备份状态",
+      "values": [
+        { "name": "Pending",    "value": 0 },
+        { "name": "Uploading",  "value": 1 },
+        { "name": "Done",       "value": 2 },
+        { "name": "Failed",     "value": 3 }
+      ]
+    },
+    "WebSocketEvent": {
+      "description": "WebSocket 事件类型",
+      "values": [
+        "auth", "auth_ok", "auth_error",
+        "ping", "pong",
+        "file_changed", "file_deleted", "file_renamed", "conflict"
+      ]
+    },
+    "HttpErrorCode": {
+      "description": "API 错误码——所有错误响应必须引用此枚举，禁止在代码中手写错误码字符串",
+      "values": [
+        { "http": 400, "code": "BAD_REQUEST",          "retry": false },
+        { "http": 400, "code": "INVALID_DEVICE_ID",     "retry": false, "note": "设备ID格式无效或长度为0" },
+        { "http": 401, "code": "UNAUTHORIZED",          "retry": false },
+        { "http": 404, "code": "NOT_FOUND",             "retry": false },
+        { "http": 409, "code": "CONFLICT",              "retry": true,  "note": "拉取最新后重传" },
+        { "http": 413, "code": "PAYLOAD_TOO_LARGE",     "retry": true,  "note": "改用分块上传" },
+        { "http": 429, "code": "RATE_LIMITED",          "retry": true,  "note": "Retry-After 头指示等待秒数" },
+        { "http": 500, "code": "INTERNAL_ERROR",         "retry": true  },
+        { "http": 503, "code": "SERVICE_UNAVAILABLE",    "retry": true  }
+      ]
+    }
+  },
+
+  "entities": {
+    "FileEntry": {
+      "description": "服务端文件索引。每行一个文件或目录。Path 为主键。",
+      "table": "FileEntry",
+      "fields": [
+        { "name": "Path",          "type": "TEXT",    "nullable": false, "role": "PK",   "description": "相对同步根的路径，以 / 开头。目录以 / 结尾" },
+        { "name": "Type",          "type": "INTEGER", "nullable": false, "role": "",     "description": "FileType 枚举" },
+        { "name": "CurrentHash",   "type": "TEXT",    "nullable": true,  "role": "",     "description": "当前版本 SHA-256 (64 hex)。目录为 NULL" },
+        { "name": "CurrentSize",   "type": "INTEGER", "nullable": false, "role": "",     "csharpType": "long", "description": "当前版本字节数。目录为 0。默认 0" },
+        { "name": "Version",       "type": "INTEGER", "nullable": false, "role": "IDX",  "description": "当前版本号。全局单调递增。默认 1" },
+        { "name": "LastModified",  "type": "TEXT",    "nullable": false, "role": "IDX",  "description": "ISO 8601 UTC 时间戳" },
+        { "name": "State",         "type": "INTEGER", "nullable": false, "role": "IDX",  "description": "FileState 枚举。默认 0 (Synced)" },
+        { "name": "CreatedAt",     "type": "TEXT",    "nullable": false, "role": "",     "description": "首次创建时间 (UTC)" }
+      ],
+      "indexes": [
+        "idx_fileentry_state   ON FileEntry(State)",
+        "idx_fileentry_type    ON FileEntry(Type)",
+        "idx_fileentry_version ON FileEntry(Version)"
+      ],
+      "apiMapping": {
+        "Path": "path",
+        "Type": "type",
+        "CurrentHash": "hash",
+        "CurrentSize": "size",
+        "Version": "version",
+        "LastModified": "lastModified",
+        "State": "state"
+      }
+    },
+
+    "VersionRecord": {
+      "description": "文件版本历史。保留最近 N 个版本（默认 5）。",
+      "table": "VersionRecord",
+      "fields": [
+        { "name": "Id",          "type": "INTEGER", "nullable": false, "role": "PK AUTOINCREMENT" },
+        { "name": "FilePath",    "type": "TEXT",    "nullable": false, "role": "FK→FileEntry(Path) IDX", "description": "关联文件路径" },
+        { "name": "Version",     "type": "INTEGER", "nullable": false, "role": "IDX", "description": "该记录对应的版本号" },
+        { "name": "Hash",        "type": "TEXT",    "nullable": false, "role": "",    "description": "该版本 SHA-256" },
+        { "name": "Size",        "type": "INTEGER", "nullable": false, "role": "",    "csharpType": "long", "description": "该版本字节数" },
+        { "name": "StoragePath", "type": "TEXT",    "nullable": false, "role": "",    "description": "版本文件在 .versions/ 中的路径" },
+        { "name": "Timestamp",   "type": "TEXT",    "nullable": false, "role": "IDX", "description": "版本创建时间 (UTC)" },
+        { "name": "DeviceId",    "type": "TEXT",    "nullable": false, "role": "FK→Device(Id)", "description": "创建设备" },
+        { "name": "RestoredFromVersion", "type": "INTEGER", "nullable": true, "role": "", "description": "回滚操作专属：回滚自哪个版本号。普通上传为 NULL" }
+      ],
+      "indexes": [
+        "idx_version_file   ON VersionRecord(FilePath, Version DESC)",
+        "idx_version_device ON VersionRecord(DeviceId)",
+        "idx_version_ts     ON VersionRecord(Timestamp)"
+      ],
+      "apiMapping": {
+        "Version": "version",
+        "Hash": "hash",
+        "Size": "size",
+        "Timestamp": "timestamp",
+        "DeviceId": "deviceId",
+        "RestoredFromVersion": "restoredFromVersion"
+      }
+    },
+
+    "Device": {
+      "description": "设备注册。首次连接时创建。",
+      "table": "Device",
+      "fields": [
+        { "name": "Id",           "type": "TEXT",    "nullable": false, "role": "PK",   "description": "GUID，客户端首次连接时生成" },
+        { "name": "Name",         "type": "TEXT",    "nullable": false, "role": "",     "description": "用户可读名称" },
+        { "name": "Person",       "type": "TEXT",    "nullable": true,  "role": "",     "description": "设备所属人。仅展示，不参与权限" },
+        { "name": "LastSeen",     "type": "TEXT",    "nullable": false, "role": "IDX",  "description": "最后在线时间 (UTC)" },
+        { "name": "Online",       "type": "INTEGER", "nullable": false, "role": "",     "description": "0=离线, 1=在线（WebSocket 连接状态）。Android 设备不使用 WebSocket，始终为 0" },
+        { "name": "RegisteredAt", "type": "TEXT",    "nullable": false, "role": "",     "description": "首次注册时间" }
+      ],
+      "apiMapping": {
+        "Id": "deviceId",
+        "Name": "name",
+        "Person": "person",
+        "LastSeen": "lastSeen",
+        "Online": "online"
+      }
+    },
+
+    "Share": {
+      "description": "文件分享链接。",
+      "table": "Share",
+      "fields": [
+        { "name": "Id",            "type": "TEXT",    "nullable": false, "role": "PK",   "description": "分享 ID (32 hex 随机)" },
+        { "name": "FilePath",      "type": "TEXT",    "nullable": false, "role": "IDX",  "description": "分享的文件路径" },
+        { "name": "PasswordHash",  "type": "TEXT",    "nullable": true,  "role": "",     "description": "密码 SHA-256。NULL=无密码" },
+        { "name": "ExpiresAt",     "type": "TEXT",    "nullable": true,  "role": "IDX",  "description": "过期时间 (UTC)。NULL=永不过期" },
+        { "name": "MaxDownloads",  "type": "INTEGER", "nullable": true,  "role": "",     "description": "最大下载次数。NULL=不限" },
+        { "name": "UsedDownloads", "type": "INTEGER", "nullable": false, "role": "",     "description": "已用下载次数。默认 0" },
+        { "name": "CreatedAt",     "type": "TEXT",    "nullable": false, "role": "IDX",  "description": "创建时间" },
+        { "name": "CreatedBy",     "type": "TEXT",    "nullable": false, "role": "",     "description": "创建设备 ID" }
+      ],
+      "indexes": [
+        "idx_share_filepath ON Share(FilePath)",
+        "idx_share_expires   ON Share(ExpiresAt)",
+        "idx_share_created   ON Share(CreatedAt)"
+      ],
+      "apiMapping": {
+        "Id": "shareId",
+        "FilePath": "filePath",
+        "ExpiresAt": "expiresAt",
+        "MaxDownloads": "maxDownloads",
+        "UsedDownloads": "usedDownloads",
+        "CreatedAt": "createdAt"
+      }
+    },
+
+    "SyncLog": {
+      "description": "同步操作审计日志。P2 阶段新增。",
+      "table": "SyncLog",
+      "fields": [
+        { "name": "Id",        "type": "INTEGER", "nullable": false, "role": "PK AUTOINCREMENT" },
+        { "name": "FilePath",  "type": "TEXT",    "nullable": false, "role": "IDX", "description": "文件路径" },
+        { "name": "Operation", "type": "INTEGER", "nullable": false, "role": "",    "description": "SyncOperation 枚举" },
+        { "name": "DeviceId",  "type": "TEXT",    "nullable": false, "role": "",    "description": "操作来源设备" },
+        { "name": "Result",    "type": "INTEGER", "nullable": false, "role": "",    "description": "LogResult 枚举" },
+        { "name": "Details",   "type": "TEXT",    "nullable": true,  "role": "",    "description": "附加信息" },
+        { "name": "CreatedAt", "type": "TEXT",    "nullable": false, "role": "IDX", "description": "操作时间" }
+      ],
+      "indexes": [
+        "idx_log_time ON SyncLog(CreatedAt DESC)",
+        "idx_log_file ON SyncLog(FilePath)"
+      ],
+      "apiMapping": {
+        "Id": "id",
+        "FilePath": "filePath",
+        "Operation": "operation",
+        "DeviceId": "deviceId",
+        "Result": "result",
+        "Details": "details",
+        "CreatedAt": "createdAt"
+      }
+    },
+
+    "SyncQueue": {
+      "description": "客户端持久化传输队列。",
+      "table": "SyncQueue",
+      "fields": [
+        { "name": "Id",          "type": "INTEGER", "nullable": false, "role": "PK AUTOINCREMENT" },
+        { "name": "FilePath",    "type": "TEXT",    "nullable": false, "role": "IDX" },
+        { "name": "Operation",   "type": "INTEGER", "nullable": false, "role": "",    "description": "SyncOperation 枚举" },
+        { "name": "Priority",    "type": "INTEGER", "nullable": false, "role": "",    "description": "QueuePriority 枚举。默认 0" },
+        { "name": "BaseVersion", "type": "INTEGER", "nullable": true,  "role": "",    "description": "冲突检测用" },
+        { "name": "FileSize",    "type": "INTEGER", "nullable": true,  "role": "",    "csharpType": "long", "description": "进度估算用" },
+        { "name": "TargetPath",  "type": "TEXT",    "nullable": true,  "role": "",    "description": "重命名操作的目标路径。Upload/Download/Delete 为 NULL" },
+        { "name": "RetryCount",  "type": "INTEGER", "nullable": false, "role": "",    "description": "默认 0" },
+        { "name": "LastError",   "type": "TEXT",    "nullable": true,  "role": "" },
+        { "name": "CreatedAt",   "type": "TEXT",    "nullable": false, "role": "IDX", "description": "FIFO 排序依据" }
+      ],
+      "indexes": [
+        "idx_queue_sort ON SyncQueue(Priority DESC, CreatedAt ASC)"
+      ]
+    },
+
+    "RemoteSnapshot": {
+      "description": "客户端本地缓存的远程文件树快照。",
+      "table": "RemoteSnapshot",
+      "fields": [
+        { "name": "Path",    "type": "TEXT",    "nullable": false, "role": "PK" },
+        { "name": "Type",    "type": "INTEGER", "nullable": false, "role": "",   "description": "FileType 枚举" },
+        { "name": "Hash",    "type": "TEXT",    "nullable": true  },
+        { "name": "Size",    "type": "INTEGER", "nullable": false, "role": "",   "csharpType": "long", "description": "默认 0" },
+        { "name": "Version", "type": "INTEGER", "nullable": false, "role": "",   "description": "默认 0" },
+        { "name": "State",   "type": "INTEGER", "nullable": false, "role": "",   "description": "FileState 枚举。默认 0" }
+      ]
+    },
+
+    "SyncCursor": {
+      "description": "客户端同步游标。单行表。",
+      "table": "SyncCursor",
+      "fields": [
+        { "name": "Id",             "type": "INTEGER", "nullable": false, "role": "PK",  "description": "固定为 1" },
+        { "name": "LastMaxVersion", "type": "INTEGER", "nullable": false, "role": "",    "description": "上次同步到的全局版本号。默认 0" },
+        { "name": "LastSyncAt",     "type": "TEXT",    "nullable": true,  "role": "",    "description": "上次成功同步时间" }
+      ]
+    },
+
+    "BackupLog": {
+      "description": "Android 照片备份记录。",
+      "table": "BackupLog",
+      "fields": [
+        { "name": "Id",         "type": "INTEGER", "nullable": false, "role": "PK AUTOINCREMENT" },
+        { "name": "LocalUri",   "type": "TEXT",    "nullable": false, "role": "IDX", "description": "本地 MediaStore URI" },
+        { "name": "RemotePath", "type": "TEXT",    "nullable": false, "role": "",    "description": "上传后的服务端路径" },
+        { "name": "FileHash",   "type": "TEXT",    "nullable": false, "role": "",    "description": "SHA-256（去重依据）" },
+        { "name": "FileSize",   "type": "INTEGER", "nullable": false, "csharpType": "long", "role": "" },
+        { "name": "Status",     "type": "INTEGER", "nullable": false, "role": "",    "description": "BackupStatus 枚举。默认 0 (Pending)" },
+        { "name": "CreatedAt",  "type": "TEXT",    "nullable": false, "role": "" }
+      ]
+    },
+
+    "OfflineCache": {
+      "description": "Android 离线收藏缓存。",
+      "table": "OfflineCache",
+      "fields": [
+        { "name": "Path",      "type": "TEXT",    "nullable": false, "role": "PK" },
+        { "name": "LocalPath", "type": "TEXT",    "nullable": false, "role": "",   "description": "本地缓存文件绝对路径" },
+        { "name": "FileHash",  "type": "TEXT",    "nullable": false, "role": "",   "description": "缓存版本哈希（判断是否过期）" },
+        { "name": "FileSize",  "type": "INTEGER", "nullable": false, "csharpType": "long", "role": "" },
+        { "name": "CachedAt",  "type": "TEXT",    "nullable": false, "role": "" }
+      ]
+    },
+
+    "ChunkedUpload": {
+      "description": "分块上传临时状态。用于断点续传追踪。全部块接收并合并后删除此记录。",
+      "table": "ChunkedUpload",
+      "fields": [
+        { "name": "FilePath",       "type": "TEXT",    "nullable": false, "role": "PK",   "description": "目标文件路径" },
+        { "name": "DeviceId",       "type": "TEXT",    "nullable": false, "role": "IDX",  "description": "发起上传的设备 ID。用于区分多设备同时上传同一文件" },
+        { "name": "FileHash",       "type": "TEXT",    "nullable": false, "role": "",     "description": "完整文件 SHA-256（去重和完整性校验依据）" },
+        { "name": "TotalChunks",    "type": "INTEGER", "nullable": false, "role": "",     "description": "总块数" },
+        { "name": "ReceivedChunks", "type": "TEXT",    "nullable": false, "role": "",     "description": "JSON 数组，已收到的块索引列表，如 [0,1,3]" },
+        { "name": "TempPath",       "type": "TEXT",    "nullable": false, "role": "",     "description": "合并前的临时文件路径（.tmp）" },
+        { "name": "BaseVersion",    "type": "INTEGER", "nullable": false, "role": "",     "description": "上传基准版本号" },
+        { "name": "LastModified",   "type": "TEXT",    "nullable": false, "role": "",     "description": "文件最后修改时间" },
+        { "name": "CreatedAt",      "type": "TEXT",    "nullable": false, "role": "IDX",  "description": "首块到达时间。用于清理超时未完成的上传" }
+      ],
+      "indexes": [
+        "idx_chunk_device  ON ChunkedUpload(DeviceId)",
+        "idx_chunk_created ON ChunkedUpload(CreatedAt)"
+      ]
+    },
+
+    "AppConfig": {
+      "description": "服务端键值配置。",
+      "table": "AppConfig",
+      "fields": [
+        { "name": "Key",   "type": "TEXT", "nullable": false, "role": "PK" },
+        { "name": "Value", "type": "TEXT", "nullable": false, "role": "" }
+      ],
+      "predefinedKeys": {
+        "token_hash":              "SHA-256(家庭Token)",
+        "cert_fingerprint":        "自签证书 SHA-256 指纹",
+        "max_versions":            "保留版本数。默认 '5'",
+        "scan_interval_minutes":   "定时扫描间隔。默认 '5'",
+        "server_version":          "服务端版本号",
+        "global_version":          "全局单调版本号计数器"
+      }
+    }
+  },
+
+  "api": {
+    "baseUrl": "http://{host}:8443",
+    "authHeader": "Authorization: Bearer {token}",
+    "deviceHeader": "X-Device-Id: {deviceId}",
+    "description": "端点认证模式: token=需Bearer头, public=无需认证, localhost=仅回环地址, message=首条消息认证(WebSocket专用)",
+    "endpoints": [
+      { "method": "GET",    "path": "/api/health",                          "auth": "public",    "description": "健康检查" },
+      { "method": "GET",    "path": "/api/version",                         "auth": "public",    "description": "服务端版本信息" },
+      { "method": "GET",    "path": "/api/cert-fingerprint",                "auth": "token",     "description": "自签证书 SHA-256 指纹" },
+      { "method": "GET",    "path": "/pair",                                "auth": "localhost", "description": "设备配对页面（显示 Token，仅本地访问）" },
+      { "method": "GET",    "path": "/api/files/tree",                      "auth": "token",     "description": "文件树（支持 sinceVersion/limit/cursor 分页）" },
+      { "method": "POST",   "path": "/api/files/upload",                    "auth": "token",     "description": "上传文件（multipart）" },
+      { "method": "GET",    "path": "/api/files/download",                  "auth": "token",     "description": "下载文件（stream）" },
+      { "method": "POST",   "path": "/api/files/delete",                    "auth": "token",     "description": "删除文件/文件夹（递归）" },
+      { "method": "POST",   "path": "/api/files/move",                      "auth": "token",     "description": "移动/重命名" },
+      { "method": "POST",   "path": "/api/files/mkdir",                     "auth": "token",     "description": "创建文件夹" },
+      { "method": "POST",   "path": "/api/files/upload/chunk",              "auth": "token",     "description": "分块上传" },
+      { "method": "GET",    "path": "/api/files/upload/chunk/status",       "auth": "token",     "description": "查询分块上传进度" },
+      { "method": "GET",    "path": "/api/files/search",                    "auth": "token",     "description": "文件名搜索" },
+      { "method": "GET",    "path": "/api/thumbnails",                      "auth": "token",     "description": "图片缩略图" },
+      { "method": "GET",    "path": "/api/versions",                        "auth": "token",     "description": "版本历史列表" },
+      { "method": "POST",   "path": "/api/versions/restore",                "auth": "token",     "description": "回滚到历史版本" },
+      { "method": "GET",    "path": "/api/devices",                         "auth": "token",     "description": "设备列表" },
+      { "method": "POST",   "path": "/api/shares",                          "auth": "token",     "description": "创建分享链接" },
+      { "method": "DELETE", "path": "/api/shares/{shareId}",                "auth": "token",     "description": "撤销分享链接" },
+      { "method": "GET",    "path": "/share/{shareId}",                     "auth": "public",    "description": "访问分享页面（无需 Token）" },
+      { "method": "GET",    "path": "/share/{shareId}/download",            "auth": "public",    "description": "下载分享文件（?password=xxx）" },
+      { "method": "GET",    "path": "/api/trash",                           "auth": "token",     "description": "回收站文件列表" },
+      { "method": "POST",   "path": "/api/trash/restore",                   "auth": "token",     "description": "恢复回收站文件" },
+      { "method": "DELETE", "path": "/api/trash/empty",                     "auth": "token",     "description": "清空回收站" },
+      { "method": "GET",    "path": "/admin",                               "auth": "localhost", "description": "管理面板首页" },
+      { "method": "GET",    "path": "/admin/api/files",                     "auth": "localhost", "description": "管理面板——文件列表" },
+      { "method": "GET",    "path": "/admin/api/devices",                   "auth": "localhost", "description": "管理面板——设备列表" },
+      { "method": "GET",    "path": "/admin/api/logs",                      "auth": "localhost", "description": "管理面板——同步日志" },
+      { "method": "GET",    "path": "/admin/api/stats",                     "auth": "localhost", "description": "管理面板——统计信息" }
+    ],
+    "websocket": {
+      "endpoint": "ws://{host}:8443/ws",
+      "auth": "连接后首条消息发送 { type: 'auth', token: 'xxx', deviceId: 'xxx' }",
+      "authMode": "message",
+      "heartbeat": { "pingIntervalSeconds": 30, "pongTimeoutSeconds": 60 },
+      "reconnectBackoff": "1s → 2s → 4s → ... max 60s",
+      "reconnectMaxBackoffSeconds": 60,
+      "_note": "authMode=message 表示认证在首条 JSON 消息中完成，非 HTTP Authorization 头。Android 客户端不使用 WebSocket（改用定时 HTTPS 轮询），因此 Device.Online 对 Android 设备始终为 0"
+    },
+    "rateLimit": {
+      "_ref": "config.rateLimitPerMinute",
+      "default": "60 requests/minute/device（文件上传/下载不计入。限流键: 已认证→DeviceId，未认证→RemoteIpAddress）",
+      "retryAfterHeader": "Retry-After"
+    },
+    "errorResponse": {
+      "description": "统一 API 错误响应体格式——所有控制器和中间件必须使用此格式",
+      "shape": {
+        "error": {
+          "code": "HttpErrorCode.code（如 BAD_REQUEST）",
+          "message": "开发者消息（英文技术描述）",
+          "friendlyMessage": "用户友好消息（中文，可安全展示给终端用户）",
+          "detail": "(可选) 调试详情——仅开发环境返回内部异常信息"
+        }
+      }
+    },
+    "responses": {
+      "FileTreeResponse": {
+        "description": "GET /api/files/tree 响应包装",
+        "fields": ["data: FileEntryDto[]", "nextCursor: string?", "hasMore: bool", "maxVersion: int"]
+      },
+      "UploadResponse": {
+        "description": "POST /api/files/upload 响应",
+        "fields": ["ok: bool", "data: { path, version, hash, size, conflictResolved? }"]
+      },
+      "ChunkUploadResponse": {
+        "description": "POST /api/files/upload/chunk 响应",
+        "fields": ["ok: bool", "chunkIndex: int", "received: int", "total: int", "done: bool"]
+      }
+    }
+  },
+
+  "config": {
+    "httpPort": 8443,
+    "udpDiscoveryPort": 8450,
+    "syncRoot": "{用户选择的同步根文件夹}",
+    "hiddenDir": ".cloudpan",
+    "versionsDir": ".versions",
+    "thumbnailsDir": ".thumbnails",
+    "ignoreFile": ".syncignore",
+    "port": 8443,
+    "chunkSize": 4194304,
+    "chunkedUploadThreshold": 10485760,
+    "queuePriorityThreshold": 1048576,
+    "maxVersionsDefault": 5,
+    "scanIntervalMinutes": 5,
+    "androidPollIntervalMinutes": 15,
+    "tokenEntropy": 256,
+    "tokenLength": 64,
+    "rateLimitPerMinute": 60,
+    "conflictSuffixPattern": "_冲突_yyyyMMdd_HHmmss",
+    "maxRetryCount": 10,
+    "retryBackoffMs": [1000, 2000, 4000, 8000, 16000, 32000, 60000, 120000, 240000, 300000],
+    "chunkedUploadTimeoutMinutes": 1440,
+    "websocketReconnectMaxBackoffSeconds": 60,
+    "_comments": {
+      "httpPort": "服务端 HTTP 监听端口。Phase 0 使用纯 HTTP（无 TLS）",
+      "udpDiscoveryPort": "UDP 局域网发现服务端口，响应 CLOUDPAN_DISCOVER 广播",
+      "chunkSize": "分块上传每块字节数（4MB）",
+      "chunkedUploadThreshold": "文件 ≥ 此值使用分块上传，< 此值整文件直传。与 queuePriorityThreshold 独立——大文件也可设为高优先级",
+      "queuePriorityThreshold": "文件 < 此值标记为 High 优先级，优先传输。默认 1MB。独立于分块阈值",
+      "chunkedUploadTimeoutMinutes": "分块上传超时（默认 24h）。超时未完成则清理临时文件",
+      "retryBackoffMs": "HTTP API 请求失败指数退避序列（独立于 WebSocket 重连退避）。达到 maxRetryCount 次后放弃并通知用户",
+      "rateLimitPerMinute": "每设备每分钟 API 调用上限（文件上传/下载不计入）。限流键: 已认证→context.Items[DeviceId]，未认证→RemoteIpAddress",
+      "conflictSuffixPattern": "冲突副本命名模式。占位符：yyyyMMdd=日期, HHmmss=时间。示例：report_冲突_20260728_143000.docx",
+      "syncignoreFormat": ".syncignore 语法：每行一个 glob 模式。支持 *（单层通配）和 **（递归通配）。以 # 开头的行为注释。示例：*.tmp、**/node_modules/、# 这是注释"
+    }
+  }
+}
