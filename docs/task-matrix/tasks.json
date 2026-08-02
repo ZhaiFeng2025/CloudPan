@@ -682,7 +682,7 @@
       "title": "Host 与 Server.UI 解耦，headless 可编译",
       "dimension": "architecture",
       "priority": "P1",
-      "status": "in-progress",
+      "status": "acceptance",
       "batch": 2,
       "findingId": "F-15",
       "dependsOn": [],
@@ -708,7 +708,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
+      "note": "Host 与 Server.UI 解耦（T-015 / F-15 / R-Q3）：Host 不再编译期引用 Server.UI，headless 可编译运行；带 UI 时经 IHostUIBridge 运行期反射接入。\\n设计：Host 定义可选桥契约 IHostUIBridge（RunTrayAsync），UIBridgeLocator 按 AppContext.BaseDirectory 探测 CloudPan.Server.UI.dll，存在即反射实例化桥，否则返回 null 回退 headless；TrayAppRunner（运行模式决策：--tray/--service/非交互→headless）移入 Host；Server.UI 新增 ServerUiBridge : IHostUIBridge 承载原托盘运行逻辑（首启安装向导/ServerWindow/ServerTrayApp/消息循环），依赖方向单向 UI→Host（无循环）；DatabaseInitializer 不再写 ServerTrayApp.Token 静态属性（T-005/T-014 后 token_hash 已入库、token.txt 已写盘，首次启动托盘经 SecretStore.ReadToken 兜底；Token 轮换仍由设置页写静态保证托盘即时显示）。\\n改动文件：新增 CloudPan.Server.Host/Hosting/{IHostUIBridge,UIBridgeLocator,TrayAppRunner}.cs、CloudPan.Server.UI/ServerUiBridge.cs；修改 CloudPan.Server.Host.csproj（移除 UI ProjectReference）、CloudPan.Server.Host/Program.cs（删 using）、Hosting/DatabaseInitializer.cs（删两处 ServerTrayApp.Token 赋值+using）、CloudPan.Server.UI.csproj（+Host 引用、+CopyUiDllToHostOutput 构建后复制 dll 到 Host bin、ServiceController 8.0.0→10.0.10 对齐 NU1605）、Server.UI/{ServerTrayApp(GetToken 注释),ServiceRestartHelper(+using),SettingsPage(+using)}.cs；删除 CloudPan.Server.UI/TrayAppRunner.cs（移入 Host）；修改 ArchitectureDependencyTests.cs（Host 白名单移除 UI、UI 增加 Host、新增 headless 门禁测试 Host程序集_不引用UI_headless可编译）；修改 publish.ps1（Host 单文件发布后 build Server.UI 并复制 Server.UI.dll 到发布目录，headless 部署删除该 dll 即无 UI）。\\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误（10 项目全编译）；dotnet test --filter Architecture 10/10 通过（原 9 + 新增 headless 门禁，含 Host程序集_不引用UI_headless可编译）；全量 dotnet test CloudPan.Tests -c Release 186/186 通过（原 185 + 1）；验收命令 grep -n 'Server.UI' CloudPan.Server.Host/CloudPan.Server.Host.csproj 无匹配（exit 1）；Host 程序集元数据引用不含 UI（deps.json 0 命中）；headless 运行时冒烟验证：真实 CloudPan.Server.exe --service（headless 路径，Server.UI.dll 虽在 bin 但 --service 强制无 UI）启动后 /api/health 返回 {\"status\":\"ok\",...}、进程存活、Kestrel 正常服务。\\n备注：①Server.UI.dll 已复制到 Host bin（CopyUiDllToHostOutput），开发期 bin 直接运行托盘可用；正式发布经 publish.ps1 复制。②冒烟测试发现 --SyncRoot CLI 参数未生效（--Port 生效），经核查 Program.cs 该解析路径本任务未改动，属既有行为，与本任务无关，未处理（可作后续排查项）。",
       "updatedAt": "2026-08-03"
     },
     {
