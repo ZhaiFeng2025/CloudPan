@@ -22,6 +22,17 @@
         "ux": "P1×3",
         "simplicity": "P1×1"
       }
+    },
+    {
+      "batch": 3,
+      "date": "2026-08-03",
+      "conclusion": "v1.1.1 四维审查（批次 3）：功能维度 12 项发现中 11 项与批次 1/2 已 done 任务同源去重（墓碑 T-005、冲突接线 T-006、分享过期 T-007、Migrations T-008、缩略图 T-012、重命名 T-019、分块幂等 T-020、Finalize T-021、设置契约 T-022、选择性同步 T-023、MaxRetryCount T-004），仅存同步根变更失联引导（P2）与 UDP 版本硬编码（P2）。架构维度：认证双实现（Host 中间件与 Core WebSocketHandler 各一份 token_hash 校验）、回收站清理裸手组合根、客户端 ApiClient 16 处路由魔数未契约化。简洁维度延续批次 2 截断承诺：行数门禁架空+超大 UI 类、客户端组合根下沉、两端图标重复。UX 维度：错误透出原始异常、深色模式缺失、Windows 无上传/按需下载、冲突弹窗轰炸。任务依赖：T-031/T-032/T-033/T-036 依赖 T-028（MainWindow 拆分前置，避免在巨型类中改版合并冲突）。截断说明：P0+P1 配额 6 已满、任务 ≤12，Android 删除进回收站（UX P1）、Android Kotlin 生成器（架构 P1）、UI 桥契约下沉与 headless 简化（架构 P2/P3，冲突取舍见下）、RateLimit Timer 泄漏（架构 P2）、FileHasher 位置与转发双入口（简洁 P2）、客户端配置三套收敛（简洁 P2）、死令牌删除（简洁 P2）、配对二维码/设置即时生效/分享页模板化（UX P2）等未纳入，进批次 4。冲突取舍：①T-028 门禁阈值『放宽』vs『严格 ≤400 拆分』——本批选严格方向（移除 UI 豁免后按 1000 门禁拆分 MainWindow/SetupForm），其余 UI 类随后续批次下调阈值；②UI 桥两方案方向相反（架构『下沉 IHostUIBridge 到 Core』vs 简洁『条件编译/独立入口简化』），未纳入本批，下批建议保留下沉方向并消除 UI→Host 唯一反向边；③UDP 版本来源 spec 常量 vs 程序集版本——建议 AssemblyInformationalVersion（反映发布物真实版本）。",
+      "dimensionSummary": {
+        "architecture": "P1×3",
+        "function": "P2×2（其余 11 项与批次 1/2 已 done 同源去重）",
+        "ux": "P2×4",
+        "simplicity": "P1×3"
+      }
     }
   ],
   "findings": [
@@ -216,6 +227,102 @@
       "location": "CloudPan.Server.Host/Controllers/TrashController.cs:68,175-180; FilesController.cs:271-304",
       "problem": "MetaFileName 用户输入直接 Path.Combine 入 trashDir（存在路径穿越读取元数据文件可能）；Download 未显式调 ValidatePath。",
       "why": "R-A5 路径安全统一防线存在未覆盖点，纵深防御不一致。"
+    },
+    {
+      "id": "F-25",
+      "dimension": "architecture",
+      "severity": "P1",
+      "location": "CloudPan.Server.Host/Middleware/TokenAuthMiddleware.cs:73-84,104-167; CloudPan.Server.Core/WebSocket/WebSocketHandler.cs:106-122,397-427",
+      "problem": "Token 验证逻辑（ComputeSha256 + CacheKeys.TokenHash 缓存 + db.AppConfigs 查 token_hash）在 Host 的 TokenAuthMiddleware 与 Core 的 WebSocketHandler 各实现一份；设备自动注册/LastSeen 维护同样在两侧各写一份。",
+      "why": "单一事实来源被破坏：改 token 验证策略/设备注册规则需同步改两处，漏改即产生 HTTP 与 WS 认证行为分叉；Host 中间件直接操作 DbContext/Device 实体，违背『Controller/中间件只做 HTTP 适配、领域逻辑进 Core』架构约束，且难以独立单测。"
+    },
+    {
+      "id": "F-26",
+      "dimension": "architecture",
+      "severity": "P1",
+      "location": "CloudPan.Server.Host/Hosting/BackgroundHostedService.cs:72-115",
+      "problem": "回收站 30 天清理在 Host 组合根里裸手实现：直接 Path.Combine(_syncRoot, \".cloudpan\", \".trash\") 拼路径、手写解析回收站 JSON 元数据（DeletedAt/TrashFileName）、直接 File.Delete，而 CloudPan.Server.Core/Trash/TrashService 已存在回收站领域服务。",
+      "why": "回收站元数据格式与保留策略出现两个事实来源，字段改名/迁移即静默破坏清理；路径构造绕过 Infrastructure/Storage 的 ValidatePath 统一防线，领域逻辑进入组合根，违背『定时任务用 IHostedService、领域逻辑进 Core』约束。"
+    },
+    {
+      "id": "F-27",
+      "dimension": "architecture",
+      "severity": "P1",
+      "location": "CloudPan.Client.Core/Services/ApiClient.cs:63-369",
+      "problem": "HttpClient 接口 ApiClient/IApiClient 为手工编写，全部路由以魔数字符串硬编码（\"/api/files/tree\"、\"/api/files/download\" 等 16 处），未从 shared-spec.json api.endpoints 生成，也未引用 Generated 的 SpecEndpoints；CloudPan.CodeGen 只产出 .g.cs（无 ApiClientGenerator），--verify 无法发现客户端路由与契约的漂移。",
+      "why": "违反契约驱动规则 0：spec 改端点时服务端有 SpecEndpoints 兜底，但客户端 16 处魔数字符串需手工同步，漏改即客户端 404/认证路径失效，且无校验手段。"
+    },
+    {
+      "id": "F-28",
+      "dimension": "simplicity",
+      "severity": "P1",
+      "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs:11-15,54-58,74-80; CloudPan.Client.UI/UI/MainWindow.cs(2522 行); CloudPan.Client.UI/UI/SetupForm.cs(1023 行)",
+      "problem": "行数门禁被制度性架空：IsExcluded 用路径段 \"UI\" 排除了两端 UI 整个项目，而 serviceControllerFiles 白名单仍列着 MainWindow/SetupForm/SettingsForm/ServerInstaller/ServerWindow——这些条目因文件先被 \"UI\" 段排除而永不生效（死白名单）；注释残留 SyncEngine.cs(1431 行) 旧信息；5 个 UI 类实测远超 ≤400 判据（MainWindow 2522 / SetupForm 1023 / ServerInstaller 932 / SettingsForm 625 / ServerWindow 510）。",
+      "why": "量化判据对 UI 层完全失效，超大类继续膨胀；白名单与排除规则自相矛盾，守卫形同虚设，且巨型类使后续 UX 改版（错误归因/深色/上传/冲突聚合）难以落地。"
+    },
+    {
+      "id": "F-29",
+      "dimension": "simplicity",
+      "severity": "P1",
+      "location": "CloudPan.Client.UI/Program.cs:1-534; CloudPan.Client.UI/CloudPan.Client.UI.csproj:26-27",
+      "problem": "客户端组合根 Program.cs 534 行，承载配置解析/DPAPI/数据库完整性检查(PRAGMA quick_check+重建)/ClientDbFactory/健康检查/装配；UI 壳项目直接引用 EF Core Sqlite 与 SQLitePCLRaw.bundle_e_sqlite3 包，CLAUDE.md 定位该层为只渲染壳。",
+      "why": "『UI 只渲染壳』定位被稀释，持久化与启动编排落在入口，UI 背负 EF 依赖，阻碍 headless/复用与单元测试，与服务端薄组合根（<150 行）先例不对齐。"
+    },
+    {
+      "id": "F-30",
+      "dimension": "simplicity",
+      "severity": "P1",
+      "location": "CloudPan.Server.UI/ServerIcons.cs:1-311 vs CloudPan.Client.UI/UI/CloudPanIcon.cs:1-311",
+      "problem": "两端图标文件各 311 行，BuildIcoBytes/RenderBitmap/DrawCloud/DrawBadge/BitmapToIcoData 等方法逐行同源，仅类名与主题色不同，约 280 行重复。",
+      "why": "重复实现累积维护负担：改图标绘制需同步两文件，任一端漏改即渲染漂移，违背『删除/简化优先』使命。"
+    },
+    {
+      "id": "F-31",
+      "dimension": "ux",
+      "severity": "P2",
+      "location": "CloudPan.Client.Core/Services/SyncEngine.Queue.cs:85,108; CloudPan.Client.UI/UI/MainWindow.cs:676-803",
+      "problem": "同步错误透出为原始异常字符串：ErrorOccurred 直接把 HttpRequestException/AggregateException 等底层异常塞给 UI，错误弹窗显示异常原文，无白话原因、无下一步动作；AggregateException 未解包（违反 CLAUDE.md 7.3）。",
+      "why": "零困惑原则要求错误信息『普通人语言 + 下一步动作』；当前错误通路对非技术用户完全不可读，是全家桶中最常触达的挫败点。"
+    },
+    {
+      "id": "F-32",
+      "dimension": "ux",
+      "severity": "P2",
+      "location": "CloudPan.Infrastructure/Design/DesignTokens.cs（浅色组单集）；CloudPan.Client.UI 与 CloudPan.Server.UI 全部窗口",
+      "problem": "深色模式完全缺失：全库无 SystemTheme/UISettings 检测、无令牌级 dark 值切换，Windows 11 深色系统下应用仍强制白底（DesignTokens 仅浅色组）。",
+      "why": "家庭夜间/客厅大屏使用白底刺眼；令牌级深色是网盘产品成熟度标配（Win11 默认即深色）。"
+    },
+    {
+      "id": "F-33",
+      "dimension": "ux",
+      "severity": "P2",
+      "location": "CloudPan.Client.UI/UI/FileBrowserView.cs 工具栏（无上传）；CloudPan.Client.UI/UI/MainWindow.cs:1876-1895（OpenFile）",
+      "problem": "Windows 文件浏览无任何上传入口（无『上传』按钮、无拖拽 Drop 支持），仅靠 Explorer 复制进同步目录；CloudOnly 文件双击只写一条日志『该文件仅在云端，未下载到本地，暂无法打开』，无『下载到本机』按钮——选择性同步排除的文件在 Windows 端永远无法按需取回。",
+      "why": "家庭用户从手机/他人设备收到的文件在台式机取回困难；仅云端文件无法下载取回，违背常用操作 ≤3 步与零困惑。"
+    },
+    {
+      "id": "F-34",
+      "dimension": "function",
+      "severity": "P2",
+      "location": "CloudPan.Server.UI/SettingsPage.cs:388-411",
+      "problem": "修改同步根后新目录创建全新 DB + 全新 Token；已配置的 Windows 客户端仍指向旧目录且持旧 Token → 全部 401/失联。设置页警告了旧数据不迁移、重启生效，但未引导所有客户端需重新配置新地址/新 Token。",
+      "why": "家庭场景改同步根是低频但真实操作；失败路径（客户端重配置）无引导，体验割裂，设备静默断连。"
+    },
+    {
+      "id": "F-35",
+      "dimension": "function",
+      "severity": "P2",
+      "location": "CloudPan.Server.Host/Hosting/UdpDiscoveryHostedService.cs:29-31",
+      "problem": "UDP 发现响应 serverInfo JSON 硬编码 version=0.2.0，与实际 v1.0.0 发布版本不符；host 用 Environment.MachineName，部分家庭网络无法解析主机名时发现失败。",
+      "why": "硬编码陈旧版本误导客户端；主机名解析失败影响发现，局域网发现是家庭多设备接入主路径。"
+    },
+    {
+      "id": "F-36",
+      "dimension": "ux",
+      "severity": "P2",
+      "location": "CloudPan.Client.UI/UI/MainWindow.cs:2033-2190（ShowConflictResolution）; CloudPan.Client.UI/UI/TrayAppContext.cs:113-128",
+      "problem": "冲突检测即弹模态 ShowDialog：批量冲突时对话框逐个堆叠（posted 回调在嵌套消息循环中再次 ShowDialog），主窗口隐藏到托盘时也强行弹到最前；选项『保留本地/保留远程/保留两者』为技术术语；RemoteModifiedTime 恒为 null，『远程版本』面板永远显示未知，用户在无远程信息下被迫决策。",
+      "why": "冲突是家庭场景最困惑时刻，信息不对称+术语+模态轰炸叠加，老人面对二选一不知所措，违反零困惑原则。"
     }
   ],
   "tasks": [
@@ -810,7 +917,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "分享创建/撤销 + 版本历史回滚 UI 入口（F-18/T-018）：服务端 /api/shares、/api/versions、/share/{id} 已就绪（T-002 下沉领域服务），客户端补齐 IApiClient/ApiClient 端点 + SyncEngine 转发 + FileBrowserView/MainWindow UI + 托盘入口。\n①契约（规则 0）：shared-spec.json api.responses 新增 ShareCreateResponse/ShareCreateData/ShareRevokeResponse/ShareRevokeData/VersionItem/VersionListResponse/VersionRestoreResponse/VersionRestoreData，重跑 CodeGen 生成 CloudPan.Contract/Generated/ApiResponses.g.cs——客户端不手抄分享/版本 DTO，改 spec 一处生效。\n②ApiClient/IApiClient：新增 CreateShareAsync（POST /api/shares，expiresAt 传 ISO 8601 UTC O 格式）、RevokeShareAsync（DELETE /api/shares/{shareId}，404 返回 false）、GetVersionsAsync（GET /api/versions）、RestoreVersionAsync（POST /api/versions/restore）。\n③新增 SyncEngine.Share.cs / SyncEngine.Versions.cs 转发（容错：失败返回 null/false/空列表，不抛给 UI）。\n④FileBrowserView：工具栏新增「分享」「版本」按钮（仅选中非目录项可用，目录/未选中禁用），新增 ShareRequested/VersionHistoryRequested 事件；UpdateSelection 联动启用。\n⑤MainWindow：ShowShareDialog——≤3 步（浏览选中→密码/过期→生成并复制链接），生成后提供「复制链接」+「撤销分享」（服务端无分享列表端点，故管理分享=生成后直接撤销）；ShowVersionHistoryDialogAsync——版本列表（版本/大小/时间/设备）+「回滚到选中版本」带确认，回滚后刷新浏览；公开 OpenShareForSelection/OpenVersionHistoryForSelection 供托盘复用。\n⑥TrayAppContext：托盘菜单新增「分享当前文件…」「版本历史…」（对文件浏览当前选中文件生效，未选中提示）。\n⑦测试：MockApiClient 增分享/版本 mock（Shares 字典 / VersionHistory 字典，CreateShare 模拟文件不存在 404，Restore 模拟回滚提升版本号并记录来源）；SyncEngineTests 增 7 用例（创建成功返回链接与分享ID / 文件不存在返回null / 撤销成功 / 分享不存在返回false / 版本列表 / 回滚成功返回新版本号 / 版本不存在返回null）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误（10 项目全编译）；dotnet test CloudPan.Tests -c Release 201/201 通过（原 194 + 新增 7）；--filter Share|Version 28/28 通过；架构测试 10/10 通过；dotnet run --project CloudPan.CodeGen -- --verify 7 项全部一致。验收标准①为手动项（文件→分享 ≤3 步得链接；版本历史可回滚），由验收者实机验证。\n【依赖说明】T-013 已 done（用户实机验收通过），dependsOn 满足。",
+      "note": "分享创建/撤销 + 版本历史回滚 UI 入口（F-18/T-018）：服务端 /api/shares、/api/versions、/share/{id} 已就绪（T-002 下沉领域服务），客户端补齐 IApiClient/ApiClient 端点 + SyncEngine 转发 + FileBrowserView/MainWindow UI + 托盘入口。\n①契约（规则 0）：shared-spec.json api.responses 新增 ShareCreateResponse/ShareCreateData/ShareRevokeResponse/ShareRevokeData/VersionItem/VersionListResponse/VersionRestoreResponse/VersionRestoreData，重跑 CodeGen 生成 CloudPan.Contract/Generated/ApiResponses.g.cs——客户端不手抄分享/版本 DTO，改 spec 一处生效。\n②ApiClient/IApiClient：新增 CreateShareAsync（POST /api/shares，expiresAt 传 ISO 8601 UTC O 格式）、RevokeShareAsync（DELETE /api/shares/{shareId}，404 返回 false）、GetVersionsAsync（GET /api/versions）、RestoreVersionAsync（POST /api/versions/restore）。\n③新增 SyncEngine.Share.cs / SyncEngine.Versions.cs 转发（容错：失败返回 null/false/空列表，不抛给 UI）。\n④FileBrowserView：工具栏新增「分享」「版本」按钮（仅选中非目录项可用，目录/未选中禁用），新增 ShareRequested/VersionHistoryRequested 事件；UpdateSelection 联动启用。\n⑤MainWindow：ShowShareDialog——≤3 步（浏览选中→密码/过期→生成并复制链接），生成后提供「复制链接」+「撤销分享」（服务端无分享列表端点，故管理分享=生成后直接撤销）；ShowVersionHistoryDialogAsync——版本列表（版本/大小/时间/设备）+「回滚到选中版本」带确认，回滚后刷新浏览；公开 OpenShareForSelection/OpenVersionHistoryForSelection 供托盘复用。\n⑥TrayAppContext：托盘菜单新增「分享当前文件…」「版本历史…」（对文件浏览当前选中文件生效，未选中提示）。\n⑦测试：MockApiClient 增分享/版本 mock（Shares 字典 / VersionHistory 字典，CreateShare 模拟文件不存在 404，Restore 模拟回滚提升版本号并记录来源）；SyncEngineTests 增 7 用例（创建成功返回链接与分享ID / 文件不存在返回null / 撤销成功 / 分享不存在返回false / 版本列表 / 回滚成功返回新版本号 / 版本不存在返回null）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误（10 项目全编译）；dotnet test CloudPan.Tests -c Release 201/201 通过（原 194 + 新增 7）；--filter Share|Version 28/28 通过；架构测试 10/10 通过；dotnet run --project CloudPan.CodeGen -- --verify 7 项全部一致。验收标准①为手动项（文件→分享 ≤3 步得链接；版本历史可回滚），由验收者实机验证。\n【依赖说明】T-013 已 done（用户实机验收通过），dependsOn 满足。\n【验收结论 2026-08-03】task-verifier 独立裁决：本任务验收标准 1 条手动 + 1 条自动；子 Agent 无法执行 UI 实机检查，按流程 Step 3' 保持 status=acceptance 待人工确认（不置 done、不放行）。\n验收标准②『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error（10 项目全编译，Time Elapsed 8.40s）。附加自动核查：『dotnet run --project CloudPan.CodeGen -- --verify』7 项全部一致（枚举/DTO/实体/清单/错误响应/API响应/设置）校验通过；『dotnet test CloudPan.Tests -c Release --filter Share|Version』28/28 通过（Failed 0 / Passed 28 / Skipped 0），含 T-018 新增 7 用例（CreateShare_成功_返回链接与分享ID / CreateShare_文件不存在_返回null / RevokeShare_撤销成功_返回true / RevokeShare_分享不存在_返回false / GetVersionHistory_返回版本列表 / RestoreVersion_回滚成功_返回新版本号 / RestoreVersion_版本不存在_返回null）。\n验收标准①（手动）代码路径/逻辑存在性核查全过：\n①ShowShareDialog ≤3 步——MainWindow.cs:1393-1653 分享对话框：第 1 步浏览选中文件（只读展示路径 :1420-1428）、第 2 步设置访问密码(:1431-1438)与过期时间(:1441-1466，永不过期/1/7/30 天后)、第 3 步点「生成分享链接」→ _engine.CreateShareAsync 返回 ShareCreateData(:1563-1603，expiresAt 按 UTC O 格式 :1569-1575)→ 结果区显示链接(:1586)+「复制链接」Clipboard.SetText(:1606-1618)——文件→分享到得链接共 3 步，≤3 步达标；撤销分享 OnRevokeClick(:1620-1649) 经 _engine.RevokeShareAsync 撤销成功即隐藏结果区（服务端无分享列表端点，「管理分享」=生成后直接撤销，注释 :1389-1392 明确）。\n②版本历史可回滚——ShowVersionHistoryDialogAsync(:1656-1807) 调 _engine.GetVersionHistoryAsync 取列表(:1659)，ListView 展示版本/大小/修改时间/设备(:1681-1695)，「回滚到选中版本」(:1747-1797)带确认（当前版本先存档 :1770-1775）→ _engine.RestoreVersionAsync 回滚(:1777)→ 成功提示并 LoadBrowserAsync 刷新(:1789)，异常/失败均有提示与容错。\n③托盘入口——TrayAppContext.cs:288-298 菜单新增「分享当前文件…」（ShowWindow+OpenShareForSelection）与「版本历史…」（ShowWindow+OpenVersionHistoryForSelection）；MainWindow.OpenShareForSelection(:1810-1820)/OpenVersionHistoryForSelection(:1823-1840) 对文件浏览当前选中文件生效、目录/未选中提示。\n④文件浏览详情入口——FileBrowserView.cs:204-229 工具栏新增「分享」「版本」按钮（仅选中非目录项可用 :410-416 UpdateSelection 中 _shareButton.Enabled = item!=null && !item.IsDirectory、_versionButton 同理），点击触发 ShareRequested/VersionHistoryRequested 事件(:37/:40、:628/:637)→ MainWindow FileBrowser_ShareRequested/FileBrowser_VersionHistoryRequested(:1364-1387) 转发打开对话框。\n⑤端点接线——ApiClient.cs:241 CreateShareAsync POST /api/shares、:251 RevokeShareAsync DELETE /api/shares/{id}（404 返回 false）、:264 GetVersionsAsync GET /api/versions?path=&limit=、:274 RestoreVersionAsync POST /api/versions/restore；SyncEngine.Share.cs/Versions.cs 转发并容错（失败返回 null/false/空列表不抛给 UI）。\n⑥契约合规——ApiResponses.g.cs 头部 AUTO-GENERATED from shared-spec.json v1.1.0 标注，含 ShareCreateResponse/ShareCreateData/ShareRevokeResponse/ShareRevokeData/VersionItem/VersionListResponse/VersionRestoreResponse/VersionRestoreData 8 个 spec 生成类型，客户端不手抄 DTO。\n⑦分层合规——转发逻辑在 Client.Core（SyncEngine 部分类），UI 只渲染，符合目标四层架构。\n待人工确认清单：①实机运行 Windows 客户端，文件浏览选中文件点「分享」→ ≤3 步得到分享链接并可复制（密码/过期设置生效）；②生成后「撤销分享」链接立即失效；③选中文件点「版本」→ 版本历史对话框列出历史版本（版本/大小/时间/设备）；④选中某历史版本点「回滚到选中版本」→ 确认后文件内容回滚到该版本且浏览刷新；⑤托盘菜单「分享当前文件…」「版本历史…」对当前选中文件生效。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -992,6 +1099,467 @@
       "statusReason": null,
       "note": "F-24/T-024 回收站元数据文件名路径穿越修复（R-A5 路径安全统一防线无覆盖点，纵深防御一致）。\n①TrashService.RestoreAsync：MetaFileName 为用户输入，先经 Path.GetFileName 归一，再校验禁止目录分隔符（'/' 或 '\\\\'，防 ../、..\\\\ 路径穿越读取 trashDir 外文件）——含分隔符/绝对路径/.或.. 一律返回 BAD_REQUEST，不再裸拼 Path.Combine(trashDir, metaFileName)；纵深防御：回收站实体文件名（entry.TrashFileName）同样经 GetFileName 归一、恢复目标路径（entry.OriginalPath）经 _storage.ValidatePath 校验，防元数据被篡改写入越界路径。\n②FileOperationService.DownloadAsync：下载路径显式经 _storage.ValidatePath（与 Delete/Move/Mkdir 一致），防 ../ 越界读取同步根外文件（如 .cloudpan 元数据/服务端配置）。\n改动文件：CloudPan.Server.Core/Trash/TrashService.cs；CloudPan.Server.Core/Files/FileOperationService.cs；CloudPan.Tests/Server/Services/TrashServiceTests.cs（新增 4 条穿越用例）；docs/task-matrix/tasks.json（状态推进）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Trash 15/15 通过（含新增 Restore_路径穿越元数据文件名_被拒绝 4 用例：../decoy.json、..\\..\\secret.json、../../server.db、/etc/passwd 均返回 BAD_REQUEST，且外部诱饵文件未被访问/删除、回收站元数据未误删）；全量 dotnet test CloudPan.Tests -c Release 194/194 通过（原 190 + 新增 4）；验收 grep 'Path.Combine(trashDir, request.MetaFileName)' TrashController.cs 无匹配。\n【验收结论 2026-08-03】task-verifier 独立裁决：通过。验收标准①『grep -n ''Path.Combine(trashDir, request.MetaFileName)'' CloudPan.Server.Host/Controllers/TrashController.cs 无匹配（已过 GetFileName）』实测无匹配（exit 1）；附加全目录核查 grep -rn ''Path.Combine(trashDir, request.MetaFileName)'' CloudPan.Server.Host/Controllers/ 亦无匹配。独立核查改动真实性：TrashController.cs:41 将用户输入 request.MetaFileName 传入领域服务 _trash.RestoreAsync；TrashService.RestoreAsync(:55-80) 先经 Path.GetFileName 归一（:62），再 4 重校验——归一后为空 / 归一结果≠原输入（含分隔符/路径即被剥离导致不一致，直接拒绝） / 是 \".\"/\"..\" / 含 '/' 或 '\\\\'（:63-66），全过才以归一后 safeMetaFileName 拼 Path.Combine(trashDir, safeMetaFileName)（:72），杜绝 ../、..\\\\、绝对路径穿越读取 trashDir 外文件——Controller 不再裸拼用户输入。纵深防御（:87-108）：entry.TrashFileName 经 GetFileName 归一（:89-90）、entry.OriginalPath 经 _storage.ValidatePath 校验（:96-101），防元数据篡改逃出同步根。验收标准②『dotnet test --filter Trash』实测 15/15 通过（Failed 0 / Passed 15 / Skipped 0），关键用例 Restore_路径穿越元数据文件名_被拒绝（TrashServiceTests.cs:100-124）为 [Theory] 4 条 InlineData：../decoy.json、..\\..\\secret.json、../../server.db、/etc/passwd，每条断言 Assert.False(result.Success)、错误码 HttpErrorCode.BAD_REQUEST，且 trashDir 之外 .cloudpan 下伪造诱饵 decoy.json 未被访问/删除（File.Exists 为 true）、回收站自身 *.json 元数据未误删（Assert.Single）——直接覆盖『穿越路径被拒绝』且不碰 trashDir 外文件。附加标准『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error。requirements 落实核查：①MetaFileName 经 Path.GetFileName 归一并校验禁止目录分隔符（TrashService.RestoreAsync 真实存在）②Download 显式调用 ValidatePath（FileOperationService.DownloadAsync:194-196 先 _storage.ValidatePath(path) 再读文件，与 Delete/Move/Mkdir 一致；FilesController.cs:84 下载路径同样 ValidatePath、:148 调 _fileOps.DownloadAsync）。两条自动标准全过，无手动项。",
       "updatedAt": "2026-08-03"
+    },
+    {
+      "id": "T-025",
+      "title": "Token 验证与设备注册收敛为 Server.Core 单一服务",
+      "dimension": "architecture",
+      "priority": "P1",
+      "status": "todo",
+      "batch": 3,
+      "findingId": "F-25",
+      "dependsOn": [],
+      "location": "CloudPan.Server.Host/Middleware/TokenAuthMiddleware.cs:73-84,104-167; CloudPan.Server.Core/WebSocket/WebSocketHandler.cs:106-122,397-427",
+      "scope": "TokenAuthMiddleware + WebSocketHandler + Server.Core 新增 ITokenService",
+      "requirements": [
+        "在 Server.Core 新建 ITokenService（ValidateTokenAsync/EnsureDeviceAsync），收敛 token_hash 计算、缓存、设备自动注册与 LastSeen 维护",
+        "TokenAuthMiddleware 与 WebSocketHandler 均注入该服务；中间件只解析 Authorization 头并把 deviceId 写入 context.Items，不再直碰 DbContext/CacheKeys",
+        "补单测：同一 token 经 HTTP 与 WS 两路径校验结果一致，设备注册幂等"
+      ],
+      "goal": "认证与设备注册单一事实来源，改策略只改一处，HTTP/WS 认证行为不再分叉",
+      "acceptanceCriteria": [
+        {
+          "text": "架构测试全绿",
+          "verification": "自动",
+          "command": "dotnet test --filter Architecture"
+        },
+        {
+          "text": "TokenAuthMiddleware 不再直查 token_hash/DbContext",
+          "verification": "自动",
+          "command": "grep -n 'token_hash' CloudPan.Server.Host/Middleware/TokenAuthMiddleware.cs 无匹配"
+        },
+        {
+          "text": "ITokenService 单测覆盖 HTTP/WS 一致性",
+          "verification": "自动",
+          "command": "dotnet test --filter TokenService"
+        }
+      ],
+      "attempts": 0,
+      "statusReason": null,
+      "note": null,
+      "updatedAt": null
+    },
+    {
+      "id": "T-026",
+      "title": "回收站保留期清理下沉 TrashService",
+      "dimension": "architecture",
+      "priority": "P1",
+      "status": "todo",
+      "batch": 3,
+      "findingId": "F-26",
+      "dependsOn": [],
+      "location": "CloudPan.Server.Host/Hosting/BackgroundHostedService.cs:72-115",
+      "scope": "BackgroundHostedService + TrashService",
+      "requirements": [
+        "TrashService 新增 PurgeExpiredAsync(TimeSpan retention)，封装回收站元数据解析（DeletedAt/TrashFileName）与过期删除",
+        "BackgroundHostedService 仅作为 IHostedService 调度器调用之，不再 Path.Combine 拼 .cloudpan/.trash 路径、不解析 JSON、不直接 File.Delete",
+        "补单测：过期条目被清理、未过期保留、元数据异常容错"
+      ],
+      "goal": "回收站元数据格式与保留策略单一来源，组合根不直碰文件系统，路径经领域服务防线",
+      "acceptanceCriteria": [
+        {
+          "text": "单测覆盖保留期清理",
+          "verification": "自动",
+          "command": "dotnet test --filter Trash"
+        },
+        {
+          "text": "BackgroundHostedService 无裸拼回收站路径",
+          "verification": "自动",
+          "command": "grep -n '.cloudpan.*.trash' CloudPan.Server.Host/Hosting/BackgroundHostedService.cs 无匹配"
+        },
+        {
+          "text": "架构测试全绿",
+          "verification": "自动",
+          "command": "dotnet test --filter Architecture"
+        }
+      ],
+      "attempts": 0,
+      "statusReason": null,
+      "note": null,
+      "updatedAt": null
+    },
+    {
+      "id": "T-027",
+      "title": "ApiClient 路由契约化（CodeGen 增 ApiClientGenerator）",
+      "dimension": "architecture",
+      "priority": "P1",
+      "status": "todo",
+      "batch": 3,
+      "findingId": "F-27",
+      "dependsOn": [],
+      "location": "CloudPan.Client.Core/Services/ApiClient.cs:63-369",
+      "scope": "CloudPan.CodeGen + ApiClient/IApiClient",
+      "requirements": [
+        "CloudPan.CodeGen 新增 ApiClientGenerator，从 shared-spec.json api.endpoints 生成客户端方法骨架与路由常量（引用 SpecEndpoints），纳入 --verify",
+        "ApiClient 删除 16 处魔数字符串，改引用生成的路由常量，业务层只写参数绑定",
+        "补 verify 场景：endpoints 变更时客户端路由漂移可被 --verify 检出"
+      ],
+      "goal": "客户端路由与契约一致，spec 改端点不产生客户端 404/认证路径失效，路由变更可校验",
+      "acceptanceCriteria": [
+        {
+          "text": "CodeGen --verify 一致",
+          "verification": "自动",
+          "command": "dotnet run --project CloudPan.CodeGen -- --verify"
+        },
+        {
+          "text": "ApiClient.cs 无裸 /api/ 路由字面量",
+          "verification": "自动",
+          "command": "grep -n '\"/api/' CloudPan.Client.Core/Services/ApiClient.cs 无匹配"
+        },
+        {
+          "text": "全量测试全绿",
+          "verification": "自动",
+          "command": "dotnet test CloudPan.Tests -c Release"
+        }
+      ],
+      "attempts": 0,
+      "statusReason": null,
+      "note": null,
+      "updatedAt": null
+    },
+    {
+      "id": "T-028",
+      "title": "行数门禁修复 + MainWindow/SetupForm 拆 partial",
+      "dimension": "simplicity",
+      "priority": "P1",
+      "status": "acceptance",
+      "batch": 3,
+      "findingId": "F-28",
+      "dependsOn": [],
+      "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs:11-15,54-58,74-80; CloudPan.Client.UI/UI/MainWindow.cs:1-2522; CloudPan.Client.UI/UI/SetupForm.cs:1-1023",
+      "scope": "CodeQualityTests + MainWindow/SetupForm 拆分",
+      "requirements": [
+        "CodeQualityTests：移除 IsExcluded 的 \"UI\" 段豁免使 serviceControllerFiles 白名单真实生效，删除过期注释 SyncEngine.cs(1431 行)，UI 类按现有 1000 行门禁纳入并逐批下调至 400",
+        "MainWindow（2522 行）与 SetupForm（1023 行）沿用 SyncEngine partial 先例拆为多部分类，每文件 ≤1000 行，行为不变",
+        "SettingsForm/ServerInstaller/ServerWindow 当前已 ≤1000 行，纳入门禁即可，不拆分（后续下调阈值时再处理）"
+      ],
+      "goal": "行数判据对 UI 层真实生效、死白名单消除，全部 UI 文件 ≤1000 行，为 UX 改版（错误归因/深色/上传/冲突聚合）扫清巨型类障碍",
+      "acceptanceCriteria": [
+        {
+          "text": "门禁测试全绿",
+          "verification": "自动",
+          "command": "dotnet test --filter CodeQuality"
+        },
+        {
+          "text": "MainWindow 拆为多个 partial 文件",
+          "verification": "自动",
+          "command": "grep -rln 'partial class MainWindow' CloudPan.Client.UI/UI/ 匹配 ≥2 个文件"
+        },
+        {
+          "text": "dotnet build 全绿",
+          "verification": "自动",
+          "command": "dotnet build CloudPan.sln -c Release"
+        }
+      ],
+      "attempts": 0,
+      "statusReason": null,
+      "note": "冲突取舍（producer）：门禁阈值『放宽』vs『严格拆分』——选严格方向：移除 UI 豁免后按 1000 门禁拆分 MainWindow/SetupForm，其余 UI 类纳入门禁后随批次下调阈值。\n【执行记录 2026-08-03】\nCodeQualityTests.cs：移除 IsExcluded 的『UI』段豁免使 serviceControllerFiles 白名单真实生效（注：Server.UI 路径段为 Server.UI 非『UI』本不受豁免影响，本次将 Client.UI 全部纳入门禁）；删除过期注释 SyncEngine.cs(1431行) 与 MaxSyncEngineLines=1500 死特殊阈值（SyncEngine 已拆 1431→257 行）；新增 FileBrowserView.cs（733 行）入白名单——其不在原白名单，移除豁免后按 MaxOtherLines=500 上限必炸，属『UI 类按 1000 行门禁纳入』的必需项（≤1000 行不拆分，与 SettingsForm/ServerInstaller/ServerWindow 同处理）。\nMainWindow（2522 行）拆为 11 个 partial 文件：MainWindow.cs（字段/构造/事件绑定/关闭行为，183 行）+ MainWindow.{Layout,Status,Conflicts,Errors,Log,Browser,Trash,Share,Versions,Controls}.cs（145-390 行）；SetupForm（1023 行）拆为 4 个 partial 文件：SetupForm.cs（字段/构造/表单控制，212 行）+ SetupForm.{Layout,Validation,Discovery}.cs（146-377 行）。纯结构移动不改行为：方法体逐字搬运，仅主文件类声明加 partial、各 partial 文件补 using 与部分类 XML 文档注释（XML 文档门禁要求每个 partial 声明上方有 ///）。\n改动文件：CloudPan.Tests/Architecture/CodeQualityTests.cs；CloudPan.Client.UI/UI/MainWindow.cs（改 partial+精简）；新增 CloudPan.Client.UI/UI/MainWindow.{Layout,Status,Conflicts,Errors,Log,Browser,Trash,Share,Versions,Controls}.cs；CloudPan.Client.UI/UI/SetupForm.cs（改 partial+精简）；新增 CloudPan.Client.UI/UI/SetupForm.{Layout,Validation,Discovery}.cs。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release --filter CodeQuality 2/2 通过（含行数门禁与 public 类型 XML 文档两测）；全量 dotnet test CloudPan.Tests -c Release 201/201 通过；验收 grep -rln 'partial class MainWindow' CloudPan.Client.UI/UI/ 匹配 11 个文件（≥2）；方法签名完整性核查：MainWindow 66 / SetupForm 31 个签名零缺失（git HEAD 原文比对）。门禁阈值保持 1000 未下调，逐批下调至 400 为后续批次职责；T-031/T-032/T-033/T-036 依赖本拆分后的 UI 类进行改版（拆分前置意义所在）。",
+      "updatedAt": "2026-08-03"
+    },
+    {
+      "id": "T-029",
+      "title": "客户端组合根下沉 Client.Core",
+      "dimension": "simplicity",
+      "priority": "P1",
+      "status": "todo",
+      "batch": 3,
+      "findingId": "F-29",
+      "dependsOn": [],
+      "location": "CloudPan.Client.UI/Program.cs:1-534; CloudPan.Client.UI/CloudPan.Client.UI.csproj:26-27",
+      "scope": "Client.UI Program.cs + Client.Core 新增组合辅助",
+      "requirements": [
+        "ClientDbFactory/EnsureDbCreated/配置解析/DPAPI/健康检查等启动编排下沉 Client.Core（组合辅助类），Program.cs 收敛为纯入口（<150 行）",
+        "移除 Client.UI csproj 的 Microsoft.EntityFrameworkCore.Sqlite 与 SQLitePCLRaw.bundle_e_sqlite3 包引用（转由 Client.Core 承载）",
+        "验证 UI 壳不再直接引用 EF Core 类型"
+      ],
+      "goal": "UI 壳只渲染，持久化与启动装配在 Client.Core 可复用可单测，客户端对齐服务端薄组合根先例",
+      "acceptanceCriteria": [
+        {
+          "text": "Program.cs ≤150 行",
+          "verification": "自动",
+          "command": "wc -l < CloudPan.Client.UI/Program.cs"
+        },
+        {
+          "text": "Client.UI csproj 无 EF/SQLite 包",
+          "verification": "自动",
+          "command": "grep -n 'EntityFrameworkCore\\|SQLitePCLRaw' CloudPan.Client.UI/CloudPan.Client.UI.csproj 无匹配"
+        },
+        {
+          "text": "dotnet build 全绿",
+          "verification": "自动",
+          "command": "dotnet build CloudPan.sln -c Release"
+        }
+      ],
+      "attempts": 0,
+      "statusReason": null,
+      "note": null,
+      "updatedAt": null
+    },
+    {
+      "id": "T-030",
+      "title": "两端图标收敛为共享单一实现",
+      "dimension": "simplicity",
+      "priority": "P1",
+      "status": "todo",
+      "batch": 3,
+      "findingId": "F-30",
+      "dependsOn": [],
+      "location": "CloudPan.Server.UI/ServerIcons.cs:1-311; CloudPan.Client.UI/UI/CloudPanIcon.cs:1-311",
+      "scope": "Infrastructure/Design IconFactory + 两端调用点",
+      "requirements": [
+        "抽取单一 IconFactory（入参：主题色、徽章字符）放共享项目（Infrastructure/Design，对齐 T-011 DesignTokens 位置），删除两端 311 行同源实现",
+        "两端调用点（MainWindow/SetupForm/TrayAppContext + ServerTrayApp/ServerWindow）改为一行工厂入口，保持现有图标外观（蓝色无徽章 / 绿色+S 徽章）",
+        "补单测：工厂可生成 ICO 字节且主题色/徽章参数化生效"
+      ],
+      "goal": "图标绘制单一实现，改一处两端生效，约 280 行重复消除",
+      "acceptanceCriteria": [
+        {
+          "text": "两端旧图标类定义已删除",
+          "verification": "自动",
+          "command": "grep -rln 'class ServerIcons\\|class CloudPanIcon' --include=*.cs 无匹配"
+        },
+        {
+          "text": "IconFactory 存在于共享项目且仅一份",
+          "verification": "自动",
+          "command": "grep -rln 'class IconFactory' --include=*.cs 匹配 1 处"
+        },
+        {
+          "text": "dotnet build 全绿",
+          "verification": "自动",
+          "command": "dotnet build CloudPan.sln -c Release"
+        }
+      ],
+      "attempts": 0,
+      "statusReason": null,
+      "note": null,
+      "updatedAt": null
+    },
+    {
+      "id": "T-031",
+      "title": "同步错误白话归因与异常解包",
+      "dimension": "ux",
+      "priority": "P2",
+      "status": "todo",
+      "batch": 3,
+      "findingId": "F-31",
+      "dependsOn": [
+        "T-028"
+      ],
+      "location": "CloudPan.Client.Core/Services/SyncEngine.Queue.cs:85,108; CloudPan.Client.UI/UI/MainWindow.cs:676-803",
+      "scope": "Client.Core 错误归因 + MainWindow 错误弹窗",
+      "requirements": [
+        "Client.Core 新增 ErrorAttribution 归因模型（Message/NextStep），错误归因映射：HttpRequestException/AggregateException（递归解包）→ 白话原因 + 下一步（连接失败→检查台式机是否开机/服务是否运行；权限→检查文件夹权限；磁盘满→清理空间）",
+        "ErrorOccurred 事件载荷改为 ErrorAttribution，ShowErrorPopup 显示白话而非 ex.Message",
+        "补单测：网络/权限/磁盘满三类异常归因正确，AggregateException 递归解包"
+      ],
+      "goal": "家庭用户看到『普通人语言 + 下一步』而非英文异常栈，零困惑",
+      "acceptanceCriteria": [
+        {
+          "text": "单测覆盖异常归因与解包",
+          "verification": "自动",
+          "command": "dotnet test --filter ErrorAttribution"
+        },
+        {
+          "text": "ErrorAttribution 归因模型存在于 Client.Core",
+          "verification": "自动",
+          "command": "grep -rn 'class ErrorAttribution' CloudPan.Client.Core/ 有匹配"
+        },
+        {
+          "text": "dotnet build 全绿",
+          "verification": "自动",
+          "command": "dotnet build CloudPan.sln -c Release"
+        }
+      ],
+      "attempts": 0,
+      "statusReason": null,
+      "note": null,
+      "updatedAt": null
+    },
+    {
+      "id": "T-032",
+      "title": "深色模式令牌级切换",
+      "dimension": "ux",
+      "priority": "P2",
+      "status": "todo",
+      "batch": 3,
+      "findingId": "F-32",
+      "dependsOn": [
+        "T-028"
+      ],
+      "location": "CloudPan.Infrastructure/Design/DesignTokens.cs（浅色组单集）",
+      "scope": "DesignTokens 深色语义组 + 两端 UI 主题切换",
+      "requirements": [
+        "DesignTokens 增加深色语义组（背景/前景/边框/状态色），按系统主题整体切换，避免硬编码反色",
+        "两端 UI 消费令牌处随系统主题切换（SystemEvents.UserPreferenceChanged），深色下不白底刺眼",
+        "在 T-028 拆分后的 UI 类内完成，避免在巨型类中改版"
+      ],
+      "goal": "家庭夜间/客厅大屏使用不再白底刺眼，深色为令牌级整体切换而非逐处反色",
+      "acceptanceCriteria": [
+        {
+          "text": "DesignTokens 含深色语义组",
+          "verification": "自动",
+          "command": "grep -n 'Dark\\|IsDark' CloudPan.Infrastructure/Design/DesignTokens.cs 有匹配"
+        },
+        {
+          "text": "手动：Win11 深色系统下客户端与服务端 UI 整体深色且可读",
+          "verification": "手动"
+        },
+        {
+          "text": "dotnet build 全绿",
+          "verification": "自动",
+          "command": "dotnet build CloudPan.sln -c Release"
+        }
+      ],
+      "attempts": 0,
+      "statusReason": null,
+      "note": null,
+      "updatedAt": null
+    },
+    {
+      "id": "T-033",
+      "title": "Windows 上传入口与 CloudOnly 按需下载",
+      "dimension": "ux",
+      "priority": "P2",
+      "status": "todo",
+      "batch": 3,
+      "findingId": "F-33",
+      "dependsOn": [
+        "T-028"
+      ],
+      "location": "CloudPan.Client.UI/UI/FileBrowserView.cs 工具栏; CloudPan.Client.UI/UI/MainWindow.cs:1876-1895（OpenFile）",
+      "scope": "FileBrowserView 工具栏 + MainWindow 拖拽/下载编排",
+      "requirements": [
+        "FileBrowserView 工具栏新增『上传』按钮（多选文件）并支持拖拽文件到主窗口即导入同步根，上传走现有队列（普通/分块）",
+        "对 CloudOnly 选中项提供『下载到本机』动作（复用 DownloadPathAsync），双击 CloudOnly 文件弹下载确认而非仅日志",
+        "上传过程有队列/进度反馈"
+      ],
+      "goal": "家庭用户从手机/他人设备收到的文件可拖入同步根，CloudOnly 文件按需取回，常用操作 ≤3 步",
+      "acceptanceCriteria": [
+        {
+          "text": "FileBrowserView 含上传/下载入口",
+          "verification": "自动",
+          "command": "grep -n 'UploadRequested\\|DownloadRequested' CloudPan.Client.UI/UI/FileBrowserView.cs 有匹配"
+        },
+        {
+          "text": "手动：拖拽文件到主窗口后出现在同步目录并上传成功",
+          "verification": "手动"
+        },
+        {
+          "text": "手动：CloudOnly 文件可下载到本机并打开",
+          "verification": "手动"
+        }
+      ],
+      "attempts": 0,
+      "statusReason": null,
+      "note": null,
+      "updatedAt": null
+    },
+    {
+      "id": "T-034",
+      "title": "同步根变更客户端重配引导",
+      "dimension": "function",
+      "priority": "P2",
+      "status": "todo",
+      "batch": 3,
+      "findingId": "F-34",
+      "dependsOn": [],
+      "location": "CloudPan.Server.UI/SettingsPage.cs:388-411",
+      "scope": "SettingsPage 保存流程",
+      "requirements": [
+        "保存同步根变更时明确列出影响面：所有已配对设备需重新配置新地址/新 Token，并提供复制新 Token 入口",
+        "提供可选迁移旧库选项（复制 .cloudpan 到新目录）或明确『不迁移』提示，避免静默断连",
+        "文案白话化（家庭服务器地址/连接钥匙）"
+      ],
+      "goal": "改同步根后用户知道所有设备需重配并可拿到新 Token，不再静默失联",
+      "acceptanceCriteria": [
+        {
+          "text": "SettingsPage 含影响面与重配引导",
+          "verification": "自动",
+          "command": "grep -n '重新配置\\|复制 Token\\|影响' CloudPan.Server.UI/SettingsPage.cs 有匹配"
+        },
+        {
+          "text": "手动：改同步根保存后提示影响面并可复制新 Token",
+          "verification": "手动"
+        }
+      ],
+      "attempts": 0,
+      "statusReason": null,
+      "note": null,
+      "updatedAt": null
+    },
+    {
+      "id": "T-035",
+      "title": "UDP 发现响应版本与主机名修复",
+      "dimension": "function",
+      "priority": "P2",
+      "status": "todo",
+      "batch": 3,
+      "findingId": "F-35",
+      "dependsOn": [],
+      "location": "CloudPan.Server.Host/Hosting/UdpDiscoveryHostedService.cs:29-31",
+      "scope": "UdpDiscoveryHostedService",
+      "requirements": [
+        "version 字段从 AssemblyInformationalVersion 读取（反映发布版本），删除硬编码 \"0.2.0\"",
+        "host 优先使用本机局域网 IP（枚举活动网卡），Environment.MachineName 作兜底",
+        "补单测：响应 JSON 版本与程序集一致、host 为 IP 或可解析主机名"
+      ],
+      "goal": "发现响应版本真实、主机名不可解析时仍可被发现，局域网发现主路径可靠",
+      "acceptanceCriteria": [
+        {
+          "text": "UdpDiscoveryHostedService 无 0.2.0 硬编码",
+          "verification": "自动",
+          "command": "grep -n '0.2.0' CloudPan.Server.Host/Hosting/UdpDiscoveryHostedService.cs 无匹配"
+        },
+        {
+          "text": "单测覆盖版本与 host 来源",
+          "verification": "自动",
+          "command": "dotnet test --filter UdpDiscovery"
+        }
+      ],
+      "attempts": 0,
+      "statusReason": null,
+      "note": "冲突取舍：UDP 版本来源 spec 常量 vs 程序集版本——选 AssemblyInformationalVersion（反映发布物真实版本，客户端据此判断协议兼容）。",
+      "updatedAt": null
+    },
+    {
+      "id": "T-036",
+      "title": "冲突弹窗改非模态聚合",
+      "dimension": "ux",
+      "priority": "P2",
+      "status": "todo",
+      "batch": 3,
+      "findingId": "F-36",
+      "dependsOn": [
+        "T-028"
+      ],
+      "location": "CloudPan.Client.UI/UI/MainWindow.cs:2033-2190; CloudPan.Client.UI/UI/TrayAppContext.cs:113-128",
+      "scope": "MainWindow 冲突处理 + TrayAppContext",
+      "requirements": [
+        "冲突改为非模态聚合：冲突发生时自动打开顶部冲突列表而非逐个 ShowDialog，避免嵌套消息循环堆叠",
+        "RemoteModifiedTime 从 /api/tree 快照/文件详情取真实时间/大小（不再恒 null），『远程版本』面板展示真实信息",
+        "选项配白话解释与安全默认值（默认保留两者），提供打开两版本对比"
+      ],
+      "goal": "批量冲突不轰炸、用户有充分远程信息决策，老人面对冲突不再不知所措",
+      "acceptanceCriteria": [
+        {
+          "text": "冲突处理路径不再同步弹模态",
+          "verification": "自动",
+          "command": "grep -n 'ShowConflictResolution' CloudPan.Client.UI/UI/MainWindow.cs 处理路径无 ShowDialog(this) 紧随"
+        },
+        {
+          "text": "RemoteModifiedTime 有真实赋值来源",
+          "verification": "自动",
+          "command": "grep -rn 'RemoteModifiedTime =' CloudPan.Client.Core/ CloudPan.Client.UI/UI/MainWindow.cs 有赋值"
+        },
+        {
+          "text": "手动：批量冲突时仅聚合列表弹出，可逐条白话决策",
+          "verification": "手动"
+        }
+      ],
+      "attempts": 0,
+      "statusReason": null,
+      "note": null,
+      "updatedAt": null
     }
   ]
 }

@@ -8,10 +8,8 @@ namespace CloudPan.Tests.Architecture;
 /// </summary>
 public class CodeQualityTests
 {
-    // Phase 0 分层阈值：核心服务/控制器允许 ≤ 1000 行，纯数据/工具类 ≤ 500 行
-    // 已知超标文件：SyncEngine.cs(1431行) — Phase 2 按传输/扫描/冲突拆分
+    // Phase 0 分层阈值：核心服务/控制器（含 UI 类，见 T-028）允许 ≤ 1000 行，纯数据/工具类 ≤ 500 行
     private const int MaxServiceControllerLines = 1000;
-    private const int MaxSyncEngineLines = 1500;
     private const int MaxOtherLines = 500;
 
     // 从测试运行目录向上查找解决方案根目录（与 ContractSourceScanTests 相同逻辑）
@@ -50,11 +48,11 @@ public class CodeQualityTests
         return null;
     }
 
-    // 排除生成代码与构建产物目录（Generated/obj/bin/UI/Analyzer 不参与质量门禁）
+    // 排除生成代码与构建产物目录（Generated/obj/bin/Analyzer 不参与质量门禁；UI 层自 T-028 起纳入门禁）
     private static bool IsExcluded(string filePath)
     {
         string[] segments = filePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return segments.Any(s => s is "Generated" or "obj" or "bin" or "UI" or "Analyzer");
+        return segments.Any(s => s is "Generated" or "obj" or "bin" or "Analyzer");
     }
 
     private static List<string> GetSourceFiles() =>
@@ -64,31 +62,28 @@ public class CodeQualityTests
             .ToList();
 
     /// <summary>
-    /// 验证非 UI 非生成源码文件行数在合理范围内。
-    /// Phase 0 分层阈值：核心服务/控制器 ≤ 1000 行，其他文件 ≤ 500 行。
+    /// 验证非生成源码文件行数在合理范围内（UI 层自 T-028 起纳入门禁）。
+    /// Phase 0 分层阈值：核心服务/控制器（含 UI 类）≤ 1000 行，其他文件 ≤ 500 行。
     /// </summary>
     [Fact]
-    public void 所有非UI非生成文件_小于行数上限()
+    public void 所有非生成文件_小于行数上限()
     {
-        // 服务/控制器类文件（Phase 0 允许 ≤ 1000 行）
+        // 服务/控制器/UI 类文件（Phase 0 允许 ≤ 1000 行）
         var serviceControllerFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "FilesController.cs", "Program.cs", "ApiClient.cs",
             "SetupForm.cs", "MainWindow.cs", "SettingsForm.cs", "ServerInstaller.cs",
             "ServerWindow.cs", "TrayAppContext.cs", "ServerTrayApp.cs",
+            "FileBrowserView.cs",
             "WebSocketClient.cs", "WebSocketHandler.cs",
         };
-
-        // SyncEngine 是已知超大文件（Phase 2 拆分目标），暂设更高阈值
-        const string syncEngineFile = "SyncEngine.cs";
 
         List<string> violations = new List<string>();
         foreach (string file in GetSourceFiles())
         {
             int lineCount = File.ReadLines(file).Count();
             string fileName = Path.GetFileName(file);
-            int limit = fileName == syncEngineFile ? MaxSyncEngineLines
-                : serviceControllerFiles.Contains(fileName) ? MaxServiceControllerLines
+            int limit = serviceControllerFiles.Contains(fileName) ? MaxServiceControllerLines
                 : MaxOtherLines;
 
             if (lineCount > limit)
