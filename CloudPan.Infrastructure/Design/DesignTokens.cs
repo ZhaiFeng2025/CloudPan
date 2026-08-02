@@ -4,7 +4,8 @@ namespace CloudPan.Shared;
 
 /// <summary>
 /// 应用调色板设计令牌。
-/// 所有颜色值从 shared-spec.json designTokens.theme 契约生成。
+/// 手工维护（shared-spec.json 不含 designTokens 节，此前“从契约生成”注释为伪称），
+/// 为两端 UI（CloudPan.Client.UI / CloudPan.Server.UI）共享的唯一来源：改此处两端同时生效。
 /// </summary>
 public static class CloudPanColors
 {
@@ -58,7 +59,8 @@ public static class CloudPanColors
 
 /// <summary>
 /// 应用间距设计令牌。
-/// 所有间距值从 shared-spec.json designTokens.spacing 契约生成。
+/// 手工维护（shared-spec.json 不含 designTokens 节，此前“从契约生成”注释为伪称），
+/// 为两端 UI（CloudPan.Client.UI / CloudPan.Server.UI）共享的唯一来源。
 /// </summary>
 public static class CloudPanSpacing
 {

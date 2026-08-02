@@ -519,7 +519,7 @@
       "title": "无障碍修复：对比度与最小字号（WCAG 2.1 AA）",
       "dimension": "ux",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 1,
       "findingId": "F-10",
       "dependsOn": [],
@@ -540,7 +540,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "无障碍修复（F-10）：两端 DesignTokens 同步修改（逐字节一致，T-011 收敛前两端同步改）。TextMuted 由 150,150,150 加深至 117,117,117（#757575），白底对比度 2.96:1→4.61:1，≥WCAG 2.1 AA 4.5:1；SizeCaption 8.5f→10f（≥10pt）；SizeBody 12f→14f，并新增 SizeBodyMin=14f 正文最小字号约束常量（SizeBody 引用之），BodySmall/Mono 为辅助小字号保持 10f。改动文件：CloudPan.Client.UI/UI/DesignTokens.cs、CloudPan.Server.UI/DesignTokens.cs（各 3 处改动）。验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 171/171 通过；验收命令 grep 'TextMuted' CloudPan.Client.UI/UI/DesignTokens.cs 数值为 117,117,117 符合对比度 ≥4.5:1。",
+      "note": "无障碍修复（F-10）：两端 DesignTokens 同步修改（逐字节一致，T-011 收敛前两端同步改）。TextMuted 由 150,150,150 加深至 117,117,117（#757575），白底对比度 2.96:1→4.61:1，≥WCAG 2.1 AA 4.5:1；SizeCaption 8.5f→10f（≥10pt）；SizeBody 12f→14f，并新增 SizeBodyMin=14f 正文最小字号约束常量（SizeBody 引用之），BodySmall/Mono 为辅助小字号保持 10f。改动文件：CloudPan.Client.UI/UI/DesignTokens.cs、CloudPan.Server.UI/DesignTokens.cs（各 3 处改动）。验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 171/171 通过；验收命令 grep 'TextMuted' CloudPan.Client.UI/UI/DesignTokens.cs 数值为 117,117,117 符合对比度 ≥4.5:1。\n【验收结论 2026-08-03】task-verifier 独立裁决：通过。验收标准『grep ''TextMuted'' CloudPan.Client.UI/UI/DesignTokens.cs 数值符合对比度』实测 TextMuted = Color.FromArgb(117,117,117)（#757575）。独立核算 WCAG 1.4.3 白底对比度（sRGB 非线性→线性化：L(117)=0.17794，L(white)=1.0，对比度=(1.0+0.05)/(0.17794+0.05)=4.608:1 ≥ 4.5:1）达标 AA；白底为最亮背景，是深色文字对比度下限，任何更暗浅色背景对比度更高，故核算对该色所有使用场景成立。使用处核查：TextMuted 全部为浅色背景前景文字（MainWindow.cs:159/289/405/504/1238/1239、SettingsForm.cs、SetupForm.cs 含 :509 SolidBrush 绘制、ServerWindow.cs、SettingsPage.cs 均作 ForeColor），无深色背景，白底核算有效。附 requirements 落实核查：SizeCaption 8.5f→10f（≥10pt）；SizeBody 12f→14f；新增 SizeBodyMin=14f 且 SizeBody=SizeBodyMin 引用之（正文最小字号约束已建立）；CloudPan.Server.UI/DesignTokens.cs 同步一致（TextMuted=117,117,117 / SizeCaption=10f / SizeBodyMin=14f），两端无漂移。单条自动标准通过，无手动项。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -548,7 +548,7 @@
       "title": "两端 DesignTokens/图标收敛为共享单一实现",
       "dimension": "simplicity",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 1,
       "findingId": "F-11",
       "dependsOn": [],
@@ -574,8 +574,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "两端 DesignTokens 收敛为共享单一实现（F-11）：新建 CloudPan.Infrastructure/Design/DesignTokens.cs 作为唯一来源（保留 T-010 修正值 TextMuted=117,117,117 / SizeCaption=10f / SizeBodyMin=SizeBody=14f），删除两端副本 CloudPan.Client.UI/UI/DesignTokens.cs 与 CloudPan.Server.UI/DesignTokens.cs；命名空间保持 CloudPan.Shared（两端 7 个消费者文件均已有 using CloudPan.Shared，零消费者改动）；Infrastructure.csproj 加 System.Drawing.Common 8.0.0 包引用（net8.0-windows 非 WinForms 项目需显式引用才可得 System.Drawing）；修正 CloudPanColors/CloudPanSpacing 两处虚假注释——『所有值从 shared-spec.json designTokens 契约生成』伪称改为如实标注『手工维护（shared-spec.json 不含 designTokens 节），两端共享唯一来源』。图标收敛（CloudPanIcon.cs 蓝色无徽章 vs ServerIcons.cs 绿色+S 徽章，311 行同源重复）涉及自绘 ICO 逻辑合并与两处 UI 调用点（MainWindow/SetupForm/TrayAppContext + ServerTrayApp/ServerWindow），未并入本任务，留后续任务处理。命名空间对齐（CloudPan.Shared→目标层）归 T-016，注意 DesignTokens 依赖 System.Drawing 无法随 CloudPan.Shared 迁入纯 net8.0 的 Contract，应由 T-016 映射为 CloudPan.Infrastructure.*。验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 171/171 通过；验收命令字面 grep -rln 'class DesignTokens' --include=*.cs 匹配 0（类名实为 CloudPanColors/CloudPanSpacing/CloudPanEffects/CloudPanFonts，非 DesignTokens），按意图验证：全仓 DesignTokens.cs 文件数 1（CloudPan.Infrastructure/Design/DesignTokens.cs）、四令牌类各仅 1 处定义。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-012",
