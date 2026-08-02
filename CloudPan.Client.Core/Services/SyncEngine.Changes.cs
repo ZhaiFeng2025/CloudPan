@@ -172,7 +172,7 @@ public partial class SyncEngine
                 if (!string.IsNullOrEmpty(snapshot.Hash))
                 {
                     // 哈希比对：大小相同且哈希一致 → 真实变更
-                    string localHash = await ComputeSha256Async(fullPath);
+                    string localHash = await FileHasher.ComputeSha256Async(fullPath);
                     if (string.Equals(localHash, snapshot.Hash, StringComparison.OrdinalIgnoreCase))
                     {
                         _logger.LogInformation("跳过上传（大小和哈希均未变）: {Path}", relativePath);

@@ -23,7 +23,7 @@ public partial class SyncEngine
 
         // m-08: 上传前记录文件 Hash，用于检测上传过程中文件是否被修改
         string? preUploadHash = null;
-        try { preUploadHash = await ComputeSha256Async(localPath); }
+        try { preUploadHash = await FileHasher.ComputeSha256Async(localPath); }
         catch (Exception ex) { _logger.LogWarning(ex, "上传前计算文件哈希失败: {Path}", item.FilePath); }
 
         UploadResponse? result;
@@ -73,7 +73,7 @@ public partial class SyncEngine
         {
             try
             {
-                string postUploadHash = await ComputeSha256Async(localPath);
+                string postUploadHash = await FileHasher.ComputeSha256Async(localPath);
                 if (!string.Equals(preUploadHash, postUploadHash, StringComparison.OrdinalIgnoreCase))
                 {
                     _logger.LogWarning("上传过程中文件被修改，重新入队: {Path}", item.FilePath);
@@ -128,7 +128,7 @@ public partial class SyncEngine
             var snapshot = await checkDb.RemoteSnapshots.FindAsync(new object[] { item.FilePath }, ct);
             if (snapshot != null && !string.IsNullOrEmpty(snapshot.Hash))
             {
-                string currentLocalHash = await ComputeSha256Async(localPath);
+                string currentLocalHash = await FileHasher.ComputeSha256Async(localPath);
                 if (!string.Equals(currentLocalHash, snapshot.Hash, StringComparison.OrdinalIgnoreCase))
                 {
                     // 本地文件已被修改且未同步，触发冲突
@@ -187,7 +187,7 @@ public partial class SyncEngine
         // 2. 如果服务端返回了 X-File-Hash 头，计算本地文件哈希并比对
         if (!string.IsNullOrEmpty(result?.ExpectedHash))
         {
-            string actualHash = await ComputeSha256Async(localPath);
+            string actualHash = await FileHasher.ComputeSha256Async(localPath);
             if (!string.Equals(actualHash, result.ExpectedHash, StringComparison.OrdinalIgnoreCase))
             {
                 item.RetryCount++;
@@ -216,7 +216,7 @@ public partial class SyncEngine
         }
         else
         {
-            downloadedHash = await ComputeSha256Async(localPath);
+            downloadedHash = await FileHasher.ComputeSha256Async(localPath);
         }
 
         long downloadedSize = new FileInfo(localPath).Length;

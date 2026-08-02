@@ -716,7 +716,7 @@
       "title": "命名空间对齐目标四层",
       "dimension": "architecture",
       "priority": "P1",
-      "status": "acceptance",
+      "status": "done",
       "batch": 2,
       "findingId": "F-16",
       "dependsOn": [],
@@ -742,7 +742,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "冲突取舍：全仓重命名会与批次 1/2 所有文件级任务产生合并冲突——应排为批次 2 首项机械性执行（批次 1 完成后），执行期间避免并发改动。\n【执行 2026-08-03】纯机械重命名（仅 namespace/using/全限定名，无逻辑改动），脚本符号表精确解析。映射表：CloudPan.Contract 全部→CloudPan.Contract；CloudPan.Infrastructure 按文件夹→CloudPan.Infrastructure.{Migrations 保留,Design,Persistence,Configuration,Security,Storage,Models(Generated 实体)}；CloudPan.Server.Core 全部→CloudPan.Server.Core；CloudPan.Server.Host 按文件夹→CloudPan.Server.Host{,.Controllers,.Hosting,.Middleware}；CloudPan.Client.Core→CloudPan.Client.Core.{Migrations 保留,Models,Services}；CloudPan.Client.UI/CloudPan.Server.UI 保持（ServerIcons 由 CloudPan.Shared.UI→CloudPan.Server.UI）；旧 CloudPan.Shared→CloudPan.Contract（契约产物）或 CloudPan.Infrastructure.Design（DesignTokens，T-011 提示）；CodeGen 7 个生成器命名空间发射同步（6×CloudPan.Shared→CloudPan.Contract、EntityGenerator→CloudPan.Infrastructure.Models）并重新生成；using 引用逐类型归属拆分（CloudPan.Server.Services 横跨 Server.Core+Infrastructure 按被引用类型映射）；EF 迁移快照实体名字符串同步（CloudPan.Server.Models.X→CloudPan.Infrastructure.Models.X、CloudPan.Client.Models.X→CloudPan.Client.Core.Models.X）；Analyzer GetTypeByMetadataName(\"CloudPan.Shared.HttpErrorCode\")→CloudPan.Contract；5 处相对命名空间引用（Models.X/Services.X 依赖父命名空间兄弟，如 TrayAppContext Services.SyncEngine、WebSocketHandler Models.Device、MainWindow Models.ClientDbContext/Services.SettingsStore、SyncEngine Models.SyncConfig、TokenAuthMiddleware Models.Device）改为简单名并补对应 using。\n改动文件：140 个 .cs（Contract/Infrastructure/Server.Core/Server.Host/Client.Core/Client.UI/Server.UI/CodeGen/Analyzers/Tests 全仓），含 7 个生成器 + 9 个生成产物（CloudPan.Contract/Generated 6 个 + CloudPan.Infrastructure/Generated/Entities.g.cs）+ 4 个迁移快照/Designer。\n验证：dotnet run --project CloudPan.CodeGen（重新生成 7 产物全部一致）；dotnet run --project CloudPan.CodeGen -- --verify 7 项全部一致；dotnet build CloudPan.sln -c Release 0 警告 0 错误（10 项目）；dotnet test CloudPan.Tests -c Release 186/186 通过（含架构测试 10/10、迁移测试）；验收 grep -rln 'namespace CloudPan.Shared' --include=*.cs 无匹配。",
+      "note": "冲突取舍：全仓重命名会与批次 1/2 所有文件级任务产生合并冲突——应排为批次 2 首项机械性执行（批次 1 完成后），执行期间避免并发改动。\n【执行 2026-08-03】纯机械重命名（仅 namespace/using/全限定名，无逻辑改动），脚本符号表精确解析。映射表：CloudPan.Contract 全部→CloudPan.Contract；CloudPan.Infrastructure 按文件夹→CloudPan.Infrastructure.{Migrations 保留,Design,Persistence,Configuration,Security,Storage,Models(Generated 实体)}；CloudPan.Server.Core 全部→CloudPan.Server.Core；CloudPan.Server.Host 按文件夹→CloudPan.Server.Host{,.Controllers,.Hosting,.Middleware}；CloudPan.Client.Core→CloudPan.Client.Core.{Migrations 保留,Models,Services}；CloudPan.Client.UI/CloudPan.Server.UI 保持（ServerIcons 由 CloudPan.Shared.UI→CloudPan.Server.UI）；旧 CloudPan.Shared→CloudPan.Contract（契约产物）或 CloudPan.Infrastructure.Design（DesignTokens，T-011 提示）；CodeGen 7 个生成器命名空间发射同步（6×CloudPan.Shared→CloudPan.Contract、EntityGenerator→CloudPan.Infrastructure.Models）并重新生成；using 引用逐类型归属拆分（CloudPan.Server.Services 横跨 Server.Core+Infrastructure 按被引用类型映射）；EF 迁移快照实体名字符串同步（CloudPan.Server.Models.X→CloudPan.Infrastructure.Models.X、CloudPan.Client.Models.X→CloudPan.Client.Core.Models.X）；Analyzer GetTypeByMetadataName(\"CloudPan.Shared.HttpErrorCode\")→CloudPan.Contract；5 处相对命名空间引用（Models.X/Services.X 依赖父命名空间兄弟，如 TrayAppContext Services.SyncEngine、WebSocketHandler Models.Device、MainWindow Models.ClientDbContext/Services.SettingsStore、SyncEngine Models.SyncConfig、TokenAuthMiddleware Models.Device）改为简单名并补对应 using。\n改动文件：140 个 .cs（Contract/Infrastructure/Server.Core/Server.Host/Client.Core/Client.UI/Server.UI/CodeGen/Analyzers/Tests 全仓），含 7 个生成器 + 9 个生成产物（CloudPan.Contract/Generated 6 个 + CloudPan.Infrastructure/Generated/Entities.g.cs）+ 4 个迁移快照/Designer。\n验证：dotnet run --project CloudPan.CodeGen（重新生成 7 产物全部一致）；dotnet run --project CloudPan.CodeGen -- --verify 7 项全部一致；dotnet build CloudPan.sln -c Release 0 警告 0 错误（10 项目）；dotnet test CloudPan.Tests -c Release 186/186 通过（含架构测试 10/10、迁移测试）；验收 grep -rln 'namespace CloudPan.Shared' --include=*.cs 无匹配。\n【验收结论 2026-08-03】task-verifier 独立裁决：通过。验收标准①『grep -rln ''namespace CloudPan.Shared'' --include=*.cs 无匹配』实测 grep exit=1 无匹配；扩展独立复核 grep -rn 'CloudPan.Shared'（含 using/全限定名/注释）同样 exit=1 无匹配——旧扁平命名空间彻底消除，契约层产物命名不再语义误导为全共享。验收标准②『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error（10 项目全编译）。附加标准『dotnet run --project CloudPan.CodeGen -- --verify』实测 7 项全部一致（枚举/DTO/实体/清单/错误响应/API响应/设置），『校验通过』——生成器发射与生成产物一致。独立复核命名空间对齐：各项目命名空间前缀与目标层一致（CloudPan.Contract×7；Infrastructure 按 {Security,Migrations,Storage,Persistence,Configuration,Models,Design} 子域；Server.Core×30 统一；Host.{Controllers,Hosting,Middleware}；Client.Core.{Services,Models,Migrations}）；契约生成产物命名空间已同步（CloudPan.Contract/Generated 6 个产物均 namespace CloudPan.Contract，CloudPan.Infrastructure/Generated/Entities.g.cs 为 CloudPan.Infrastructure.Models），无生成物残留 CloudPan.Shared；生成文件头部 AUTO-GENERATED from shared-spec.json 标注保留。goal『层归属可从命名空间判定，四层架构真实化』达成，Analyzer 命名空间规则可启用。两条自动标准全过，无手动项。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -750,7 +750,7 @@
       "title": "文件哈希计算收敛为单一实现",
       "dimension": "simplicity",
       "priority": "P1",
-      "status": "todo",
+      "status": "in-progress",
       "batch": 2,
       "findingId": "F-17",
       "dependsOn": [],
@@ -776,7 +776,7 @@
       "attempts": 0,
       "statusReason": null,
       "note": "与批次 1 T-003 同改 ApiClient.cs，顺序执行避免并发编辑。",
-      "updatedAt": null
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-018",

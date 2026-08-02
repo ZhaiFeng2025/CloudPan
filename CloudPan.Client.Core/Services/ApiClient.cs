@@ -1,5 +1,4 @@
 using System.Net.Http.Json;
-using System.Security.Cryptography;
 using System.Text.Json;
 using CloudPan.Contract;
 using Microsoft.Extensions.Logging;
@@ -157,7 +156,7 @@ public class ApiClient : IApiClient, IDisposable
         // 下载后 SHA-256 校验（与 shared-spec.json §5 对齐）
         if (!string.IsNullOrEmpty(expectedHash))
         {
-            string actualHash = await ComputeSha256Async(tmpPath, ct);
+            string actualHash = await FileHasher.ComputeSha256Async(tmpPath, ct);
             if (!string.Equals(actualHash, expectedHash, StringComparison.OrdinalIgnoreCase))
             {
                 SafeDelete(tmpPath);
@@ -170,15 +169,6 @@ public class ApiClient : IApiClient, IDisposable
         File.Move(tmpPath, localPath, overwrite: true);
 
         return new DownloadResult { LastModified = lastModified, ExpectedHash = expectedHash };
-    }
-
-    /// <summary>计算文件 SHA-256（64 字符十六进制）。</summary>
-    private static async Task<string> ComputeSha256Async(string filePath, CancellationToken ct = default)
-    {
-        using SHA256 sha = SHA256.Create();
-        await using var stream = File.OpenRead(filePath);
-        byte[] hash = await sha.ComputeHashAsync(stream, ct);
-        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     /// <summary>安全删除文件，不抛异常。</summary>
@@ -261,7 +251,7 @@ public class ApiClient : IApiClient, IDisposable
         }
 
         // 大文件分块上传
-        string fileHash = await ComputeSha256Async(localPath, ct);
+        string fileHash = await FileHasher.ComputeSha256Async(localPath, ct);
         int totalChunks = (int)Math.Ceiling((double)fileSize / SpecConfig.ChunkSize);
 
         // 查询服务端进度（断点续传）

@@ -339,7 +339,7 @@ public partial class SyncEngine
                     else if (!string.IsNullOrEmpty(snapshot.Hash))
                     {
                         // 大小相同，进一步比对哈希确认无变化
-                        string localHash = await ComputeSha256Async(fullPath);
+                        string localHash = await FileHasher.ComputeSha256Async(fullPath);
                         if (!string.Equals(localHash, snapshot.Hash, StringComparison.OrdinalIgnoreCase))
                         {
                             _logger.LogInformation("全量扫描检测到变更（哈希不同）: {Path}", snapshot.Path);

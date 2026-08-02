@@ -223,13 +223,4 @@ public partial class SyncEngine
     {
         try { File.Delete(NormalizePath(path)); } catch (Exception ex) { _logger.LogWarning(ex, "删除文件失败: {Path}", path); }
     }
-
-    /// <summary>计算文件 SHA-256（64 字符十六进制）。</summary>
-    private static async Task<string> ComputeSha256Async(string filePath)
-    {
-        using System.Security.Cryptography.SHA256 sha = System.Security.Cryptography.SHA256.Create();
-        await using var stream = File.OpenRead(NormalizePath(filePath));
-        byte[] hash = await sha.ComputeHashAsync(stream);
-        return Convert.ToHexString(hash).ToLowerInvariant();
-    }
 }
