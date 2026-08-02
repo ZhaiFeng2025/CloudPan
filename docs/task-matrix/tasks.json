@@ -929,9 +929,9 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
+      "note": "设置页改由 SpecSettings 契约驱动（F-22/T-022）。①SettingsPage 重写为遍历 SpecSettings.All 按 SettingGroup 分组渲染表单——键名/标签/校验（Type/Min/Max/IsPath）/持久化通道（Startup→ServerSettingsFile，AppConfig→ISettingsService）均来自设置定义，删除手写三设置项常量（服务端口/同步根目录/家庭共享 Token 的标签、1-65535 端口校验、重启提示等硬编码）；分区显示名（网络/存储/安全）为 spec groups.label 未进生成产物的 UI 本地映射。②token_hash 写入收敛到 ISettingsService：TokenService 注入 ISettingsService，RotateAsync 的 DB 写改经 SetStringAsync(SpecSettings.Keys.TokenHash, hash)（原直写 ExecuteSqlRaw），移除 IDbContextFactory 依赖；ISettingsService 接口注释同步（不再声明 token_hash 不在此读写）。③TokenServiceTests 构造改为注入 SettingsService。\\n改动文件：CloudPan.Server.UI/SettingsPage.cs（重写）；CloudPan.Server.Core/Configuration/TokenService.cs（token_hash 写收敛 ISettingsService）；CloudPan.Server.Core/Configuration/ISettingsService.cs（注释）；CloudPan.Tests/Server/Services/TokenServiceTests.cs（CreateService 注入 SettingsService）；docs/task-matrix/tasks.json（状态推进）。\\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 189/189 通过（TokenServiceTests 4/4、架构 CodeQuality 行数门禁全绿）；验收①dotnet run --project CloudPan.CodeGen -- --verify 7 项全部一致；验收②grep -n 'SpecSettings' CloudPan.Server.UI/SettingsPage.cs 有匹配（9 处）。备注：SettingsPage.cs 压缩至 477 行以满足 CodeQualityTests 行数门禁（上限 500，原 429 行版本重写后超限已收敛）；DatabaseInitializer 首次初始化 token_hash 种子写入保持原样（启动期引导路径，非运行时设置，不在本次收敛范围）。",
       "updatedAt": "2026-08-03",
-      "status": "in-progress"
+      "status": "acceptance"
     },
     {
       "id": "T-023",
