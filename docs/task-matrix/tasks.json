@@ -363,7 +363,7 @@
       "title": "服务端删除传播到客户端（墓碑机制）",
       "dimension": "function",
       "priority": "P1",
-      "status": "acceptance",
+      "status": "done",
       "batch": 1,
       "findingId": "F-05",
       "dependsOn": [],
@@ -389,7 +389,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "服务端删除改软删除墓碑机制（F-05）：FileIndexService.DeleteAsync（物理 RemoveRange）改为 SoftDeleteAsync（标记 FileState.Deleting + 提升版本号 + 更新 LastModified，FileEntry 行保留），新增 PurgeExpiredTombstonesAsync 物理清理过期墓碑；FileOperationService.DeleteAsync 先分配新版本号再软删（墓碑据此经增量树传播），仍移入回收站；BackgroundHostedService 新增墓碑 30 天保留窗口定时清理（与回收站对齐）；树查询返回 Deleting 项，客户端 SyncEngine.ApplyRemoteChangesAsync 据墓碑删除本地副本并取消该路径待处理队列；客户端 OnWsFileDeleted 按 path 精确处理——新增 DeleteLocalCopyAsync 直接删本地副本+清快照+取消未决传输（不再仅触发增量同步），最后兜底增量同步；SearchAsync/分享创建/版本回滚加墓碑防护（已删文件不出现、不可分享、不可回滚）。\n改动文件：CloudPan.Server.Core/FileIndex/{IFileIndexService,FileIndexService}.cs；CloudPan.Server.Core/Files/FileOperationService.cs；CloudPan.Server.Core/{Trash,Sharing,Versions}/{TrashService,SharingService,VersionHistoryService}.cs；CloudPan.Server.Host/Hosting/BackgroundHostedService.cs；CloudPan.Client.Core/Services/{SyncEngine.Changes,SyncEngine.Scan}.cs；CloudPan.Tests/Server/Services/{FileIndexServiceTests,FileOperationServiceTests}.cs；CloudPan.Tests/Server/Controllers/FilesControllerIntegrationTests.cs；CloudPan.Tests/Client/Services/SyncEngineTests.cs；e2e-test.sh（新增 FS-14 服务端删除→客户端本地副本消失场景，置入阶段 2 主流程）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 158/158 通过（原 150，新增 8 个删除传播用例：SoftDelete_文件/文件夹墓碑、PurgeExpired 到期/未到期、GetFileTree 增量返回墓碑、Search 排除墓碑、Delete_文件_增量树返回墓碑、WsFileDeleted 删除本地副本、ApplyRemoteChanges 墓碑删除本地文件）；dotnet test --filter Architecture 9/9 通过。E2E FS-14 需真实发布产物+客户端 GUI 运行，未在本机执行（见验收标准①，由验收者运行 e2e-test.sh 验证）。",
+      "note": "服务端删除改软删除墓碑机制（F-05）：FileIndexService.DeleteAsync（物理 RemoveRange）改为 SoftDeleteAsync（标记 FileState.Deleting + 提升版本号 + 更新 LastModified，FileEntry 行保留），新增 PurgeExpiredTombstonesAsync 物理清理过期墓碑；FileOperationService.DeleteAsync 先分配新版本号再软删（墓碑据此经增量树传播），仍移入回收站；BackgroundHostedService 新增墓碑 30 天保留窗口定时清理（与回收站对齐）；树查询返回 Deleting 项，客户端 SyncEngine.ApplyRemoteChangesAsync 据墓碑删除本地副本并取消该路径待处理队列；客户端 OnWsFileDeleted 按 path 精确处理——新增 DeleteLocalCopyAsync 直接删本地副本+清快照+取消未决传输（不再仅触发增量同步），最后兜底增量同步；SearchAsync/分享创建/版本回滚加墓碑防护（已删文件不出现、不可分享、不可回滚）。\\n改动文件：CloudPan.Server.Core/FileIndex/{IFileIndexService,FileIndexService}.cs；CloudPan.Server.Core/Files/FileOperationService.cs；CloudPan.Server.Core/{Trash,Sharing,Versions}/{TrashService,SharingService,VersionHistoryService}.cs；CloudPan.Server.Host/Hosting/BackgroundHostedService.cs；CloudPan.Client.Core/Services/{SyncEngine.Changes,SyncEngine.Scan}.cs；CloudPan.Tests/Server/Services/{FileIndexServiceTests,FileOperationServiceTests}.cs；CloudPan.Tests/Server/Controllers/FilesControllerIntegrationTests.cs；CloudPan.Tests/Client/Services/SyncEngineTests.cs；e2e-test.sh（新增 FS-14 服务端删除→客户端本地副本消失场景，置入阶段 2 主流程）。\\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 158/158 通过（原 150，新增 8 个删除传播用例：SoftDelete_文件/文件夹墓碑、PurgeExpired 到期/未到期、GetFileTree 增量返回墓碑、Search 排除墓碑、Delete_文件_增量树返回墓碑、WsFileDeleted 删除本地副本、ApplyRemoteChanges 墓碑删除本地文件）；dotnet test --filter Architecture 9/9 通过。E2E FS-14 需真实发布产物+客户端 GUI 运行，未在本机执行（见验收标准①，由验收者运行 e2e-test.sh 验证）。\n【验收结论 2026-08-02】task-verifier 独立裁决：通过。验收标准①『bash e2e-test.sh（FS-14 服务端删除→客户端本地文件消失）』：完整套件需重发布自包含单文件（IN-01，联网耗时）+Windows 服务安装+GUI 客户端进程，且连带 20+ 个与 T-005 无关场景，未在本环境原样执行；改以更强证据裁决——最小化 FS-14 实测（真实 CloudPan.Server.exe headless + 真实 CloudPan.Client.exe 参数模式进程，两端同步根分离）：①服务端上传 tombstone-prop.txt → 客户端约 6s 全量同步下载本地副本（39 字节，内容与服务端一致，WS 认证成功）；②服务端 POST /api/files/delete 返回 deletedVersion=2、物理文件移入回收站；③客户端约 3s 内本地副本消失，客户端日志完整链路『WS 推送: 文件删除 /tombstone-prop.txt → WS 删除已处理，本地副本已删 → 同步删除』；④服务端增量树(since=0)返回 state=2(Deleting) 墓碑条目供客户端增量同步删除。佐证：删除传播单元/集成测试 58/58 通过（覆盖 SoftDelete 文件/文件夹墓碑、PurgeExpired 到期/未到期、GetFileTree 增量返回墓碑、Search 排除墓碑、Delete 增量树返回墓碑、WsFileDeleted 删除本地副本并清快照/队列、ApplyRemoteChanges 墓碑删除本地文件、集成测试删除后树返回 Deleting）。验收标准②『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error。独立核对覆盖：服务端 SoftDeleteAsync 标记 Deleting+提升版本号+保留行、DeleteAsync 先分配版本号再软删并移入回收站、PurgeExpiredTombstonesAsync+BackgroundHostedService 30 天窗口清理（Timer 回调 Task.Run+全量异常捕获，符合 CLAUDE.md 7.2）、树查询返回 Deleting 条目（含 State）、WS BroadcastFileDeletedAsync 广播 file_deleted（排除发起设备）、Search 排除墓碑；客户端 OnWsFileDeleted 按 path 精确处理（Task.Run+try/catch/finally，非 fire-and-forget）、DeleteLocalCopyAsync 取消待处理队列+删本地副本+清快照、ApplyRemoteChangesAsync 处理 Deleting 墓碑、WebSocketClient file_deleted 事件解析。FileState.Deleting=2 由 shared-spec 契约生成（Enums.g.cs）。两条自动标准全过，无手动项。",
       "updatedAt": "2026-08-02"
     },
     {
@@ -397,7 +397,7 @@
       "title": "上传冲突检测 BaseVersion 接线",
       "dimension": "function",
       "priority": "P1",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 1,
       "findingId": "F-06",
       "dependsOn": [],
@@ -423,8 +423,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "上传入队记录 BaseVersion = snapshot.Version（本地上一次已同步版本），ProcessUploadAsync 携带给服务端复用既有 409 冲突流程（直传 FilesController.Upload / 分块 ChunkedUploadService.FinalizeAsync，baseVersion>0 且服务端版本更高即返回 409；HandleUploadConflictAsync 保存冲突副本）。改动文件：CloudPan.Client.Core/Services/SyncEngine.Changes.cs（EnqueueLocalChangeAsync 上传入队赋值 BaseVersion = snapshot?.Version）；CloudPan.Tests/Client/Services/MockApiClient.cs（UploadAsync 模拟服务端冲突检测——baseVersion>0 且当前版本更高抛 HttpRequestException(Conflict)，对齐 Controller/ChunkedUploadService 语义）；CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 3 用例：EnqueueLocalChange_上传_记录BaseVersion为快照版本、EnqueueLocalChange_新文件上传_BaseVersion为空、ProcessUpload_双设备并发编辑_第二次上传409_Conflict冲突提示——覆盖双设备并发编辑→第二次上传 409→ConflictDetected 冲突提示→队列项保留等待用户决策；Dispose 退订事件处理器满足 CP300）。验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Conflict 3/3 通过（含新增客户端 409 用例）；全量 dotnet test CloudPan.Tests -c Release 161/161 通过（原 158 + 新增 3）。",
+      "updatedAt": "2026-08-02"
     },
     {
       "id": "T-007",

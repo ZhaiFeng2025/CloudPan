@@ -52,6 +52,16 @@ public class MockApiClient : IApiClient
         UploadCalls.TryGetValue(remotePath, out int count);
         UploadCalls[remotePath] = count + 1;
 
+        // 模拟服务端冲突检测：baseVersion > 0 且服务端当前版本 > baseVersion → 409
+        // （对齐 FilesController.Upload / ChunkedUploadService.FinalizeAsync 语义，供并发编辑冲突测试使用）
+        if (baseVersion > 0 && Files.TryGetValue(remotePath, out var current) && current.Version > baseVersion)
+        {
+            throw new HttpRequestException(
+                $"版本冲突：客户端基于 v{baseVersion}，服务端当前 v{current.Version}",
+                null,
+                System.Net.HttpStatusCode.Conflict);
+        }
+
         long size = File.Exists(localPath) ? new FileInfo(localPath).Length : 0;
         int version = Files.Count + 1;
 

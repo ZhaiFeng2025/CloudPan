@@ -153,6 +153,8 @@ public partial class SyncEngine
 
         // 上传去重：文件大小与快照一致 → 进一步比对哈希；均未变则跳过
         long fileSize = 0;
+        // 上传冲突检测基准版本（F-06）：本地上一次已同步的服务端版本，服务端据此检测并发编辑
+        int? baseVersion = null;
         if (operation == SyncOperation.Upload)
         {
             string fullPath = NormalizePath(Path.Combine(_syncRoot, relativePath.TrimStart('/')));
@@ -162,6 +164,7 @@ public partial class SyncEngine
             }
 
             var snapshot = await db.RemoteSnapshots.FindAsync(relativePath);
+            baseVersion = snapshot?.Version; // 记录 BaseVersion = snapshot.Version（本地上一次已同步版本）
             long localSize = new FileInfo(fullPath).Length;
             if (snapshot != null && localSize == snapshot.Size)
             {
@@ -191,7 +194,8 @@ public partial class SyncEngine
             FilePath = relativePath,
             Operation = (int)operation,
             Priority = fileSize < QueuePriorityThreshold ? (int)QueuePriority.High : (int)QueuePriority.Normal,
-            FileSize = fileSize
+            FileSize = fileSize,
+            BaseVersion = baseVersion // 冲突检测基准版本，ProcessUploadAsync 携带给服务端触发 409
         });
         await db.SaveChangesAsync();
         _logger.LogInformation($"入队: {operation} {relativePath}");

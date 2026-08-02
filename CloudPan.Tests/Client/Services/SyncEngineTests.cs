@@ -45,8 +45,15 @@ public class SyncEngineTests : IDisposable
         _engine = new SyncEngine(_api, config, _dbFactory, _logger);
     }
 
+    /// <summary>冲突测试事件处理器（Dispose 中退订，满足 CP300 事件订阅可退订规则）。</summary>
+    private Action<ConflictInfo>? _conflictHandler;
+
     public void Dispose()
     {
+        if (_conflictHandler != null)
+        {
+            _engine.ConflictDetected -= _conflictHandler;
+        }
         try { Directory.Delete(_tempDir, recursive: true); } catch { }
     }
 
@@ -358,6 +365,105 @@ public class SyncEngineTests : IDisposable
         await using var dbCheck = await _dbFactory.CreateDbContextAsync();
         int remaining = await dbCheck.SyncQueue.CountAsync(q => q.FilePath == "/process-upload.txt");
         Assert.Equal(0, remaining);
+    }
+
+    // ============================================================
+    // 上传冲突检测 BaseVersion 接线测试（F-06）
+    // ============================================================
+
+    [Fact]
+    public async Task EnqueueLocalChange_上传_记录BaseVersion为快照版本()
+    {
+        // 预置已同步快照（本地上一次已同步版本 = 3）
+        string filePath = Path.Combine(_syncRoot, "base-ver.txt");
+        await File.WriteAllTextAsync(filePath, "content-v2");
+
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.Add(new RemoteSnapshot
+            {
+                Path = "/base-ver.txt", Type = 0, Size = 999, // 大小与本地不同，绕过去重
+                Version = 3, State = 0, Hash = "old-hash"
+            });
+            await setupDb.SaveChangesAsync();
+        }
+
+        await _engine.EnqueueLocalChangeAsync("/base-ver.txt", SyncOperation.Upload);
+
+        await using var dbCheck = await _dbFactory.CreateDbContextAsync();
+        var item = await dbCheck.SyncQueue.FirstOrDefaultAsync(q => q.FilePath == "/base-ver.txt");
+        Assert.NotNull(item);
+        Assert.Equal(3, item!.BaseVersion); // BaseVersion = snapshot.Version
+    }
+
+    [Fact]
+    public async Task EnqueueLocalChange_新文件上传_BaseVersion为空()
+    {
+        string filePath = Path.Combine(_syncRoot, "brand-new.txt");
+        await File.WriteAllTextAsync(filePath, "new file");
+
+        await _engine.EnqueueLocalChangeAsync("/brand-new.txt", SyncOperation.Upload);
+
+        await using var dbCheck = await _dbFactory.CreateDbContextAsync();
+        var item = await dbCheck.SyncQueue.FirstOrDefaultAsync(q => q.FilePath == "/brand-new.txt");
+        Assert.NotNull(item);
+        Assert.Null(item!.BaseVersion); // 无快照（新文件），BaseVersion 为空 → 服务端按新文件处理
+    }
+
+    [Fact]
+    public async Task ProcessUpload_双设备并发编辑_第二次上传409_Conflict冲突提示()
+    {
+        string filePath = Path.Combine(_syncRoot, "concurrent-edit.txt");
+        await File.WriteAllTextAsync(filePath, "设备B的编辑");
+
+        // 设备 A 首次上传（服务端 v1）——设备 B 同步后本地快照为 v1
+        await _api.UploadAsync(filePath, "/concurrent-edit.txt", baseVersion: 0, lastModified: DateTime.UtcNow.ToString("O"));
+
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.Add(new RemoteSnapshot
+            {
+                Path = "/concurrent-edit.txt", Type = 0, Size = new FileInfo(filePath).Length,
+                Version = 1, State = 0, Hash = "hash-v1"
+            });
+            await setupDb.SaveChangesAsync();
+        }
+
+        // 设备 A 再次编辑上传（服务端 v2，设备 B 不知情）
+        await _api.UploadAsync(filePath, "/concurrent-edit.txt", baseVersion: 1, lastModified: DateTime.UtcNow.ToString("O"));
+
+        // 设备 B 本地编辑 → 入队上传（BaseVersion 应为快照版本 1）
+        await _engine.EnqueueLocalChangeAsync("/concurrent-edit.txt", SyncOperation.Upload);
+
+        await using (var enqueueDb = await _dbFactory.CreateDbContextAsync())
+        {
+            var item = await enqueueDb.SyncQueue.FirstOrDefaultAsync(q => q.FilePath == "/concurrent-edit.txt");
+            Assert.NotNull(item);
+            Assert.Equal(1, item!.BaseVersion);
+        }
+
+        // 订阅冲突事件（具名字段处理器，Dispose 中退订满足 CP300）
+        int conflictCount = 0;
+        ConflictInfo? conflictInfo = null;
+        _conflictHandler = ci => { conflictCount++; conflictInfo = ci; };
+        _engine.ConflictDetected += _conflictHandler;
+
+        // 处理队列 → 服务端 409 → 触发客户端冲突提示
+        var method = typeof(SyncEngine).GetMethod("ProcessQueueAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+        Task? task = (Task?)method!.Invoke(_engine, [CancellationToken.None]);
+        Assert.NotNull(task);
+        await task;
+
+        Assert.Equal(1, conflictCount); // 冲突提示已触发
+        Assert.NotNull(conflictInfo);
+        Assert.Equal("/concurrent-edit.txt", conflictInfo!.RelativePath);
+
+        // 队列项保留（等待用户决策，而非被删除或覆盖）
+        await using var dbFinal = await _dbFactory.CreateDbContextAsync();
+        int remaining = await dbFinal.SyncQueue.CountAsync(q => q.FilePath == "/concurrent-edit.txt");
+        Assert.Equal(1, remaining);
     }
 }
 
