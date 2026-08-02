@@ -191,6 +191,15 @@ public class FileOperationService : IFileOperationService
     /// <inheritdoc />
     public async Task<FileDownloadResult> DownloadAsync(string path)
     {
+        // R-A5 路径安全统一防线：下载路径显式经 ValidatePath（与 Delete/Move/Mkdir 一致，
+        // 防止 ../ 等路径穿越越界读取同步根外文件——如 .cloudpan 元数据/服务端配置）
+        string? pathErr = _storage.ValidatePath(path);
+        if (pathErr != null)
+        {
+            return new FileDownloadResult(false, null, null, null, 0,
+                new DomainError(HttpErrorCode.BAD_REQUEST, pathErr, "路径格式不正确"));
+        }
+
         var entry = await _index.GetByPathAsync(path);
         if (entry == null)
         {

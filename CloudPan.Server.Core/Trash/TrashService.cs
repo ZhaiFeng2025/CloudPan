@@ -55,7 +55,21 @@ public class TrashService : ITrashService
     public async Task<TrashRestoreResult> RestoreAsync(string metaFileName)
     {
         string trashDir = GetTrashDir();
-        string metaPath = Path.Combine(trashDir, metaFileName);
+
+        // R-A5 路径安全统一防线：MetaFileName 为用户输入，先经 Path.GetFileName 归一，
+        // 再校验——禁止目录分隔符（'/' 或 '\\'，防 ../、..\\ 等路径穿越读取 trashDir 外文件），
+        // 且归一后结果必须与输入一致（存在分隔符即会被剥离导致不一致，直接拒绝）
+        string safeMetaFileName = Path.GetFileName(metaFileName);
+        if (string.IsNullOrEmpty(safeMetaFileName)
+            || safeMetaFileName != metaFileName
+            || safeMetaFileName is "." or ".."
+            || safeMetaFileName.IndexOfAny(new[] { '/', '\\' }) >= 0)
+        {
+            return new TrashRestoreResult(false, null,
+                new DomainError(HttpErrorCode.BAD_REQUEST, "回收站记录文件名不合法", "回收站记录文件名不合法"));
+        }
+
+        string metaPath = Path.Combine(trashDir, safeMetaFileName);
         if (!File.Exists(metaPath))
         {
             return new TrashRestoreResult(false, null,
@@ -70,7 +84,23 @@ public class TrashService : ITrashService
                 new DomainError(HttpErrorCode.BAD_REQUEST, "回收站记录损坏", "回收站记录损坏，无法恢复该文件"));
         }
 
-        string trashFile = Path.Combine(trashDir, entry.TrashFileName);
+        // R-A5 纵深防御：回收站实体文件名经 GetFileName 归一、恢复目标路径经 ValidatePath 校验，
+        // 防元数据被篡改写入越界路径（TrashFileName 指向 trashDir 外、OriginalPath 逃出同步根）
+        string safeTrashFileName = Path.GetFileName(entry.TrashFileName);
+        if (string.IsNullOrEmpty(safeTrashFileName) || safeTrashFileName != entry.TrashFileName)
+        {
+            return new TrashRestoreResult(false, null,
+                new DomainError(HttpErrorCode.BAD_REQUEST, "回收站记录损坏", "回收站记录损坏，无法恢复该文件"));
+        }
+
+        string? targetPathErr = _storage.ValidatePath(entry.OriginalPath);
+        if (targetPathErr != null)
+        {
+            return new TrashRestoreResult(false, null,
+                new DomainError(HttpErrorCode.BAD_REQUEST, "回收站记录损坏", "回收站记录损坏，无法恢复该文件"));
+        }
+
+        string trashFile = Path.Combine(trashDir, safeTrashFileName);
         if (!File.Exists(trashFile) && !Directory.Exists(trashFile))
         {
             return new TrashRestoreResult(false, null,

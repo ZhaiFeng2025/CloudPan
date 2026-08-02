@@ -938,7 +938,7 @@
       "title": "选择性同步取消勾选振荡修复",
       "dimension": "function",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 2,
       "findingId": "F-23",
       "dependsOn": [],
@@ -958,7 +958,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "F-23 振荡修复：FullScanCoreAsync 第 2 步跳过 CloudOnly 快照时记录 cloudOnlyPaths 集合，第 3 步枚举本地新文件时跳过 State==CloudOnly 快照对应的本地残留副本——取消勾选后仍存在的本地文件不再当新文件上传（原路径：上传→ProcessUploadAsync 置回 Synced→下次增量同步按 IsPathSelected=false 打回 CloudOnly→下次扫描重传，形成振荡浪费带宽与版本）。\\n改动文件：CloudPan.Client.Core/Services/SyncEngine.Scan.cs（新增 cloudOnlyPaths 集合 + 第 3 步跳过，注释标注 F-23）；CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 FullScan_取消勾选CloudOnly本地残留副本_不重传不振荡）；docs/task-matrix/tasks.json（状态推进）。\\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Sync 38/38 通过（含新增 CloudOnly 振荡用例，FQN 单独精确运行 1/1 通过，断言第一次/第二次全量扫描均不入队上传且快照保持 CloudOnly——覆盖『取消勾选后本地文件不重传、不振荡』）；全量 dotnet test CloudPan.Tests -c Release 190/190 通过（原 189 + 新增 1）。\\n备注：取消勾选当前经设置页保存→重启客户端生效（TrayAppContext.OpenSettings 提示『部分更改需要重启客户端后生效』），本地残留副本不自动清理，由本修复保证不再被上传与振荡；『取消勾选时可选地清理本地副本』留作后续可选增强，不在本任务范围内。",
+      "note": "F-23 振荡修复：FullScanCoreAsync 第 2 步跳过 CloudOnly 快照时记录 cloudOnlyPaths 集合，第 3 步枚举本地新文件时跳过 State==CloudOnly 快照对应的本地残留副本——取消勾选后仍存在的本地文件不再当新文件上传（原路径：上传→ProcessUploadAsync 置回 Synced→下次增量同步按 IsPathSelected=false 打回 CloudOnly→下次扫描重传，形成振荡浪费带宽与版本）。\\n改动文件：CloudPan.Client.Core/Services/SyncEngine.Scan.cs（新增 cloudOnlyPaths 集合 + 第 3 步跳过，注释标注 F-23）；CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 FullScan_取消勾选CloudOnly本地残留副本_不重传不振荡）；docs/task-matrix/tasks.json（状态推进）。\\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Sync 38/38 通过（含新增 CloudOnly 振荡用例，FQN 单独精确运行 1/1 通过，断言第一次/第二次全量扫描均不入队上传且快照保持 CloudOnly——覆盖『取消勾选后本地文件不重传、不振荡』）；全量 dotnet test CloudPan.Tests -c Release 190/190 通过（原 189 + 新增 1）。\\n备注：取消勾选当前经设置页保存→重启客户端生效（TrayAppContext.OpenSettings 提示『部分更改需要重启客户端后生效』），本地残留副本不自动清理，由本修复保证不再被上传与振荡；『取消勾选时可选地清理本地副本』留作后续可选增强，不在本任务范围内。\\n【验收结论 2026-08-03】task-verifier 独立裁决：通过。验收标准①『dotnet test --filter Sync』实测 38/38 通过（Failed 0 / Passed 38 / Skipped 0），关键用例 FullScan_取消勾选CloudOnly本地残留副本_不重传不振荡（CloudPan.Tests/Client/Services/SyncEngineTests.cs:237）单独精确运行 1/1 通过——场景 /photos/summer.jpg 快照 State==CloudOnly + 本地残留副本，断言第一次/第二次全量扫描 SyncQueue 均无 Upload 项、快照保持 CloudOnly（未被上传置回 Synced），直接覆盖『取消勾选后本地文件不重传、不振荡』；该类名 SyncEngineTests 含 'Sync' 子串，--filter Sync 命中该类，验收命令可复现。附加标准『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error。独立核查代码路径真实性：SyncEngine.Scan.cs:296-297 新增 cloudOnlyPaths 集合（F-23 注释标注）；:311-317 第 2 步遍历快照遇 State==CloudOnly 记录 path 并 continue；:368-373 第 3 步枚举本地新文件时 cloudOnlyPaths 命中即跳过，不再 EnqueueLocalChangeAsync(Upload)——完整阻断『上传→置回 Synced→下次增量打回 CloudOnly→重传』振荡环。requirements 落实核查：①第 3 步枚举本地文件跳过 CloudOnly 快照对应本地文件（真实存在，改动落在 SyncEngine.Scan.cs）②补单测覆盖不重传不振荡（真实存在且独立运行通过）。单条自动标准通过，无手动项。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -966,7 +966,7 @@
       "title": "回收站元数据文件名路径穿越修复",
       "dimension": "architecture",
       "priority": "P2",
-      "status": "todo",
+      "status": "in-progress",
       "batch": 2,
       "findingId": "F-24",
       "dependsOn": [],
@@ -992,7 +992,7 @@
       "attempts": 0,
       "statusReason": null,
       "note": null,
-      "updatedAt": null
+      "updatedAt": "2026-08-03"
     }
   ]
 }

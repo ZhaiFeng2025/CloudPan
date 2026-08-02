@@ -95,4 +95,31 @@ public class TrashServiceTests : Infrastructure.TestBase
 
         Assert.Empty(Directory.GetFiles(TrashDir, "*.json"));
     }
+
+    /// <summary>
+    /// F-24/T-024 路径穿越拒绝：MetaFileName 为用户输入，含目录分隔符（/、\）或绝对路径的穿越
+    /// 一律返回 BAD_REQUEST，且不得读取/删除 trashDir 之外的文件。
+    /// </summary>
+    [Theory]
+    [InlineData("../decoy.json")]
+    [InlineData(@"..\..\secret.json")]
+    [InlineData("../../server.db")]
+    [InlineData("/etc/passwd")]
+    public async Task Restore_路径穿越元数据文件名_被拒绝(string traversalName)
+    {
+        var svc = await CreateServiceAsync("a.txt", "x");
+        await svc.MoveToTrashAsync("/a.txt", isDirectory: false);
+
+        // 诱饵：trashDir 之外的 .cloudpan 下放置伪造元数据，若发生路径穿越会被读到/删除
+        string decoyPath = Path.Combine(TempDir, ".cloudpan", "decoy.json");
+        await File.WriteAllTextAsync(decoyPath, "{}");
+
+        var result = await svc.RestoreAsync(traversalName);
+
+        Assert.False(result.Success);
+        Assert.Equal(HttpErrorCode.BAD_REQUEST.Code, result.Error!.Code.Code);
+        // 穿越被拒绝：外部诱饵未被动过，回收站自身元数据未误删
+        Assert.True(File.Exists(decoyPath));
+        Assert.Single(Directory.GetFiles(TrashDir, "*.json"));
+    }
 }
