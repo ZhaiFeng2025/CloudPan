@@ -1,53 +1,28 @@
 using System.Security.Principal;
-using System.ServiceProcess;
-using CloudPan.Server.Data;
+using CloudPan.Server.Hosting;
 using CloudPan.Server.Services;
-using CloudPan.Shared;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 
 namespace CloudPan.Server.UI;
 
 /// <summary>
-/// 运行模式处理器：Windows Service / headless console / tray GUI。
-/// 从 Program.cs 提取。headless（--service 或非交互）不创建任何窗口。
+/// IHostUIBridge 实现（T-015）：Host 运行期经 <see cref="UIBridgeLocator"/> 反射发现并实例化本类型，委托托盘 GUI 运行。
+/// headless（本程序集未部署）时 Host 不加载本类型，以纯 Kestrel 服务运行。
 /// </summary>
-public static class TrayAppRunner
+public sealed class ServerUiBridge : IHostUIBridge
 {
-    public static async Task RunAsync(WebApplication app, string[] args)
+    public Task RunTrayAsync(WebApplication app, string[] args)
     {
-        bool useTray = args.Contains("--tray");
-        bool isService = Environment.UserInteractive == false || args.Contains("--service");
-
-        if (useTray || !isService)
-        {
-            ApplicationConfiguration.Initialize();
-            await RunWithTrayAsync(app);
-        }
-        else
-        {
-            // headless：Windows Service 或控制台，无 UI
-            try
-            {
-                app.Run();
-            }
-            catch (Exception ex)
-            {
-                Log.Fatal(ex, "Web 服务运行异常");
-                Environment.ExitCode = 1;
-            }
-
-            Log.CloseAndFlush();
-        }
+        ApplicationConfiguration.Initialize();
+        return RunWithTrayAsync(app);
     }
 
     private static async Task RunWithTrayAsync(WebApplication app)
     {
         // 未安装为服务则显示安装向导（仅管理员）
-        bool serviceInstalled = IsServiceInstalled("CloudPanServer");
+        bool serviceInstalled = TrayAppRunner.IsServiceInstalled("CloudPanServer");
         if (!serviceInstalled)
         {
             using WindowsIdentity identity = WindowsIdentity.GetCurrent();
@@ -170,21 +145,5 @@ public static class TrayAppRunner
         }
 
         Log.CloseAndFlush();
-    }
-
-    /// <summary>检查 Windows 服务是否已安装（供设置页"重启服务"分支复用）。</summary>
-    public static bool IsServiceInstalled(string serviceName)
-    {
-        try
-        {
-            using var sc = ServiceController.GetServices()
-                .FirstOrDefault(s => s.ServiceName == serviceName);
-            return sc != null;
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "检查服务 {ServiceName} 安装状态时发生异常（可能是权限不足）", serviceName);
-            return false;
-        }
     }
 }

@@ -18,6 +18,11 @@ Write-Host "`n[1/3] Building Server..." -ForegroundColor Yellow
 Remove-Item "$dist\Server\CloudPan.Server.exe" -Force -ErrorAction SilentlyContinue
 dotnet publish "$root\CloudPan.Server.Host\CloudPan.Server.Host.csproj" -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o "$dist\Server" 2>&1
 
+# 可选 UI 模块（T-015）：Host 不再编译期引用 Server.UI，其 dll 作为独立程序集随发布输出，
+# Host 运行期经 IHostUIBridge 反射发现；headless 部署删除此 dll 即无 UI
+dotnet build "$root\CloudPan.Server.UI\CloudPan.Server.UI.csproj" -c Release 2>&1
+Copy-Item "$root\CloudPan.Server.UI\bin\Release\net8.0-windows\CloudPan.Server.UI.dll" "$dist\Server\" -Force
+
 # Server install/uninstall scripts
 Set-Content -Path "$dist\Server\install.bat" -Value @"
 @echo off

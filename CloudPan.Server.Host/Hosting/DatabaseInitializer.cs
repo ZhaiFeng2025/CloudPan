@@ -2,7 +2,6 @@ using System.Security.Cryptography;
 using CloudPan.Server.Data;
 using CloudPan.Server.Models;
 using CloudPan.Server.Services;
-using CloudPan.Server.UI;
 using CloudPan.Shared;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -99,12 +98,10 @@ public static class DatabaseInitializer
             if (!string.IsNullOrEmpty(presetToken))
             {
                 token = presetToken;
-                ServerTrayApp.Token = token;
             }
             else
             {
                 token = TokenGenerator.Generate();
-                ServerTrayApp.Token = token; // 供托盘菜单显示/复制
                 Console.ForegroundColor = ConsoleColor.Yellow;
                 Console.WriteLine();
                 Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");

@@ -20,7 +20,7 @@
     <ProjectReference Include="..\CloudPan.Contract\CloudPan.Contract.csproj" />
     <ProjectReference Include="..\CloudPan.Infrastructure\CloudPan.Infrastructure.csproj" />
     <ProjectReference Include="..\CloudPan.Server.Core\CloudPan.Server.Core.csproj" />
-    <ProjectReference Include="..\CloudPan.Server.UI\CloudPan.Server.UI.csproj" />
+    <!-- T-015：不再编译期引用可选 UI 模块（headless 可编译）。可选 UI 经 IHostUIBridge 运行期反射接入 -->
   </ItemGroup>
 
   <ItemGroup>

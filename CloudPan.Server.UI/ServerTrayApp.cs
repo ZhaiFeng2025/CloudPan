@@ -126,7 +126,8 @@ public class ServerTrayApp : ApplicationContext
     }
 
     /// <summary>
-    /// 获取当前 Token。优先静态缓存（首次启动赋值），服务重启后回退读 token.txt——修复重启后托盘显示"未生成"的既存问题。
+    /// 获取当前 Token。优先静态缓存（Token 轮换时由设置页更新，保证托盘立即显示新值）；
+    /// 未缓存时读 token.txt（T-015 后首次启动不再写静态属性，DatabaseInitializer 已把 Token 写入 token.txt）。
     /// </summary>
     private string? GetToken()
     {

@@ -15,17 +15,27 @@
     <ProjectReference Include="..\CloudPan.Contract\CloudPan.Contract.csproj" />
     <ProjectReference Include="..\CloudPan.Infrastructure\CloudPan.Infrastructure.csproj" />
     <ProjectReference Include="..\CloudPan.Server.Core\CloudPan.Server.Core.csproj" />
+    <!-- T-015：实现 Host 定义的 IHostUIBridge 桥契约（Host 不再引用本程序集，方向 UI→Host，无循环） -->
+    <ProjectReference Include="..\CloudPan.Server.Host\CloudPan.Server.Host.csproj" />
   </ItemGroup>
 
-  <!-- ServerTrayApp 依赖 WebApplication（Microsoft.AspNetCore.App 框架引用），不依赖 Host 项目本身，避免循环引用 -->
+  <!-- ServerTrayApp 依赖 WebApplication（Microsoft.AspNetCore.App 框架引用） -->
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
+  <!-- T-015：Host 已不再引用本程序集，构建后把 dll 复制到 Host 输出目录，保证开发期（bin 直接运行）托盘 UI 可用；
+       正式发布由 publish.ps1 显式复制 Server.UI.dll 到发布目录 -->
+  <Target Name="CopyUiDllToHostOutput" AfterTargets="Build">
+    <Copy SourceFiles="$(TargetPath)"
+          DestinationFolder="$(MSBuildThisFileDirectory)..\CloudPan.Server.Host\bin\$(Configuration)\$(TargetFramework)\"
+          Condition="Exists('$(MSBuildThisFileDirectory)..\CloudPan.Server.Host\CloudPan.Server.Host.csproj')" />
+  </Target>
+
   <ItemGroup>
     <PackageReference Include="Serilog" Version="4.3.0" />
-    <!-- IsServiceInstalled 使用 ServiceController 检查 Windows 服务安装状态 -->
-    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
+    <!-- IsServiceInstalled 使用 ServiceController 检查 Windows 服务安装状态；版本与 Host 传递的 Microsoft.Extensions.Hosting.WindowsServices 10.0.10 对齐（NU1605） -->
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.10" />
   </ItemGroup>
 
 </Project>

@@ -1,4 +1,5 @@
 using System.Xml.Linq;
+using CloudPan.Server.Hosting;
 using Xunit;
 
 namespace CloudPan.Tests.Architecture;
@@ -20,9 +21,10 @@ public class ArchitectureDependencyTests
         // 领域层：仅依赖基础设施/契约
         ["CloudPan.Server.Core"]    = new[] { "CloudPan.Contract", "CloudPan.Infrastructure" },
         ["CloudPan.Client.Core"]    = new[] { "CloudPan.Contract", "CloudPan.Infrastructure" },
-        // 宿主层：依赖领域/基础设施/契约；Host 引用 UI（同级宿主层）
-        ["CloudPan.Server.Host"]    = new[] { "CloudPan.Contract", "CloudPan.Infrastructure", "CloudPan.Server.Core", "CloudPan.Server.UI" },
-        ["CloudPan.Server.UI"]      = new[] { "CloudPan.Contract", "CloudPan.Infrastructure", "CloudPan.Server.Core" },
+        // 宿主层：依赖领域/基础设施/契约。T-015：Host 不再引用 UI（headless 可编译）；
+        // UI 实现 Host 定义的 IHostUIBridge 桥契约，依赖方向单向 UI→Host（同级宿主层内可选模块依赖契约提供方）
+        ["CloudPan.Server.Host"]    = new[] { "CloudPan.Contract", "CloudPan.Infrastructure", "CloudPan.Server.Core" },
+        ["CloudPan.Server.UI"]      = new[] { "CloudPan.Contract", "CloudPan.Infrastructure", "CloudPan.Server.Core", "CloudPan.Server.Host" },
         ["CloudPan.Client.UI"]      = new[] { "CloudPan.Contract", "CloudPan.Infrastructure", "CloudPan.Client.Core" },
         // 工具项目：零依赖
         ["CloudPan.CodeGen"]        = Array.Empty<string>(),
@@ -74,6 +76,26 @@ public class ArchitectureDependencyTests
         Assert.True(violations.Count == 0,
             $"架构依赖方向违反（R-A1 单向依赖）:\n{string.Join("\n", violations)}\n" +
             "规则: Host/UI → Core → Infrastructure → Contract，禁止反向/跳层。见 docs/architecture-requirements.md");
+    }
+
+    /// <summary>
+    /// T-015 / R-Q3 headless 编译门禁：Host 程序集（CloudPan.Server）的元数据引用不得含可选 UI 程序集，
+    /// 且 Host csproj 无 UI 项目引用——保证 Host 不携带 UI 程序集即可编译并独立运行（headless）。
+    /// </summary>
+    [Fact]
+    public void Host程序集_不引用UI_headless可编译()
+    {
+        // 编译产物级门禁：Host 程序集元数据引用不含 UI 程序集（typeof(TrayAppRunner) 取自 Host 程序集）
+        var hostAsm = typeof(TrayAppRunner).Assembly;
+        Assert.DoesNotContain(
+            hostAsm.GetReferencedAssemblies(),
+            r => r.Name == "CloudPan.Server.UI");
+
+        // 项目文件级门禁：Host csproj 不含 Server.UI 引用（对齐验收标准 grep 命令）
+        string hostCsproj = Path.Combine(
+            FindSolutionDir() ?? throw new DirectoryNotFoundException("找不到解决方案根目录（CloudPan.sln）"),
+            "CloudPan.Server.Host", "CloudPan.Server.Host.csproj");
+        Assert.DoesNotContain("Server.UI", File.ReadAllText(hostCsproj), StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? FindSolutionDir()
