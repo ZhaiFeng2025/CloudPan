@@ -750,7 +750,7 @@
       "title": "文件哈希计算收敛为单一实现",
       "dimension": "simplicity",
       "priority": "P1",
-      "status": "in-progress",
+      "status": "acceptance",
       "batch": 2,
       "findingId": "F-17",
       "dependsOn": [],
@@ -775,7 +775,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "与批次 1 T-003 同改 ApiClient.cs，顺序执行避免并发编辑。",
+      "note": "文件哈希收敛为单一实现（F-17/T-017）：新建 CloudPan.Contract/FileHasher.cs（静态 FileHasher.ComputeSha256Async，全仓唯一 SHA256.Create()），服务端与客户端共用；FileStorageService.ComputeHashAsync 委托 FileHasher（IFileStorageService API 不变，服务端 10+ 调用点零改动）；删除客户端两份私有实现——ApiClient.cs（DownloadAsync 下载校验 + UploadChunkedAsync 大文件哈希 2 处调用点）与 SyncEngine.Queue.cs（Changes.cs:175 / Scan.cs:342 / Transfers.cs×5 共 7 处调用点改为 FileHasher.ComputeSha256Async），ApiClient 移除 using System.Security.Cryptography。路径语义保持等价：客户端所有调用点传入路径已经 ToLocalPath/NormalizePath 规范化（含 \\\\?\\ 长路径前缀），原私有方法内部 NormalizePath 为幂等冗余，Contract 工具直接 File.OpenRead 行为一致。改动文件：新增 CloudPan.Contract/FileHasher.cs；修改 CloudPan.Infrastructure/Storage/FileStorageService.cs、CloudPan.Client.Core/Services/{ApiClient,SyncEngine.Queue,SyncEngine.Changes,SyncEngine.Scan,SyncEngine.Transfers}.cs。验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 186/186 通过；验收命令 grep -rc 'SHA256.Create()' --include=*.cs | grep -v ':0' 仅 1 行（CloudPan.Contract/FileHasher.cs:16）；grep 客户端私有 ComputeSha256Async 定义无匹配；dotnet run --project CloudPan.CodeGen -- --verify 7 项全部一致。",
       "updatedAt": "2026-08-03"
     },
     {
