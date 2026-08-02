@@ -31,7 +31,11 @@ public class TokenServiceTests : Infrastructure.TestBase
 
     private static TokenService CreateService(
         IDbContextFactory<CloudPanDbContext> dbFactory, string syncRoot, IMemoryCache cache, FakeWebSocketHandler ws)
-        => new TokenService(dbFactory, syncRoot, cache, ws, NullLogger<TokenService>.Instance);
+    {
+        // T-022：TokenService 的 token_hash 写入统一经 ISettingsService
+        var settingsService = new SettingsService(dbFactory);
+        return new TokenService(settingsService, syncRoot, cache, ws, NullLogger<TokenService>.Instance);
+    }
 
     [Fact]
     public async Task RotateAsync_生成64hex_同步DB哈希与token文件()

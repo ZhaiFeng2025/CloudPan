@@ -1,8 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
-using CloudPan.Infrastructure.Persistence;
+using CloudPan.Contract;
 using CloudPan.Infrastructure.Security;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 
@@ -12,23 +11,24 @@ namespace CloudPan.Server.Core;
 /// Token 轮换服务。副作用顺序即一致性策略：
 ///   token.txt（尽力而为） → DB token_hash（权威源） → 缓存失效 → 可选断开连接。
 /// 文件失败不阻断（展示用途），DB 失败则抛异常（系统停留旧 Token，无服务中断）。
+/// token_hash 写入统一经 ISettingsService（运行时设置唯一通道，规则 0/T-022）。
 /// </summary>
 public sealed class TokenService : ITokenService
 {
-    private readonly IDbContextFactory<CloudPanDbContext> _dbFactory;
+    private readonly ISettingsService _settingsService;
     private readonly string _syncRoot;
     private readonly IMemoryCache _cache;
     private readonly IWebSocketHandler _ws;
     private readonly ILogger<TokenService> _logger;
 
     public TokenService(
-        IDbContextFactory<CloudPanDbContext> dbFactory,
+        ISettingsService settingsService,
         string syncRoot,
         IMemoryCache cache,
         IWebSocketHandler ws,
         ILogger<TokenService> logger)
     {
-        _dbFactory = dbFactory;
+        _settingsService = settingsService;
         _syncRoot = syncRoot;
         _cache = cache;
         _ws = ws;
@@ -49,17 +49,9 @@ public sealed class TokenService : ITokenService
             _logger.LogError(ex, "Token 轮换：写入 token.txt 失败（非致命，DB 哈希仍为权威源）");
         }
 
-        // 2. DB token_hash（权威源）：失败则抛异常，系统停留在旧 Token
+        // 2. DB token_hash（权威源）经 ISettingsService 写入：失败则抛异常，系统停留在旧 Token
         string tokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(newToken))).ToLowerInvariant();
-        await using (var db = await _dbFactory.CreateDbContextAsync())
-        {
-            await using var tx = await db.Database.BeginTransactionAsync();
-            await db.Database.ExecuteSqlRawAsync(
-                "INSERT OR IGNORE INTO AppConfig(Key, Value) VALUES('token_hash', {0})", tokenHash);
-            await db.Database.ExecuteSqlRawAsync(
-                "UPDATE AppConfig SET Value = {0} WHERE Key = 'token_hash'", tokenHash);
-            await tx.CommitAsync();
-        }
+        await _settingsService.SetStringAsync(SpecSettings.Keys.TokenHash, tokenHash);
 
         // 3. 立即失效 5 分钟缓存——旧 Token 即刻失效，无需等缓存过期
         _cache.Remove(CacheKeys.TokenHash);

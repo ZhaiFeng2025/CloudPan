@@ -874,7 +874,7 @@
       "title": "分块上传 Finalize 原子化（DB/FS 一致）",
       "dimension": "function",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 2,
       "findingId": "F-21",
       "dependsOn": [
@@ -896,7 +896,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "分块上传 Finalize 原子化（F-21/T-021）：Move 覆盖目标失败（文件被锁）时回滚 FileEntry 到旧 hash/version，确保索引永远反映真实磁盘内容。\n方案选型：需求二选一（Move 先于 DB 提交 / Move 失败回滚 FileEntry）——选后者，与 T-020 既有『DB 事务提交→FS 原子覆盖』结构最小改动，且回滚直接消除毒化状态（DB 已提交新 hash/version 而磁盘仍旧内容、客户端下轮树同步对齐错误索引永不重传）。\n实现：ChunkedUploadService.FinalizeAsync 阶段 3 的 IOFile.Move 失败 catch 中新增 RollbackFinalizeAsync——使用全新 DbContext（CLAUDE.md 7.3：不复用已提交的 db，其变更追踪器持有新值而非 DB 真值）开启独立事务：FileEntry 恢复旧 hash/version/size/LastModified/State（新建文件则删除条目）、移除本次新增的孤儿 VersionRecord（旧内容仍是磁盘真值，存档冗余）并删除存档文件；临时文件 finally 清理后 rethrow（客户端 500 后队列重试/下轮扫描按哈希差异重新上传收敛）。DB 失败路径不变（原 catch 清理孤儿存档）。\n改动文件：CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.cs（阶段 3 catch 回滚 + 新增 RollbackFinalizeAsync）；CloudPan.Tests/Server/Services/ChunkedUploadServiceTests.cs（新增 ReceiveChunk_Move覆盖目标失败_回滚FileEntry到旧hash与version_重试收敛）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter ChunkedUpload 7/7 通过（原 6 + 新增 1，新增用例以 FileShare.ReadWrite 锁目标文件模拟 Move 失败→断言回滚后 FileEntry 恢复旧 hash/version/size/LastModified、无孤儿 VersionRecord、会话已清理、临时文件已删、磁盘仍为旧内容；释放锁后客户端重传→Move 成功收敛到新内容）；全量 dotnet test CloudPan.Tests -c Release 189/189 通过（原 188 + 1）。",
+      "note": "分块上传 Finalize 原子化（F-21/T-021）：Move 覆盖目标失败（文件被锁）时回滚 FileEntry 到旧 hash/version，确保索引永远反映真实磁盘内容。\n方案选型：需求二选一（Move 先于 DB 提交 / Move 失败回滚 FileEntry）——选后者，与 T-020 既有『DB 事务提交→FS 原子覆盖』结构最小改动，且回滚直接消除毒化状态（DB 已提交新 hash/version 而磁盘仍旧内容、客户端下轮树同步对齐错误索引永不重传）。\n实现：ChunkedUploadService.FinalizeAsync 阶段 3 的 IOFile.Move 失败 catch 中新增 RollbackFinalizeAsync——使用全新 DbContext（CLAUDE.md 7.3：不复用已提交的 db，其变更追踪器持有新值而非 DB 真值）开启独立事务：FileEntry 恢复旧 hash/version/size/LastModified/State（新建文件则删除条目）、移除本次新增的孤儿 VersionRecord（旧内容仍是磁盘真值，存档冗余）并删除存档文件；临时文件 finally 清理后 rethrow（客户端 500 后队列重试/下轮扫描按哈希差异重新上传收敛）。DB 失败路径不变（原 catch 清理孤儿存档）。\n改动文件：CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.cs（阶段 3 catch 回滚 + 新增 RollbackFinalizeAsync）；CloudPan.Tests/Server/Services/ChunkedUploadServiceTests.cs（新增 ReceiveChunk_Move覆盖目标失败_回滚FileEntry到旧hash与version_重试收敛）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter ChunkedUpload 7/7 通过（原 6 + 新增 1，新增用例以 FileShare.ReadWrite 锁目标文件模拟 Move 失败→断言回滚后 FileEntry 恢复旧 hash/version/size/LastModified、无孤儿 VersionRecord、会话已清理、临时文件已删、磁盘仍为旧内容；释放锁后客户端重传→Move 成功收敛到新内容）；全量 dotnet test CloudPan.Tests -c Release 189/189 通过（原 188 + 1）。\n【验收结论 2026-08-03】task-verifier 独立裁决：通过。验收标准①『dotnet test --filter ChunkedUpload』实测 7/7 通过（Failed 0 / Passed 7 / Skipped 0），其中关键用例 ReceiveChunk_Move覆盖目标失败_回滚FileEntry到旧hash与version_重试收敛（CloudPan.Tests/Server/Services/ChunkedUploadServiceTests.cs:160）按 FQN --filter 单独精确运行 1/1 通过，完整覆盖验收场景『Move 失败回滚』：以 FileShare.ReadWrite 锁目标文件模拟 Move 必然失败→断言回滚后 FileEntry 恢复旧 hash/version/size/LastModified/State=Synced、无孤儿 VersionRecord、ChunkedUpload 会话已清理、临时文件已删、磁盘仍为旧内容；释放锁后客户端重传（全新会话）→Move 成功、断言 completed.Hash==newHash 且磁盘逐字节等于新内容、索引 hash/version 收敛到新值——直接证明『索引永远反映真实磁盘内容，失败路径可重试』。验收标准②（附加）『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error（10 项目全编译）。独立核查代码路径：ChunkedUploadService.FinalizeAsync 阶段 3 的 IOFile.Move catch（行 361-366）调用 RollbackFinalizeAsync（行 382-437），使用全新 DbContext（行 385，CLAUDE.md 7.3：不复用已提交 db——其变更追踪器持有新值而非 DB 真值）开启独立事务：FileEntry 恢复旧 hash/version/size/LastModified/State（新建文件则删除条目）、移除本次新增孤儿 VersionRecord（按 StoragePath==archivePath 匹配）并删除存档文件、事务提交后清理 FS 副作用、catch 事务回滚 rethrow；Move 失败 finally SafeDeleteTemp 后 rethrow（客户端 500 后队列重试/下轮扫描按哈希差异重新上传收敛）。Controller（FilesController.ChunkedUpload.cs）grep IOFile/.Move(/RollbackFinalize 无匹配——T-002 后逻辑纯下沉 Core，无残留毒化路径。附加标准『dotnet test CloudPan.Tests -c Release』实测 189/189 通过（Failed 0 / Passed 189 / Skipped 0），无回归。requirements 落实：①选『Move 失败回滚 FileEntry』方案（与 T-020 既有结构最小改动），Move 覆盖目标失败时回滚 FileEntry 到旧 hash/version ②回滚使索引回到与磁盘一致的旧状态，失败路径可重试收敛。单条自动标准通过，无手动项。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -930,7 +930,8 @@
       "attempts": 0,
       "statusReason": null,
       "note": null,
-      "updatedAt": null
+      "updatedAt": "2026-08-03",
+      "status": "in-progress"
     },
     {
       "id": "T-023",

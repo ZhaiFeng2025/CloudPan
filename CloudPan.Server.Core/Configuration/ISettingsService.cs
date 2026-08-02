@@ -2,7 +2,8 @@ namespace CloudPan.Server.Core;
 
 /// <summary>
 /// 运行时设置服务——AppConfig 键值表的类型化门面。
-/// 仅处理 persistence=appconfig 的设置（Token 轮换走 ITokenService，不在此读写）。
+/// 处理 persistence=appconfig 的设置；token_hash 的轮换编排走 ITokenService，
+/// 但其哈希写入经本服务（TokenService 调用 SetStringAsync，T-022 收敛）。
 /// 启动期参数（端口/同步根目录）走 ServerSettingsFile，不在此列。
 /// </summary>
 public interface ISettingsService
