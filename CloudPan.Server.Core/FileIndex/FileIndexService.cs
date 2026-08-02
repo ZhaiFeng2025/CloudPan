@@ -206,10 +206,13 @@ public class FileIndexService : IFileIndexService
                 string oldPrefix = oldPath.TrimEnd('/') + "/";
                 string newPrefix = newPath.TrimEnd('/') + "/";
 
-                // SQLite 的 REPLACE 函数做前缀替换
+                // 注意：SQLite 的 REPLACE(Path, oldPrefix, newPrefix) 会替换行内所有匹配段，
+                // 嵌套同名目录重命名后路径错乱（/photos/photos/img.jpg 变 /backup/photos/backup/photos/img.jpg）。
+                // 改为按前缀长度裁剪的字符串拼接：newPrefix + 原路径前缀之后的剩余部分。
+                // SQLite SUBSTR 为 1 基索引，前缀长度 +1 即剩余部分起点。
                 await db.Database.ExecuteSqlRawAsync(
-                    "UPDATE FileEntry SET Path = REPLACE(Path, {0}, {1}), Version = {2} WHERE Path LIKE {3}",
-                    oldPrefix, newPrefix, newVersion, oldPrefix + "%");
+                    "UPDATE FileEntry SET Path = {0} || SUBSTR(Path, {1}), Version = {2} WHERE Path LIKE {3}",
+                    newPrefix, oldPrefix.Length + 1, newVersion, oldPrefix + "%");
             }
 
             await tx.CommitAsync();

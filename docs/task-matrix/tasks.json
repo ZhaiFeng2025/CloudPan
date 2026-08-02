@@ -818,7 +818,7 @@
       "title": "目录重命名索引前缀替换修复",
       "dimension": "function",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 2,
       "findingId": "F-19",
       "dependsOn": [],
@@ -838,8 +838,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "目录重命名索引前缀替换修复（F-19/T-019）：FileIndexService.MoveAsync 目录分支 SQL 由 REPLACE(Path, oldPrefix, newPrefix) 改为按前缀长度裁剪的字符串拼接（newPrefix || SUBSTR(Path, oldPrefix.Length+1)）。SQLite REPLACE 会替换行内所有匹配段——嵌套同名目录重命名后路径错乱（/photos/photos/img.jpg → /backup/photos/backup/photos/img.jpg），SUBSTR 仅保留前缀之后的剩余部分，结果正确（/backup/photos/photos/img.jpg）。\n改动文件：CloudPan.Server.Core/FileIndex/FileIndexService.cs（MoveAsync 目录分支 SQL，注释说明 REPLACE 缺陷）；CloudPan.Tests/Server/Services/FileIndexServiceTests.cs（新增 Move_目录_嵌套同名子目录路径正确——/photos 下建同名子目录 /photos 及 /photos/photos/img.jpg，移到 /backup/photos 后断言路径为 /backup/photos/photos/img.jpg，旧 REPLACE 实现下该用例断言 NotNull 失败）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Index 17/17 通过（含新增嵌套同名目录用例）；全量 dotnet test CloudPan.Tests -c Release 187/187 通过（原 186 + 新增 1）。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-020",

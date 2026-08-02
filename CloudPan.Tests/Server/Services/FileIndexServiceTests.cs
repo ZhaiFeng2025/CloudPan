@@ -205,6 +205,32 @@ public class FileIndexServiceTests : Infrastructure.TestBase
     }
 
     [Fact]
+    public async Task Move_目录_嵌套同名子目录路径正确()
+    {
+        var dbFactory = CreateServerDbFactory();
+        FileIndexService index = new FileIndexService(dbFactory);
+
+        // 嵌套同名目录场景（F-19）：/photos 下再建同名子目录 /photos，内含 img.jpg。
+        // 旧 REPLACE(Path,'/photos/','/backup/photos/') 会替换路径内所有匹配段，
+        // /photos/photos/img.jpg 中两处 /photos/ 均被替换 → /backup/photos/backup/photos/img.jpg 错乱。
+        await index.CreateDirectoryAsync("/photos", 1);
+        await index.CreateDirectoryAsync("/photos/photos", 2);
+        await index.UpsertFileAsync("/photos/photos/img.jpg", FileType.File, "hash", 10,
+            DateTime.UtcNow.ToString("O"), 3);
+
+        await index.MoveAsync("/photos", "/backup/photos", 4, isDirectory: true);
+
+        // 修复后按前缀长度裁剪拼接，结果应为 /backup/photos/photos/img.jpg
+        Assert.Null(await index.GetByPathAsync("/photos/photos/img.jpg"));
+        Assert.Null(await index.GetByPathAsync("/photos"));
+        var movedFile = await index.GetByPathAsync("/backup/photos/photos/img.jpg");
+        Assert.NotNull(movedFile);
+        Assert.Equal(4, movedFile.Version);
+        Assert.NotNull(await index.GetByPathAsync("/backup/photos"));
+        Assert.NotNull(await index.GetByPathAsync("/backup/photos/photos"));
+    }
+
+    [Fact]
     public async Task GetFileTree_分页_返回hasMore和nextCursor()
     {
         var dbFactory = CreateServerDbFactory();
