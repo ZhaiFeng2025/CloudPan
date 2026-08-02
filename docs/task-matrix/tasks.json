@@ -966,7 +966,7 @@
       "title": "回收站元数据文件名路径穿越修复",
       "dimension": "architecture",
       "priority": "P2",
-      "status": "in-progress",
+      "status": "acceptance",
       "batch": 2,
       "findingId": "F-24",
       "dependsOn": [],
@@ -991,7 +991,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
+      "note": "F-24/T-024 回收站元数据文件名路径穿越修复（R-A5 路径安全统一防线无覆盖点，纵深防御一致）。\n①TrashService.RestoreAsync：MetaFileName 为用户输入，先经 Path.GetFileName 归一，再校验禁止目录分隔符（'/' 或 '\\\\'，防 ../、..\\\\ 路径穿越读取 trashDir 外文件）——含分隔符/绝对路径/.或.. 一律返回 BAD_REQUEST，不再裸拼 Path.Combine(trashDir, metaFileName)；纵深防御：回收站实体文件名（entry.TrashFileName）同样经 GetFileName 归一、恢复目标路径（entry.OriginalPath）经 _storage.ValidatePath 校验，防元数据被篡改写入越界路径。\n②FileOperationService.DownloadAsync：下载路径显式经 _storage.ValidatePath（与 Delete/Move/Mkdir 一致），防 ../ 越界读取同步根外文件（如 .cloudpan 元数据/服务端配置）。\n改动文件：CloudPan.Server.Core/Trash/TrashService.cs；CloudPan.Server.Core/Files/FileOperationService.cs；CloudPan.Tests/Server/Services/TrashServiceTests.cs（新增 4 条穿越用例）；docs/task-matrix/tasks.json（状态推进）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Trash 15/15 通过（含新增 Restore_路径穿越元数据文件名_被拒绝 4 用例：../decoy.json、..\\..\\secret.json、../../server.db、/etc/passwd 均返回 BAD_REQUEST，且外部诱饵文件未被访问/删除、回收站元数据未误删）；全量 dotnet test CloudPan.Tests -c Release 194/194 通过（原 190 + 新增 4）；验收 grep 'Path.Combine(trashDir, request.MetaFileName)' TrashController.cs 无匹配。",
       "updatedAt": "2026-08-03"
     }
   ]
