@@ -295,7 +295,7 @@
       "title": "客户端 API 响应 DTO 改用 Generated 类型",
       "dimension": "simplicity",
       "priority": "P0",
-      "status": "acceptance",
+      "status": "done",
       "batch": 1,
       "findingId": "F-03",
       "dependsOn": [],
@@ -321,7 +321,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "契约补全 + 客户端改用 Generated 类型。shared-spec.json api.responses 补齐分块契约（新增 UploadData/ChunkUploadData/ChunkStatusData，修正 ChunkUploadResponse 为嵌套 data 形状对齐服务端实际返回，UploadResponse 去除不存在的 ok 字段）；重写 ApiResponseGenerator 从 spec.fields 解析生成 record（PascalCase 属性名 + camelCase JSON 名）。\n改动文件：shared-spec.json（api.responses 段）；CloudPan.CodeGen/Generators/ApiResponseGenerator.cs；CloudPan.Contract/Generated/ApiResponses.g.cs（重新生成）；CloudPan.Client.Core/Services/ApiClient.cs（删 7 个手工 DTO FileTreeApiResponse/UploadApiResponse/UploadDataDto/ChunkApiResponse/ChunkApiData/ChunkStatusResponse/ChunkStatusData + 中间类 ChunkApiStatusResponse，改引用 Generated 类型）；CloudPan.Client.Core/Services/IApiClient.cs；CloudPan.Client.Core/Services/SyncEngine.Scan.cs（FileTreeResponse.Data 数组 .Count→.Length）；CloudPan.Client.Core/Services/SyncEngine.Transfers.cs；CloudPan.Tests/Client/Services/MockApiClient.cs。\n验证：dotnet run --project CloudPan.CodeGen -- --verify 7 项全部一致；dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 150/150 通过；grep -rn 'FileTreeApiResponse' CloudPan.Client.Core/ 无匹配。",
+      "note": "契约补全 + 客户端改用 Generated 类型。shared-spec.json api.responses 补齐分块契约（新增 UploadData/ChunkUploadData/ChunkStatusData，修正 ChunkUploadResponse 为嵌套 data 形状对齐服务端实际返回，UploadResponse 去除不存在的 ok 字段）；重写 ApiResponseGenerator 从 spec.fields 解析生成 record（PascalCase 属性名 + camelCase JSON 名）。\n改动文件：shared-spec.json（api.responses 段）；CloudPan.CodeGen/Generators/ApiResponseGenerator.cs；CloudPan.Contract/Generated/ApiResponses.g.cs（重新生成）；CloudPan.Client.Core/Services/ApiClient.cs（删 7 个手工 DTO FileTreeApiResponse/UploadApiResponse/UploadDataDto/ChunkApiResponse/ChunkApiData/ChunkStatusResponse/ChunkStatusData + 中间类 ChunkApiStatusResponse，改引用 Generated 类型）；CloudPan.Client.Core/Services/IApiClient.cs；CloudPan.Client.Core/Services/SyncEngine.Scan.cs（FileTreeResponse.Data 数组 .Count→.Length）；CloudPan.Client.Core/Services/SyncEngine.Transfers.cs；CloudPan.Tests/Client/Services/MockApiClient.cs。\n验证：dotnet run --project CloudPan.CodeGen -- --verify 7 项全部一致；dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 150/150 通过；grep -rn 'FileTreeApiResponse' CloudPan.Client.Core/ 无匹配。\n【验收结论 2026-08-02】task-verifier 独立裁决：通过。验收标准①『dotnet run --project CloudPan.CodeGen -- --verify』实测 7 项全部一致（枚举/DTO/实体/清单/错误响应/API响应/设置），『校验通过』；验收标准②『grep -rn ''FileTreeApiResponse'' CloudPan.Client.Core/ 无匹配』实测无匹配（exit 1）。独立复核：CloudPan.Contract/Generated/ApiResponses.g.cs 存在且由 spec 生成（头部 AUTO-GENERATED 标注），ApiClient.cs 不再定义手工响应 DTO。附加标准『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error。两条自动标准全过，无手动项。",
       "updatedAt": "2026-08-02"
     },
     {
@@ -329,7 +329,7 @@
       "title": "spec config 键生成并接线，消除硬编码重复",
       "dimension": "simplicity",
       "priority": "P0",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 1,
       "findingId": "F-04",
       "dependsOn": [],
@@ -355,8 +355,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "扩展 ManifestGenerator.GenerateSpecConfig，为有消费者的 config 键生成 10 个常量（ChunkSize/ChunkedUploadThreshold/QueuePriorityThreshold/ConflictSuffixPattern/ChunkedUploadTimeoutMinutes/MaxRetryCount/RetryBackoffMs/ScanIntervalMinutes/MaxVersionsDefault/TokenEntropy），并接线消除硬编码。\n改动文件：CloudPan.CodeGen/Generators/ManifestGenerator.cs；CloudPan.Contract/Generated/ContractManifest.g.cs（重新生成）；CloudPan.Client.Core/Services/ApiClient.cs（删 ChunkedUploadThreshold=10_485_760/ChunkSizeBytes=4_194_304 私有常量，改引 SpecConfig.ChunkedUploadThreshold/SpecConfig.ChunkSize）；CloudPan.Client.Core/Services/SyncEngine.cs（QueuePriorityThreshold/MaxRetryCount 改引 SpecConfig，注意 MaxRetryCount 由原 20 对齐 spec 值 10；FullScanInterval 改引 SpecConfig.ScanIntervalMinutes）；CloudPan.Client.Core/Services/SyncEngine.Queue.cs（GetBackoffDelay 改引 SpecConfig.RetryBackoffMs 数组，原指数+抖动方案替换为 spec 序列）；CloudPan.Client.Core/Services/FileWatcherService.cs（兜底全量扫描定时器间隔改引 SpecConfig.ScanIntervalMinutes）；CloudPan.Server.Core/Files/FileOperationService.cs + CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.cs（冲突副本后缀改引 SpecConfig.ConflictSuffixPattern，超时常量改引 SpecConfig.ChunkedUploadTimeoutMinutes，版本裁剪 .Skip(5) 改引 SpecConfig.MaxVersionsDefault）；CloudPan.Server.Core/Upload/UploadService.cs（版本裁剪 .Skip(5) 改引 SpecConfig.MaxVersionsDefault）；CloudPan.Infrastructure/Security/TokenGenerator.cs（生成字节数改引 SpecConfig.TokenEntropy/8）。\n零消费者键处理：tokenEntropy/maxVersionsDefault/scanIntervalMinutes 经核查均有间接消费者（TokenGenerator 字节数 / 两端版本裁剪 / FileWatcherService+SyncEngine 兜底间隔），选择『先接线』而非从 spec 删除，shared-spec.json 未改动。FilesController 经 T-002 重构后为纯 HTTP 适配，无硬编码配置字面量，无需改动。\n验证：dotnet run --project CloudPan.CodeGen 生成清单；dotnet run --project CloudPan.CodeGen -- --verify 7 项全部一致；dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 150/150 通过；验收 grep -rn '10_485_760|4_194_304' CloudPan.Client.Core/ CloudPan.Server.Host/ 无匹配（仅剩生成物 ContractManifest.g.cs 与生成器默认值 ManifestGenerator.cs 中，均非消费端）。",
+      "updatedAt": "2026-08-02"
     },
     {
       "id": "T-005",

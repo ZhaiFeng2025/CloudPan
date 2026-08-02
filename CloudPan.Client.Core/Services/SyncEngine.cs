@@ -53,8 +53,8 @@ public partial class SyncEngine : IDisposable
     private readonly FileWatcherService? _fileWatcher;
     private readonly WebSocketClient? _wsClient;
 
-    // 队列优先级阈值（与 shared-spec.json config.queuePriorityThreshold 对齐）
-    private const int QueuePriorityThreshold = 1_048_576; // 1MB
+    // 队列优先级阈值（单源：shared-spec.json → SpecConfig.QueuePriorityThreshold）
+    private const int QueuePriorityThreshold = SpecConfig.QueuePriorityThreshold;
 
     // 跟踪字段
     private DateTime? _lastSyncTime;
@@ -79,12 +79,13 @@ public partial class SyncEngine : IDisposable
     // 增量同步并发锁（禁止多个 IncrementalSyncAsync 并发执行，防重复入队）
     private readonly SemaphoreSlim _syncLock = new(1, 1);
 
-    // 5 分钟兜底全量扫描计时
+    // 兜底全量扫描间隔（单源：shared-spec.json → SpecConfig.ScanIntervalMinutes）
     private DateTime _lastFullScan = DateTime.MinValue;
-    private static readonly TimeSpan FullScanInterval = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan FullScanInterval = TimeSpan.FromMinutes(SpecConfig.ScanIntervalMinutes);
 
     // 统一异常处理：区分 TaskCanceledException（HttpClient 超时）与 HttpRequestException
-    private const int MaxRetryCount = 20;
+    // 最大重试次数单源：shared-spec.json → SpecConfig.MaxRetryCount
+    private const int MaxRetryCount = SpecConfig.MaxRetryCount;
 
     // 首次同步阶段标记（用于 FullScanAsync 状态文字区分）
     private bool _firstSyncActive;

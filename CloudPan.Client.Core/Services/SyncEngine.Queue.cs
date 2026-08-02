@@ -206,16 +206,17 @@ public partial class SyncEngine
     }
 
     /// <summary>
-    /// 指数退避延迟（毫秒）。带随机抖动，适用于网络/文件锁等瞬态错误。
-    /// 第 1 次 ≈ 2s，第 2 次 ≈ 4s，第 3 次 ≈ 8s，...最大 30s。
+    /// 重试退避延迟（毫秒）。单源：shared-spec.json → SpecConfig.RetryBackoffMs。
+    /// 第 n 次重试取序列第 n-1 个值，超出序列长度保持末值。
     /// </summary>
     private static int GetBackoffDelay(int retryCount)
     {
-        // 指数退避：2^retryCount * 1000ms，cap at 30s
-        int exponential = Math.Min(1 << Math.Min(retryCount, 5), 30) * 1000;
-        // 随机抖动 ±500ms
-        int jitter = Random.Shared.Next(-500, 500);
-        return Math.Max(exponential + jitter, 200);
+        if (retryCount <= 0)
+        {
+            return 0;
+        }
+        int index = Math.Min(retryCount - 1, SpecConfig.RetryBackoffMs.Length - 1);
+        return SpecConfig.RetryBackoffMs[index];
     }
 
     private void SafeDelete(string path)

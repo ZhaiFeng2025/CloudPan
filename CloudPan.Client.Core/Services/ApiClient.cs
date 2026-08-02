@@ -216,13 +216,10 @@ public class ApiClient : IApiClient, IDisposable
     }
 
     // ============================================================
-    // 分块上传
+    // 分块上传（阈值与块大小来自 shared-spec.json → SpecConfig，改 spec 一处生效）
     // ============================================================
 
-    private const long ChunkedUploadThreshold = 10_485_760; // 10MB
-    private const int ChunkSizeBytes = 4_194_304;           // 4MB
-
-    /// <summary>分块上传文件（自动判断 <10MB 直传、>=10MB 分块）。</summary>
+    /// <summary>分块上传文件（自动判断 < 阈值直传、≥ 阈值分块）。</summary>
     public async Task<UploadResponse?> UploadChunkedAsync(
         string localPath, string remotePath, int baseVersion, string lastModified,
         IProgress<long>? progress = null, CancellationToken ct = default)
@@ -230,14 +227,14 @@ public class ApiClient : IApiClient, IDisposable
         long fileSize = new FileInfo(localPath).Length;
 
         // 小文件直传（复用现有逻辑）
-        if (fileSize < ChunkedUploadThreshold)
+        if (fileSize < SpecConfig.ChunkedUploadThreshold)
         {
             return await UploadAsync(localPath, remotePath, baseVersion, lastModified, progress, ct);
         }
 
         // 大文件分块上传
         string fileHash = await ComputeSha256Async(localPath, ct);
-        int totalChunks = (int)Math.Ceiling((double)fileSize / ChunkSizeBytes);
+        int totalChunks = (int)Math.Ceiling((double)fileSize / SpecConfig.ChunkSize);
 
         // 查询服务端进度（断点续传）
         var status = await GetChunkStatusAsync(remotePath, ct);
@@ -253,8 +250,8 @@ public class ApiClient : IApiClient, IDisposable
                 continue;
             }
 
-            long offset = i * (long)ChunkSizeBytes;
-            int currentChunkSize = (int)Math.Min(ChunkSizeBytes, fileSize - offset);
+            long offset = i * (long)SpecConfig.ChunkSize;
+            int currentChunkSize = (int)Math.Min(SpecConfig.ChunkSize, fileSize - offset);
 
             byte[] buffer = new byte[currentChunkSize];
             fileStream.Position = offset;

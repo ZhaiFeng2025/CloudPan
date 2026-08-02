@@ -6,7 +6,7 @@ namespace CloudPan.Client.Services;
 
 /// <summary>
 /// 文件变更监控服务。
-/// FileSystemWatcher 主通道 + 5 分钟定时全量扫描兜底。
+/// FileSystemWatcher 主通道 + 定时全量扫描兜底（间隔见 SpecConfig.ScanIntervalMinutes）。
 /// </summary>
 public class FileWatcherService : IDisposable
 {
@@ -68,7 +68,8 @@ public class FileWatcherService : IDisposable
         _ignoreWatcher.Changed += OnIgnoreFileChanged;
         _ignoreWatcher.Created += OnIgnoreFileChanged;
 
-        // 兜底通道：5 分钟全量扫描（同步回调避免 async void 崩溃风险）
+        // 兜底通道：定时全量扫描（间隔单源 shared-spec.json → SpecConfig.ScanIntervalMinutes；同步回调避免 async void 崩溃风险）
+        var scanInterval = TimeSpan.FromMinutes(SpecConfig.ScanIntervalMinutes);
         _scanTimer = new System.Threading.Timer(_ =>
         {
             Task.Run(async () =>
@@ -76,7 +77,7 @@ public class FileWatcherService : IDisposable
                 try { await FullScanAsync(); }
                 catch (Exception ex) { _logger.LogError(ex, "全量扫描调度异常"); }
             });
-        }, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
+        }, null, scanInterval, scanInterval);
 
         _logger.LogInformation($"文件监控已启动: {_syncRoot}");
     }

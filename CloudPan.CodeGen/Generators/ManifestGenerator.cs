@@ -149,6 +149,70 @@ public static class ManifestGenerator
             rateLimit = rl.GetInt32();
         }
 
+        // 分块上传配置（消费者：ApiClient / ChunkedUploadService）
+        int chunkSize = 4_194_304;
+        if (spec.Config.TryGetValue("chunkSize", out var cs) && cs.ValueKind == JsonValueKind.Number)
+        {
+            chunkSize = cs.GetInt32();
+        }
+
+        long chunkedUploadThreshold = 10_485_760;
+        if (spec.Config.TryGetValue("chunkedUploadThreshold", out var cut) && cut.ValueKind == JsonValueKind.Number)
+        {
+            chunkedUploadThreshold = cut.GetInt64();
+        }
+
+        int queuePriorityThreshold = 1_048_576;
+        if (spec.Config.TryGetValue("queuePriorityThreshold", out var qpt) && qpt.ValueKind == JsonValueKind.Number)
+        {
+            queuePriorityThreshold = qpt.GetInt32();
+        }
+
+        string conflictSuffixPattern = "_冲突_yyyyMMdd_HHmmss";
+        if (spec.Config.TryGetValue("conflictSuffixPattern", out var csp) && csp.ValueKind == JsonValueKind.String)
+        {
+            conflictSuffixPattern = csp.GetString()!;
+        }
+
+        int chunkedUploadTimeoutMinutes = 1440;
+        if (spec.Config.TryGetValue("chunkedUploadTimeoutMinutes", out var cutm) && cutm.ValueKind == JsonValueKind.Number)
+        {
+            chunkedUploadTimeoutMinutes = cutm.GetInt32();
+        }
+
+        int maxRetryCount = 10;
+        if (spec.Config.TryGetValue("maxRetryCount", out var mrc) && mrc.ValueKind == JsonValueKind.Number)
+        {
+            maxRetryCount = mrc.GetInt32();
+        }
+
+        string retryBackoffMs = "1000, 2000, 4000, 8000, 16000, 32000, 60000, 120000, 240000, 300000";
+        if (spec.Config.TryGetValue("retryBackoffMs", out var rbm) && rbm.ValueKind == JsonValueKind.Array)
+        {
+            retryBackoffMs = string.Join(", ", rbm.EnumerateArray().Select(e => e.GetInt32()));
+        }
+
+        // 定时全量扫描间隔（消费者：FileWatcherService 兜底定时器 / SyncEngine.FullScanInterval）
+        int scanIntervalMinutes = 5;
+        if (spec.Config.TryGetValue("scanIntervalMinutes", out var sim) && sim.ValueKind == JsonValueKind.Number)
+        {
+            scanIntervalMinutes = sim.GetInt32();
+        }
+
+        // 保留版本数默认值（消费者：UploadService/ChunkedUploadService 版本裁剪）
+        int maxVersionsDefault = 5;
+        if (spec.Config.TryGetValue("maxVersionsDefault", out var mvd) && mvd.ValueKind == JsonValueKind.Number)
+        {
+            maxVersionsDefault = mvd.GetInt32();
+        }
+
+        // 家庭 Token 熵（位）（消费者：TokenGenerator 生成字节数 = 熵 / 8）
+        int tokenEntropy = 256;
+        if (spec.Config.TryGetValue("tokenEntropy", out var te) && te.ValueKind == JsonValueKind.Number)
+        {
+            tokenEntropy = te.GetInt32();
+        }
+
         sb.AppendLine("/// <summary>");
         sb.AppendLine("/// 运行时配置常量。由 shared-spec.json → config 驱动。");
         sb.AppendLine("/// </summary>");
@@ -162,6 +226,36 @@ public static class ManifestGenerator
         sb.AppendLine();
         sb.AppendLine("    /// <summary>WebSocket 重连最大退避时间（秒）</summary>");
         sb.AppendLine($"    public const int WebSocketReconnectMaxBackoffSeconds = {(spec.Api.Websocket.ReconnectMaxBackoffSeconds ?? 60)};");
+        sb.AppendLine();
+        sb.AppendLine($"    /// <summary>分块上传每块字节数</summary>");
+        sb.AppendLine($"    public const int ChunkSize = {chunkSize};");
+        sb.AppendLine();
+        sb.AppendLine($"    /// <summary>文件 ≥ 此字节数使用分块上传，< 此值整文件直传</summary>");
+        sb.AppendLine($"    public const long ChunkedUploadThreshold = {chunkedUploadThreshold};");
+        sb.AppendLine();
+        sb.AppendLine($"    /// <summary>文件 < 此字节数标记为 High 优先级，优先传输</summary>");
+        sb.AppendLine($"    public const int QueuePriorityThreshold = {queuePriorityThreshold};");
+        sb.AppendLine();
+        sb.AppendLine($"    /// <summary>冲突副本命名模式（占位符：yyyyMMdd=日期, HHmmss=时间）</summary>");
+        sb.AppendLine($"    public const string ConflictSuffixPattern = \"{EscapeString(conflictSuffixPattern)}\";");
+        sb.AppendLine();
+        sb.AppendLine($"    /// <summary>分块上传超时（分钟）。超时未完成则清理临时文件</summary>");
+        sb.AppendLine($"    public const int ChunkedUploadTimeoutMinutes = {chunkedUploadTimeoutMinutes};");
+        sb.AppendLine();
+        sb.AppendLine($"    /// <summary>HTTP 请求失败最大重试次数，达到后放弃并通知用户</summary>");
+        sb.AppendLine($"    public const int MaxRetryCount = {maxRetryCount};");
+        sb.AppendLine();
+        sb.AppendLine($"    /// <summary>HTTP 请求失败指数退避序列（毫秒）。第 n 次重试取第 n-1 个值，超出序列长度保持末值</summary>");
+        sb.AppendLine($"    public static readonly int[] RetryBackoffMs = {{ {retryBackoffMs} }};");
+        sb.AppendLine();
+        sb.AppendLine($"    /// <summary>定时全量扫描间隔（分钟），兜底 FileSystemWatcher 遗漏</summary>");
+        sb.AppendLine($"    public const int ScanIntervalMinutes = {scanIntervalMinutes};");
+        sb.AppendLine();
+        sb.AppendLine($"    /// <summary>文件版本历史默认保留数</summary>");
+        sb.AppendLine($"    public const int MaxVersionsDefault = {maxVersionsDefault};");
+        sb.AppendLine();
+        sb.AppendLine($"    /// <summary>家庭 Token 熵（位）。生成字节数 = 熵 / 8</summary>");
+        sb.AppendLine($"    public const int TokenEntropy = {tokenEntropy};");
         sb.AppendLine();
         sb.AppendLine("    /// <summary>服务端 Token 文件名</summary>");
         sb.AppendLine("    public const string TokenFileName = \"token.txt\";");

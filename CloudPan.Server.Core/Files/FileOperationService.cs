@@ -224,7 +224,7 @@ public class FileOperationService : IFileOperationService
         // 生成冲突文件名
         string nameWithoutExt = Path.GetFileNameWithoutExtension(path);
         string ext = Path.GetExtension(path);
-        string suffix = DateTime.Now.ToString("_冲突_yyyyMMdd_HHmmss"); // spec: conflictSuffixPattern
+        string suffix = DateTime.Now.ToString(SpecConfig.ConflictSuffixPattern); // 单源：shared-spec.json → SpecConfig.ConflictSuffixPattern
         string conflictPath = Path.GetDirectoryName(path)?.Replace('\\', '/') ?? "";
         if (!conflictPath.EndsWith('/') && !string.IsNullOrEmpty(conflictPath))
         {

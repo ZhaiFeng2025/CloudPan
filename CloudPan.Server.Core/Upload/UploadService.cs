@@ -66,11 +66,11 @@ public class UploadService : IUploadService
                     DeviceId = deviceId
                 });
 
-                // 保留最近 5 个版本
+                // 保留最近 N 个版本（N 单源：shared-spec.json → SpecConfig.MaxVersionsDefault）
                 var oldVersions = await db.VersionRecords
                     .Where(v => v.FilePath == path)
                     .OrderByDescending(v => v.Version)
-                    .Skip(5)
+                    .Skip(SpecConfig.MaxVersionsDefault)
                     .ToListAsync(ct);
                 db.VersionRecords.RemoveRange(oldVersions);
             }

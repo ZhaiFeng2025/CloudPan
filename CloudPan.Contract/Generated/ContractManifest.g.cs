@@ -110,6 +110,36 @@ public static class SpecConfig
     /// <summary>WebSocket 重连最大退避时间（秒）</summary>
     public const int WebSocketReconnectMaxBackoffSeconds = 60;
 
+    /// <summary>分块上传每块字节数</summary>
+    public const int ChunkSize = 4194304;
+
+    /// <summary>文件 ≥ 此字节数使用分块上传，< 此值整文件直传</summary>
+    public const long ChunkedUploadThreshold = 10485760;
+
+    /// <summary>文件 < 此字节数标记为 High 优先级，优先传输</summary>
+    public const int QueuePriorityThreshold = 1048576;
+
+    /// <summary>冲突副本命名模式（占位符：yyyyMMdd=日期, HHmmss=时间）</summary>
+    public const string ConflictSuffixPattern = "_冲突_yyyyMMdd_HHmmss";
+
+    /// <summary>分块上传超时（分钟）。超时未完成则清理临时文件</summary>
+    public const int ChunkedUploadTimeoutMinutes = 1440;
+
+    /// <summary>HTTP 请求失败最大重试次数，达到后放弃并通知用户</summary>
+    public const int MaxRetryCount = 10;
+
+    /// <summary>HTTP 请求失败指数退避序列（毫秒）。第 n 次重试取第 n-1 个值，超出序列长度保持末值</summary>
+    public static readonly int[] RetryBackoffMs = { 1000, 2000, 4000, 8000, 16000, 32000, 60000, 120000, 240000, 300000 };
+
+    /// <summary>定时全量扫描间隔（分钟），兜底 FileSystemWatcher 遗漏</summary>
+    public const int ScanIntervalMinutes = 5;
+
+    /// <summary>文件版本历史默认保留数</summary>
+    public const int MaxVersionsDefault = 5;
+
+    /// <summary>家庭 Token 熵（位）。生成字节数 = 熵 / 8</summary>
+    public const int TokenEntropy = 256;
+
     /// <summary>服务端 Token 文件名</summary>
     public const string TokenFileName = "token.txt";
 

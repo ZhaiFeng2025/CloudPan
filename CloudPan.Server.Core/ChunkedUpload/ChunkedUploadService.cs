@@ -10,7 +10,7 @@ namespace CloudPan.Server.Services;
 /// <inheritdoc />
 public class ChunkedUploadService : IChunkedUploadService
 {
-    private const int ChunkedUploadTimeoutMinutes = 1440; // 24h
+    private const int ChunkedUploadTimeoutMinutes = SpecConfig.ChunkedUploadTimeoutMinutes; // 单源：shared-spec.json → SpecConfig
 
     private readonly IDbContextFactory<CloudPanDbContext> _dbFactory;
     private readonly IFileStorageService _storage;
@@ -201,7 +201,7 @@ public class ChunkedUploadService : IChunkedUploadService
                 int conflictVersion = await _version.NextVersionAsync();
                 string nameWithoutExt = Path.GetFileNameWithoutExtension(path);
                 string ext = Path.GetExtension(path);
-                string suffix = DateTime.Now.ToString("_冲突_yyyyMMdd_HHmmss");
+                string suffix = DateTime.Now.ToString(SpecConfig.ConflictSuffixPattern); // 单源：shared-spec.json → SpecConfig
                 string conflictPath = (Path.GetDirectoryName(path)?.Replace('\\', '/') ?? "");
                 if (!conflictPath.EndsWith('/') && !string.IsNullOrEmpty(conflictPath))
                 {
@@ -275,11 +275,11 @@ public class ChunkedUploadService : IChunkedUploadService
                     DeviceId = deviceId
                 });
 
-                // 保留最近 5 个版本
+                // 保留最近 N 个版本（N 单源：shared-spec.json → SpecConfig.MaxVersionsDefault）
                 var oldVersions = await db.VersionRecords
                     .Where(v => v.FilePath == path)
                     .OrderByDescending(v => v.Version)
-                    .Skip(5)
+                    .Skip(SpecConfig.MaxVersionsDefault)
                     .ToListAsync();
                 db.VersionRecords.RemoveRange(oldVersions);
             }
