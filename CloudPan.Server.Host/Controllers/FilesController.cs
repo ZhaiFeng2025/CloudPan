@@ -21,6 +21,7 @@ public partial class FilesController : ControllerBase
     private readonly IFileStorageService _storage;
     private readonly IFileIndexService _index;
     private readonly IVersionService _version;
+    private readonly IUploadService _upload;
     private readonly IDbContextFactory<CloudPanDbContext> _dbFactory;
     private readonly ISyncLogService _syncLog;
     private readonly IWebSocketHandler _wsHandler;
@@ -30,6 +31,7 @@ public partial class FilesController : ControllerBase
         IFileStorageService storage,
         IFileIndexService index,
         IVersionService version,
+        IUploadService upload,
         IDbContextFactory<CloudPanDbContext> dbFactory,
         ISyncLogService syncLog,
         IWebSocketHandler wsHandler,
@@ -38,6 +40,7 @@ public partial class FilesController : ControllerBase
         _storage = storage;
         _index = index;
         _version = version;
+        _upload = upload;
         _dbFactory = dbFactory;
         _syncLog = syncLog;
         _wsHandler = wsHandler;
@@ -102,120 +105,31 @@ public partial class FilesController : ControllerBase
             }
         }
 
-        // 先分配版本号，再写文件，避免孤儿文件
-        int newVersion = await _version.NextVersionAsync();
-
-        // 写入文件
-        await using var stream = file.OpenReadStream();
-        string? writeError = await _storage.AtomicWriteAsync(path, stream, expectedHash: null);
-        if (writeError != null)
-        {
-            return this.Error(HttpErrorCode.INTERNAL_ERROR, writeError, "服务暂时不可用，请稍后重试");
-        }
-
-        // 计算哈希和大小
-        string hash = await _storage.ComputeHashAsync(_storage.GetAbsolutePath(path));
-
-        // 存档旧版本 + 更新索引 + 审计日志（同一 DbContext 事务；存档 FS 步骤在 try 内——异常统一清理目标文件与存档，避免孤儿）
+        // 上传编排（先存档旧版本→再原子覆盖目标→后更新索引）由 Server.Core UploadService 保证顺序
         string uploadDeviceId = HttpContext.Items["DeviceId"] as string ?? "unknown";
-        await using var db = await _dbFactory.CreateDbContextAsync();
+        await using var stream = file.OpenReadStream();
 
-        string? archiveStoragePath = null;
-        await using var tx = await db.Database.BeginTransactionAsync();
-
+        UploadResult result;
         try
         {
-            // 1. 存档旧版本（FS；在 try 内，存档异常走 catch 清理目标文件，避免孤儿）
-            var existingForArchive = await db.FileEntries.FindAsync(path);
-            if (existingForArchive != null && existingForArchive.CurrentHash != null)
-            {
-                archiveStoragePath = await _storage.StoreVersionAsync(path, existingForArchive.Version);
-            }
-
-            // 2. DB 插入 VersionRecord（仅当 FS 存档已完成）
-            if (existingForArchive != null && existingForArchive.CurrentHash != null)
-            {
-                db.VersionRecords.Add(new VersionRecord
-                {
-                    FilePath = path,
-                    Version = existingForArchive.Version,
-                    Hash = existingForArchive.CurrentHash!,
-                    Size = existingForArchive.CurrentSize,
-                    StoragePath = archiveStoragePath!,
-                    Timestamp = DateTime.UtcNow.ToString("O"),
-                    DeviceId = uploadDeviceId
-                });
-
-                // 保留最近 5 个版本
-                var oldVersions = await db.VersionRecords
-                    .Where(v => v.FilePath == path)
-                    .OrderByDescending(v => v.Version)
-                    .Skip(5)
-                    .ToListAsync();
-                db.VersionRecords.RemoveRange(oldVersions);
-            }
-
-            // 3. 更新文件索引
-            FileEntry? entry = await db.FileEntries.FindAsync(path);
-            if (entry != null)
-            {
-                entry.CurrentHash = hash;
-                entry.CurrentSize = file.Length;
-                entry.Version = newVersion;
-                entry.LastModified = lastModified ?? DateTime.UtcNow.ToString("O");
-                entry.State = (int)FileState.Synced;
-            }
-            else
-            {
-                entry = new FileEntry
-                {
-                    Path = path,
-                    Type = (int)FileType.File,
-                    CurrentHash = hash,
-                    CurrentSize = file.Length,
-                    Version = newVersion,
-                    LastModified = lastModified ?? DateTime.UtcNow.ToString("O"),
-                    State = (int)FileState.Synced,
-                    CreatedAt = DateTime.UtcNow.ToString("O")
-                };
-                db.FileEntries.Add(entry);
-            }
-
-            // 4. 审计日志
-            db.SyncLogs.Add(new SyncLog
-            {
-                FilePath = entry.Path,
-                Operation = (int)SyncOperation.Upload,
-                DeviceId = uploadDeviceId,
-                Result = (int)LogResult.Success,
-                CreatedAt = DateTime.UtcNow.ToString("O")
-            });
-
-            await db.SaveChangesAsync();
-            await tx.CommitAsync();
+            result = await _upload.UploadAsync(path, stream, file.Length, lastModified, uploadDeviceId);
         }
-        catch
+        catch (UploadStorageException storageEx)
         {
-            await tx.RollbackAsync();
-            // 事务回滚后删除已写入的文件 + 版本存档，避免孤儿文件
-            try { _storage.Delete(path); } catch (Exception cleanupEx) { _logger.LogWarning(cleanupEx, "事务回滚后清理文件失败: {Path}", path); }
-            if (archiveStoragePath != null) { try { _storage.Delete(archiveStoragePath); } catch (Exception cleanupEx) { _logger.LogWarning(cleanupEx, "事务回滚后清理版本存档失败: {Path}", archiveStoragePath); } }
-            throw;
+            return this.Error(HttpErrorCode.INTERNAL_ERROR, storageEx.Message, "服务暂时不可用，请稍后重试");
         }
 
         // WebSocket 广播
-        await _wsHandler.BroadcastFileChangedAsync(path, newVersion, uploadDeviceId);
+        await _wsHandler.BroadcastFileChangedAsync(path, result.Version, uploadDeviceId);
 
-        // 获取最新 entry 构造响应
-        var savedEntry = await _index.GetByPathAsync(path);
         return Ok(new
         {
             data = new
             {
-                path = savedEntry?.Path ?? path,
-                version = newVersion,
-                hash,
-                size = file.Length,
+                path = result.Path,
+                version = result.Version,
+                hash = result.Hash,
+                size = result.Size,
                 conflictResolved = false
             }
         });

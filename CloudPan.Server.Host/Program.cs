@@ -67,6 +67,7 @@ builder.Services.AddSingleton(typeof(int), httpPort); // 供 UDP 广播/设置�
 builder.Services.AddSingleton<IFileStorageService>(new FileStorageService(syncRoot));
 builder.Services.AddSingleton<IFileIndexService, FileIndexService>();
 builder.Services.AddSingleton<IVersionService, VersionService>();
+builder.Services.AddSingleton<IUploadService, UploadService>();
 builder.Services.AddSingleton<ISyncLogService, SyncLogService>();
 builder.Services.AddSingleton<IWebSocketHandler, WebSocketHandler>();
 builder.Services.AddSingleton<ISettingsService, SettingsService>();

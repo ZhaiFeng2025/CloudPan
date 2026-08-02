@@ -378,6 +378,64 @@ public class FilesControllerIntegrationTests : IClassFixture<WebApplicationFacto
     }
 
     // ============================================================
+    // 版本历史（T-001：先存档后覆盖，回滚得到旧版本真实内容）
+    // ============================================================
+
+    /// <summary>上传一个文件到指定远程路径，返回服务端版本号。</summary>
+    private async Task<int> UploadFileAsync(string remotePath, string localContent)
+    {
+        string localFile = Path.Combine(_tempDir, $"_src_{Guid.NewGuid():N}.txt");
+        await File.WriteAllTextAsync(localFile, localContent);
+
+        using MultipartFormDataContent form = new MultipartFormDataContent();
+        await using var fs = File.OpenRead(localFile);
+        form.Add(new StreamContent(fs), "file", "file.txt");
+        form.Add(new StringContent(remotePath), "path");
+        form.Add(new StringContent("0"), "baseVersion");
+        form.Add(new StringContent(DateTime.UtcNow.ToString("O")), "lastModified");
+
+        var response = await _client.PostAsync("/api/files/upload", form);
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(JsonOptions);
+        return body.GetProperty("data").GetProperty("version").GetInt32();
+    }
+
+    [Fact]
+    public async Task Upload_普通上传_版本历史回滚_内容为旧Version()
+    {
+        string guid = Guid.NewGuid().ToString("N")[..8];
+        string remotePath = $"/version-archive-{guid}.txt";
+        string version1Content = $"version 1 original {guid}";
+        string version2Content = $"version 2 newer {guid}";
+
+        // 第一次上传（版本 v1，旧内容）
+        int v1 = await UploadFileAsync(remotePath, version1Content);
+
+        // 第二次上传（版本 v2，新内容覆盖）
+        int v2 = await UploadFileAsync(remotePath, version2Content);
+        Assert.True(v2 > v1, "第二次上传应产生更大的版本号");
+
+        // 版本历史应包含 v1 记录，且大小为旧内容长度（存档的是旧内容而非最新内容）
+        var versionsResponse = await _client.GetAsync($"/api/versions?path={Uri.EscapeDataString(remotePath)}");
+        versionsResponse.EnsureSuccessStatusCode();
+        var versionsBody = await versionsResponse.Content.ReadFromJsonAsync<JsonElement>(JsonOptions);
+        var versions = versionsBody.GetProperty("data");
+        Assert.True(versions.GetArrayLength() >= 1, "版本历史应至少包含一条记录");
+        var v1Record = versions.EnumerateArray().First(v => v.GetProperty("version").GetInt32() == v1);
+        Assert.Equal(version1Content.Length, v1Record.GetProperty("size").GetInt32());
+
+        // 回滚到 v1 → 内容应为旧版本内容（修复前此断言失败：回滚得到的是 v2 最新内容）
+        var restoreResponse = await _client.PostAsJsonAsync("/api/versions/restore",
+            new { filePath = remotePath, version = v1 }, JsonOptions);
+        restoreResponse.EnsureSuccessStatusCode();
+
+        var downloadResponse = await _client.GetAsync($"/api/files/download?path={Uri.EscapeDataString(remotePath)}");
+        downloadResponse.EnsureSuccessStatusCode();
+        string downloaded = await downloadResponse.Content.ReadAsStringAsync();
+        Assert.Equal(version1Content, downloaded);
+    }
+
+    // ============================================================
     // Token 认证
     // ============================================================
 
