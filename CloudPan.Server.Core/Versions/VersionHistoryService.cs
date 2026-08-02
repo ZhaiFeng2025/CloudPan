@@ -74,6 +74,13 @@ public class VersionHistoryService : IVersionHistoryService
                 new DomainError(HttpErrorCode.NOT_FOUND, $"文件不存在: {filePath}", "文件不存在，无法恢复"));
         }
 
+        // 墓碑防护：文件已删除（墓碑）时禁止回滚历史版本——物理文件在回收站，目标版本文件不可作为新内容写入
+        if (currentEntry.State == (int)FileState.Deleting)
+        {
+            return new VersionRestoreResult(false, null, null, null, null, null,
+                new DomainError(HttpErrorCode.NOT_FOUND, $"文件已删除: {filePath}", "文件已删除，无法回滚历史版本"));
+        }
+
         // 1. 存档当前版本（FS）
         string storagePath = await _storage.StoreVersionAsync(filePath, currentEntry.Version);
 

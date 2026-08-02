@@ -128,6 +128,16 @@ public partial class SyncEngine
 
             if (item.State == (int)FileState.Deleting)
             {
+                // 取消该路径待处理的上传/下载（远端已删除，本地未决传输不再有意义；与 WS file_deleted 处理一致）
+                var pending = await db.SyncQueue
+                    .Where(q => q.FilePath == item.Path
+                        && (q.Operation == (int)SyncOperation.Upload || q.Operation == (int)SyncOperation.Download))
+                    .ToListAsync();
+                if (pending.Count > 0)
+                {
+                    db.SyncQueue.RemoveRange(pending);
+                }
+
                 if (File.Exists(localPath))
                 {
                     SafeDelete(localPath);

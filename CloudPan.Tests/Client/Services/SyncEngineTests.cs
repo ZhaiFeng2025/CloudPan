@@ -267,6 +267,70 @@ public class SyncEngineTests : IDisposable
     // ============================================================
 
     [Fact]
+    public async Task WsFileDeleted_删除本地副本并清理快照()
+    {
+        // 预置本地文件 + 远端快照 + 待处理上传
+        string filePath = Path.Combine(_syncRoot, "ws-del.txt");
+        await File.WriteAllTextAsync(filePath, "will be deleted by ws");
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.Add(new RemoteSnapshot
+            {
+                Path = "/ws-del.txt", Type = 0, Size = 27,
+                Version = 2, State = 0, Hash = "hash"
+            });
+            setupDb.SyncQueue.Add(new SyncQueueItem
+            {
+                FilePath = "/ws-del.txt", Operation = (int)SyncOperation.Upload,
+                Priority = (int)QueuePriority.High
+            });
+            await setupDb.SaveChangesAsync();
+        }
+
+        // 反射调用 DeleteLocalCopyAsync（WS file_deleted 精确处理路径）
+        var method = typeof(SyncEngine).GetMethod("DeleteLocalCopyAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+        Task? task = (Task?)method!.Invoke(_engine, ["/ws-del.txt"]);
+        Assert.NotNull(task);
+        await task;
+
+        // 本地文件已删、快照已清、待处理队列已取消
+        Assert.False(File.Exists(filePath));
+        await using var dbCheck = await _dbFactory.CreateDbContextAsync();
+        Assert.Null(await dbCheck.RemoteSnapshots.FindAsync("/ws-del.txt"));
+        int pending = await dbCheck.SyncQueue.CountAsync(q => q.FilePath == "/ws-del.txt");
+        Assert.Equal(0, pending);
+    }
+
+    [Fact]
+    public async Task ApplyRemoteChanges_Deleting墓碑_删除本地文件()
+    {
+        // 预置本地文件（服务端已删除，树返回 Deleting 墓碑）
+        string filePath = Path.Combine(_syncRoot, "tomb-del.txt");
+        await File.WriteAllTextAsync(filePath, "to be deleted by tombstone");
+
+        var response = new FileTreeResponse(
+            new[]
+            {
+                new FileEntryDto("/tomb-del.txt", (int)CloudPan.Shared.FileType.File,
+                    "hash", 30, 5, DateTime.UtcNow.ToString("O"), (int)CloudPan.Shared.FileState.Deleting)
+            },
+            null, false, 5);
+
+        var method = typeof(SyncEngine).GetMethod("ApplyRemoteChangesAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        Task? task = (Task?)method!.Invoke(_engine, [db, response, CancellationToken.None]);
+        Assert.NotNull(task);
+        await task;
+
+        Assert.False(File.Exists(filePath)); // 本地副本已删除
+    }
+
+    [Fact]
     public async Task ProcessQueue_上传成功_从队列移除()
     {
         string filePath = Path.Combine(_syncRoot, "process-upload.txt");

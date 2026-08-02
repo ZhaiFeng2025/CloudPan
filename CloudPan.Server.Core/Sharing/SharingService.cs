@@ -43,6 +43,13 @@ public class SharingService : ISharingService
                 new DomainError(HttpErrorCode.NOT_FOUND, $"文件不存在: {filePath}", "文件不存在，无法创建分享链接"));
         }
 
+        // 墓碑防护：已删除文件（FileState.Deleting）不可再创建分享链接，物理文件已在回收站
+        if (entry.State == (int)FileState.Deleting)
+        {
+            return new ShareCreateResult(false, null, null, null,
+                new DomainError(HttpErrorCode.NOT_FOUND, $"文件不存在: {filePath}", "文件不存在，无法创建分享链接"));
+        }
+
         await using var db = await _dbFactory.CreateDbContextAsync();
         Share share = new Share
         {

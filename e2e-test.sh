@@ -4,7 +4,7 @@
 # 覆盖场景:
 #   阶段 0 安装与配置: IN-01/02/03, CF-01/02
 #   阶段 1 服务端 API: FS-01..09, CO-01, SE-01..04
-#   阶段 2 客户端同步: FS-10..13
+#   阶段 2 客户端同步: FS-10..14
 #   阶段 3 可靠性:     RE-01..02
 # 用法: bash e2e-test.sh   （前置: dotnet build CloudPan.sln -c Release）
 # ============================================================
@@ -521,6 +521,36 @@ scenario_fs13() {
   check $? "FS-13" "客户端修改文件产生版本记录"
 }
 
+# FS-14 服务端删除 → 客户端同步删除本地副本（墓碑传播，F-05）
+scenario_fs14() {
+  echo "e2e tombstone propagation" > "$E2E_DIR/tomb.txt"
+  UP=$(MSYS_NO_PATHCONV=1 curl -s -X POST "$BASE/api/files/upload" -H "$AUTH" -H "$DEV" \
+    -F "file=@$E2E_WIN\\tomb.txt" -F "path=/tombstone-prop.txt")
+  if ! echo "$UP" | grep -q '"path":"/tombstone-prop.txt"'; then
+    echo "    上传响应: $UP"; check 1 "FS-14" "上传 /tombstone-prop.txt"; return
+  fi
+  # 等待客户端增量同步下载本地副本
+  local FOUND=0
+  for i in $(seq 1 20); do
+    if [ -f "$CLIENT_ROOT_BASH/tombstone-prop.txt" ]; then FOUND=1; break; fi
+    sleep 3
+  done
+  if [ "$FOUND" = "0" ]; then
+    check 1 "FS-14" "客户端已下载待删文件（未同步）"; return
+  fi
+  # 服务端删除（软删除墓碑）
+  curl -s -X POST "$BASE/api/files/delete" -H "$AUTH" -H "$DEV" -H "Content-Type: application/json" \
+    -d '{"path":"/tombstone-prop.txt"}' > /dev/null
+  # 等待客户端收到墓碑/WS 推送删除本地副本
+  local GONE=0
+  for i in $(seq 1 20); do
+    if [ ! -f "$CLIENT_ROOT_BASH/tombstone-prop.txt" ]; then GONE=1; break; fi
+    sleep 3
+  done
+  [ "$GONE" = "1" ]
+  check $? "FS-14" "服务端删除后客户端本地副本消失（墓碑传播）"
+}
+
 # ============================================================
 # 阶段 3：可靠性
 # ============================================================
@@ -631,6 +661,7 @@ scenario_fs10
 scenario_fs11
 scenario_fs12
 scenario_fs13
+scenario_fs14
 
 echo ""
 echo "──────────────────────────────────────────"

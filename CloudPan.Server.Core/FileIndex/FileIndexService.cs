@@ -115,59 +115,72 @@ public class FileIndexService : IFileIndexService
     }
 
     /// <summary>
-    /// 物理删除文件条目及其子文件（递归删除文件夹）。
-    /// 先删除关联的 VersionRecord（满足 FK 约束），再删除 FileEntry。
+    /// 软删除（墓碑机制）：将文件/目录及其子条目标记为 FileState.Deleting 并提升版本号、更新时间戳，
+    /// 不物理移除 FileEntry 行（F-05 双向同步删除传播的前提——客户端树查询据 Deleting 状态删除本地副本）。
+    /// 物理清理由 PurgeExpiredTombstonesAsync 在保留窗口到期后承担。
     /// </summary>
-    public async Task<List<string>> DeleteAsync(string path, bool isDirectory)
+    public async Task<List<string>> SoftDeleteAsync(string path, bool isDirectory, int newVersion)
     {
         await using var db = await _dbFactory.CreateDbContextAsync();
-        List<string> deletedPaths = new List<string>();
-
-        // 收集所有待删除路径
-        List<string> pathsToDelete = new List<string>();
+        List<string> affectedPaths = new List<string>();
+        List<FileEntry> targets = new List<FileEntry>();
+        string timestamp = DateTime.UtcNow.ToString("O");
 
         if (isDirectory)
         {
+            // 目录：前缀覆盖目录自身（/dir/ 以 /dir/ 开头）及全部后代
             string prefix = path.TrimEnd('/') + "/";
-            var children = await db.FileEntries
+            targets.AddRange(await db.FileEntries
                 .Where(f => f.Path.StartsWith(prefix))
-                .ToListAsync();
-            pathsToDelete.AddRange(children.Select(c => c.Path));
+                .ToListAsync());
+        }
+        else
+        {
+            var entry = await db.FileEntries.FindAsync(path);
+            if (entry != null)
+            {
+                targets.Add(entry);
+            }
         }
 
-        var entry = await db.FileEntries.FindAsync(path);
-        if (entry != null)
+        foreach (var target in targets)
         {
-            pathsToDelete.Add(entry.Path);
-        }
-
-        // 先删除关联的版本历史（FK 约束要求）
-        if (pathsToDelete.Count > 0)
-        {
-            var versions = await db.VersionRecords
-                .Where(v => pathsToDelete.Contains(v.FilePath))
-                .ToListAsync();
-            db.VersionRecords.RemoveRange(versions);
-        }
-
-        // 再删除文件条目
-        if (isDirectory)
-        {
-            string prefix = path.TrimEnd('/') + "/";
-            var children = await db.FileEntries
-                .Where(f => f.Path.StartsWith(prefix))
-                .ToListAsync();
-            db.FileEntries.RemoveRange(children);
-        }
-
-        if (entry != null)
-        {
-            db.FileEntries.Remove(entry);
+            target.State = (int)FileState.Deleting;
+            target.Version = newVersion;
+            target.LastModified = timestamp;
+            affectedPaths.Add(target.Path);
         }
 
         await db.SaveChangesAsync();
-        deletedPaths.AddRange(pathsToDelete);
-        return deletedPaths;
+        return affectedPaths;
+    }
+
+    /// <summary>
+    /// 物理清理超过保留窗口的墓碑：删除 FileState.Deleting 且 LastModified 早于 cutoff 的
+    /// FileEntry 行及其关联 VersionRecord（FK 约束要求先删版本记录）。
+    /// </summary>
+    public async Task<int> PurgeExpiredTombstonesAsync(DateTime cutoff)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        string cutoffStr = cutoff.ToString("O");
+
+        var tombstones = await db.FileEntries
+            .Where(f => f.State == (int)FileState.Deleting
+                && string.Compare(f.LastModified, cutoffStr) < 0)
+            .ToListAsync();
+        if (tombstones.Count == 0)
+        {
+            return 0;
+        }
+
+        List<string> paths = tombstones.Select(t => t.Path).ToList();
+        var versions = await db.VersionRecords
+            .Where(v => paths.Contains(v.FilePath))
+            .ToListAsync();
+        db.VersionRecords.RemoveRange(versions);
+        db.FileEntries.RemoveRange(tombstones);
+        await db.SaveChangesAsync();
+        return tombstones.Count;
     }
 
     /// <summary>
@@ -241,8 +254,11 @@ public class FileIndexService : IFileIndexService
     public async Task<List<FileEntryDto>> SearchAsync(string query, int limit = 50)
     {
         await using var db = await _dbFactory.CreateDbContextAsync();
+        // 排除墓碑（FileState.Deleting）：已删除文件不应出现在用户搜索中
         var items = await db.FileEntries
-            .Where(f => f.Path.Contains(query) && f.Type == (int)FileType.File)
+            .Where(f => f.Path.Contains(query)
+                && f.Type == (int)FileType.File
+                && f.State != (int)FileState.Deleting)
             .Take(limit)
             .ToListAsync();
 

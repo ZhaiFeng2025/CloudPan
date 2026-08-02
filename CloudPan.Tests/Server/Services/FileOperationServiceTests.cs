@@ -37,7 +37,7 @@ public class FileOperationServiceTests : Infrastructure.TestBase
     }
 
     [Fact]
-    public async Task Delete_文件_索引移除并进入回收站()
+    public async Task Delete_文件_标记墓碑并进入回收站()
     {
         var (svc, index) = await CreateServiceAsync();
         await SeedFileAsync(index, SyncRoot, "/a.txt", "delete me");
@@ -46,8 +46,26 @@ public class FileOperationServiceTests : Infrastructure.TestBase
 
         Assert.True(result.Success);
         Assert.NotNull(result.DeletedVersion);
-        Assert.Null(await index.GetByPathAsync("/a.txt"));
+        // 墓碑保留：条目仍在但标记 Deleting 并提升版本号（客户端增量同步据墓碑删除本地副本）
+        var tomb = await index.GetByPathAsync("/a.txt");
+        Assert.NotNull(tomb);
+        Assert.Equal((int)FileState.Deleting, tomb.State);
+        Assert.Equal(result.DeletedVersion, tomb.Version);
         Assert.False(File.Exists(Path.Combine(SyncRoot, "a.txt"))); // 已移入回收站
+    }
+
+    [Fact]
+    public async Task Delete_文件_增量树返回墓碑_客户端据此删本地()
+    {
+        var (svc, index) = await CreateServiceAsync();
+        await SeedFileAsync(index, SyncRoot, "/del.txt", "delete propagate");
+        await svc.DeleteAsync("/del.txt", 0, "dev-1");
+
+        // 客户端以删除前游标拉增量 → 收到 Deleting 墓碑（F-05 双向同步删除传播）
+        var tree = await index.GetFileTreeAsync(sinceVersion: 0);
+        var item = tree.Data.FirstOrDefault(d => d.Path == "/del.txt");
+        Assert.NotNull(item);
+        Assert.Equal((int)FileState.Deleting, item.State);
     }
 
     [Fact]

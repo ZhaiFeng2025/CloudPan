@@ -66,7 +66,7 @@ public class FileIndexServiceTests : Infrastructure.TestBase
     }
 
     [Fact]
-    public async Task Delete_文件_物理删除()
+    public async Task SoftDelete_文件_标记墓碑并保留条目()
     {
         var dbFactory = CreateServerDbFactory();
         FileIndexService index = new FileIndexService(dbFactory);
@@ -74,15 +74,18 @@ public class FileIndexServiceTests : Infrastructure.TestBase
         await index.UpsertFileAsync("/bye.txt", FileType.File, "hash", 1,
             DateTime.UtcNow.ToString("O"), 1);
 
-        var deleted = await index.DeleteAsync("/bye.txt", isDirectory: false);
+        var deleted = await index.SoftDeleteAsync("/bye.txt", isDirectory: false, newVersion: 5);
         Assert.Contains("/bye.txt", deleted);
 
+        // 墓碑保留：条目仍在，标记 Deleting 并提升版本号（客户端增量同步据此删除本地副本）
         var found = await index.GetByPathAsync("/bye.txt");
-        Assert.Null(found);
+        Assert.NotNull(found);
+        Assert.Equal((int)FileState.Deleting, found.State);
+        Assert.Equal(5, found.Version);
     }
 
     [Fact]
-    public async Task Delete_文件夹_递归删除子文件()
+    public async Task SoftDelete_文件夹_递归标记子文件墓碑()
     {
         var dbFactory = CreateServerDbFactory();
         FileIndexService index = new FileIndexService(dbFactory);
@@ -93,14 +96,95 @@ public class FileIndexServiceTests : Infrastructure.TestBase
         await index.UpsertFileAsync("/parent/child2.txt", FileType.File, "hash", 20,
             DateTime.UtcNow.ToString("O"), 3);
 
-        var deleted = await index.DeleteAsync("/parent/", isDirectory: true);
+        var deleted = await index.SoftDeleteAsync("/parent/", isDirectory: true, newVersion: 9);
 
         Assert.Contains("/parent/", deleted);
         Assert.Contains("/parent/child1.txt", deleted);
         Assert.Contains("/parent/child2.txt", deleted);
 
-        Assert.Null(await index.GetByPathAsync("/parent/"));
-        Assert.Null(await index.GetByPathAsync("/parent/child1.txt"));
+        // 墓碑保留：所有条目均在，标记 Deleting 且版本号提升
+        Assert.Equal((int)FileState.Deleting, (await index.GetByPathAsync("/parent/"))!.State);
+        Assert.Equal(9, (await index.GetByPathAsync("/parent/child1.txt"))!.Version);
+        Assert.Equal((int)FileState.Deleting, (await index.GetByPathAsync("/parent/child2.txt"))!.State);
+    }
+
+    [Fact]
+    public async Task PurgeExpiredTombstones_超过保留窗口_物理清理()
+    {
+        var dbFactory = CreateServerDbFactory();
+        FileIndexService index = new FileIndexService(dbFactory);
+
+        // 插入一个"老"墓碑（LastModified 为 40 天前）
+        string oldTs = DateTime.UtcNow.AddDays(-40).ToString("O");
+        var db = dbFactory.CreateDbContext();
+        db.FileEntries.Add(new CloudPan.Server.Models.FileEntry
+        {
+            Path = "/old-tomb.txt",
+            Type = (int)FileType.File,
+            CurrentHash = "hash",
+            CurrentSize = 1,
+            Version = 2,
+            LastModified = oldTs,
+            State = (int)FileState.Deleting,
+            CreatedAt = oldTs
+        });
+        await db.SaveChangesAsync();
+        db.Dispose();
+
+        int purged = await index.PurgeExpiredTombstonesAsync(DateTime.UtcNow.AddDays(-30));
+        Assert.Equal(1, purged);
+        Assert.Null(await index.GetByPathAsync("/old-tomb.txt"));
+    }
+
+    [Fact]
+    public async Task PurgeExpiredTombstones_未到期_保留()
+    {
+        var dbFactory = CreateServerDbFactory();
+        FileIndexService index = new FileIndexService(dbFactory);
+
+        await index.UpsertFileAsync("/fresh.txt", FileType.File, "hash", 1,
+            DateTime.UtcNow.ToString("O"), 1);
+        await index.SoftDeleteAsync("/fresh.txt", isDirectory: false, newVersion: 2);
+
+        // cutoff 为 1 天前：新墓碑（创建于当前）未到期，不应清理
+        int purged = await index.PurgeExpiredTombstonesAsync(DateTime.UtcNow.AddDays(-1));
+        Assert.Equal(0, purged);
+        Assert.NotNull(await index.GetByPathAsync("/fresh.txt")); // 未到期墓碑保留
+    }
+
+    [Fact]
+    public async Task GetFileTree_增量_返回删除墓碑()
+    {
+        var dbFactory = CreateServerDbFactory();
+        FileIndexService index = new FileIndexService(dbFactory);
+
+        await index.UpsertFileAsync("/keep.txt", FileType.File, "hash", 10,
+            DateTime.UtcNow.ToString("O"), 1);
+        await index.UpsertFileAsync("/gone.txt", FileType.File, "hash", 20,
+            DateTime.UtcNow.ToString("O"), 5);
+        await index.SoftDeleteAsync("/gone.txt", isDirectory: false, newVersion: 10);
+
+        var result = await index.GetFileTreeAsync(sinceVersion: 5);
+        Assert.Single(result.Data); // 只有墓碑 /gone.txt（v10 > 5）
+        Assert.Equal("/gone.txt", result.Data[0].Path);
+        Assert.Equal((int)FileState.Deleting, result.Data[0].State);
+    }
+
+    [Fact]
+    public async Task Search_排除删除墓碑()
+    {
+        var dbFactory = CreateServerDbFactory();
+        FileIndexService index = new FileIndexService(dbFactory);
+
+        await index.UpsertFileAsync("/report.txt", FileType.File, "hash", 10,
+            DateTime.UtcNow.ToString("O"), 1);
+        await index.UpsertFileAsync("/report-del.txt", FileType.File, "hash", 10,
+            DateTime.UtcNow.ToString("O"), 2);
+        await index.SoftDeleteAsync("/report-del.txt", isDirectory: false, newVersion: 3);
+
+        var results = await index.SearchAsync("report");
+        Assert.Single(results);
+        Assert.Equal("/report.txt", results[0].Path);
     }
 
     [Fact]

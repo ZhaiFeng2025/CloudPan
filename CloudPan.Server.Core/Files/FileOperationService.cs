@@ -64,8 +64,12 @@ public class FileOperationService : IFileOperationService
 
         bool isDirectory = entry.Type == (int)FileType.Directory;
 
-        // 先删除 DB 条目（失败则抛异常，文件保持原样，索引与 FS 一致）
-        await _index.DeleteAsync(path, isDirectory);
+        // 分配新版本号（软删除墓碑据此传播给客户端增量同步）
+        int newVersion = await _version.NextVersionAsync();
+
+        // 软删除墓碑：FileEntry 行保留并标记 FileState.Deleting，客户端树查询据其删除本地副本
+        //（失败则抛异常，文件保持原样，索引与 FS 一致）
+        await _index.SoftDeleteAsync(path, isDirectory, newVersion);
 
         // 再移入回收站（FS）；失败则物理删除兜底，避免孤儿文件
         try
@@ -82,8 +86,6 @@ public class FileOperationService : IFileOperationService
             }
             catch (Exception ex2) { _logger.LogWarning(ex2, "物理删除失败: {Path}", path); }
         }
-
-        int newVersion = await _version.NextVersionAsync();
 
         // 写入审计日志（删除成功）
         await _syncLog.LogAsync(path, SyncOperation.Delete, deviceId, LogResult.Success);

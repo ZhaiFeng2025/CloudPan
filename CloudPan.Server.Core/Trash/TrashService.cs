@@ -89,7 +89,8 @@ public class TrashService : ITrashService
             if (entry.IsDirectory)
             {
                 Directory.Move(trashFile, targetPath);
-                // 删除时子文件的 FileEntry 已被移除，恢复时递归重建子文件索引，避免客户端看不到恢复的内容
+                // 删除时子文件为墓碑（FileState.Deleting），恢复时递归 Upsert 将墓碑还原为 Synced，
+                // 客户端增量同步据此恢复本地内容
                 await ReindexDirectoryAsync(entry.OriginalPath);
             }
             else

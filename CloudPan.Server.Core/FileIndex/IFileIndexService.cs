@@ -11,7 +11,13 @@ public interface IFileIndexService
     Task<FileTreeResponse> GetFileTreeAsync(int? sinceVersion = null, string? subPath = null, int limit = 5000, string? cursor = null);
     Task<FileEntry?> GetByPathAsync(string path);
     Task<FileEntry> UpsertFileAsync(string path, FileType type, string? hash, long size, string lastModified, int newVersion, FileState state = FileState.Synced);
-    Task<List<string>> DeleteAsync(string path, bool isDirectory);
+
+    /// <summary>软删除（墓碑）：将文件/目录及其子条目标记为 FileState.Deleting 并提升版本号，不物理移除。</summary>
+    Task<List<string>> SoftDeleteAsync(string path, bool isDirectory, int newVersion);
+
+    /// <summary>物理清理超过保留窗口的墓碑（FileState.Deleting 且 LastModified 早于 cutoff）。返回清理条数。</summary>
+    Task<int> PurgeExpiredTombstonesAsync(DateTime cutoff);
+
     Task MoveAsync(string oldPath, string newPath, int newVersion, bool isDirectory);
     Task CreateDirectoryAsync(string path, int version);
     Task<List<FileEntryDto>> SearchAsync(string query, int limit = 50);

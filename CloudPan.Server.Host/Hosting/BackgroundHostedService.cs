@@ -1,4 +1,5 @@
 using CloudPan.Server.Data;
+using CloudPan.Server.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -8,7 +9,7 @@ using Timer = System.Threading.Timer;
 namespace CloudPan.Server.Hosting;
 
 /// <summary>
-/// 后台定时任务宿主：回收站 30 天清理、超时分块清理、WAL checkpoint、内存监控。
+/// 后台定时任务宿主：回收站 30 天清理、墓碑物理清理、超时分块清理、WAL checkpoint、内存监控。
 /// 替换 Program.cs 中的裸 Timer（R-A6：定时任务用 IHostedService）。Timer 回调使用 Task.Run 包裹并捕获全部异常（CLAUDE.md 7.2）。
 /// </summary>
 public sealed class BackgroundHostedService : IHostedService, IDisposable
@@ -17,9 +18,13 @@ public sealed class BackgroundHostedService : IHostedService, IDisposable
     private readonly IServiceProvider _services;
     private readonly ILogger<BackgroundHostedService> _logger;
     private Timer? _trashTimer;
+    private Timer? _tombstoneTimer;
     private Timer? _chunkTimer;
     private Timer? _walTimer;
     private Timer? _memTimer;
+
+    /// <summary>墓碑保留窗口（天）。与回收站 30 天清理对齐，保证客户端有足够时间同步删除。</summary>
+    private static readonly TimeSpan TombstoneRetention = TimeSpan.FromDays(30);
 
     public BackgroundHostedService(string syncRoot, IServiceProvider services, ILogger<BackgroundHostedService> logger)
     {
@@ -31,16 +36,18 @@ public sealed class BackgroundHostedService : IHostedService, IDisposable
     public Task StartAsync(CancellationToken cancellationToken)
     {
         _trashTimer = new Timer(TrashCleanup, null, TimeSpan.FromMinutes(10), TimeSpan.FromHours(6));
+        _tombstoneTimer = new Timer(TombstoneCleanup, null, TimeSpan.FromMinutes(15), TimeSpan.FromHours(6));
         _chunkTimer = new Timer(ChunkCleanup, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(30));
         _walTimer = new Timer(WalCheckpoint, null, TimeSpan.FromMinutes(60), TimeSpan.FromMinutes(60));
         _memTimer = new Timer(MemoryMonitor, null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(10));
-        _logger.LogInformation("后台定时任务已启动（回收站/分块/WAL/内存监控）");
+        _logger.LogInformation("后台定时任务已启动（回收站/墓碑/分块/WAL/内存监控）");
         return Task.CompletedTask;
     }
 
     public Task StopAsync(CancellationToken cancellationToken)
     {
         _trashTimer?.Dispose();
+        _tombstoneTimer?.Dispose();
         _chunkTimer?.Dispose();
         _walTimer?.Dispose();
         _memTimer?.Dispose();
@@ -50,6 +57,7 @@ public sealed class BackgroundHostedService : IHostedService, IDisposable
     public void Dispose()
     {
         _trashTimer?.Dispose();
+        _tombstoneTimer?.Dispose();
         _chunkTimer?.Dispose();
         _walTimer?.Dispose();
         _memTimer?.Dispose();
@@ -104,6 +112,25 @@ public sealed class BackgroundHostedService : IHostedService, IDisposable
         {
             _logger.LogWarning(ex, "回收站定时清理异常");
         }
+    }
+
+    // ==================== 墓碑物理清理（>30 天，客户端同步删除传播完成后可回收） ====================
+
+    private void TombstoneCleanup(object? state)
+    {
+        Task.Run(async () =>
+        {
+            try
+            {
+                var index = _services.GetRequiredService<IFileIndexService>();
+                int purged = await index.PurgeExpiredTombstonesAsync(DateTime.UtcNow - TombstoneRetention);
+                if (purged > 0)
+                {
+                    _logger.LogInformation("清理过期墓碑: {Count} 条", purged);
+                }
+            }
+            catch (Exception ex) { _logger.LogWarning(ex, "墓碑定时清理异常"); }
+        });
     }
 
     // ==================== 分块上传超时清理（>24h 未完成） ====================

@@ -21,7 +21,54 @@ public partial class SyncEngine
     private void OnWsFileDeleted(string path)
     {
         _logger.LogInformation("WS 推送删除: {Path}", path);
-        TriggerWsIncrementalSync();
+        // 按 path 精确处理：直接删除本地副本（不再仅触发增量同步等待树墓碑）。
+        // Task.Run 包裹异步删除，避免 async void 异常逃逸；最后兜底触发增量同步（目录删除需拉子树墓碑）。
+        Task.Run(async () =>
+        {
+            try
+            {
+                await DeleteLocalCopyAsync(path);
+                _logger.LogInformation("WS 删除已处理，本地副本已删: {Path}", path);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "WS 删除本地副本失败: {Path}", path);
+            }
+            finally
+            {
+                TriggerWsIncrementalSync();
+            }
+        });
+    }
+
+    /// <summary>删除本地副本 + 清理快照与待处理队列（WS file_deleted 精确处理与树墓碑共用）。</summary>
+    private async Task DeleteLocalCopyAsync(string path)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync();
+
+        // 取消该路径待处理的上传/下载（远端已删除，本地未决传输不再有意义）
+        var pending = await db.SyncQueue
+            .Where(q => q.FilePath == path
+                && (q.Operation == (int)SyncOperation.Upload || q.Operation == (int)SyncOperation.Download))
+            .ToListAsync();
+        if (pending.Count > 0)
+        {
+            db.SyncQueue.RemoveRange(pending);
+        }
+
+        string localPath = ToLocalPath(path);
+        if (File.Exists(localPath))
+        {
+            SafeDelete(localPath);
+        }
+
+        var snapshot = await db.RemoteSnapshots.FindAsync(path);
+        if (snapshot != null)
+        {
+            db.RemoteSnapshots.Remove(snapshot);
+        }
+
+        await db.SaveChangesAsync();
     }
 
     private void OnWsFileRenamed(string oldPath, string newPath)

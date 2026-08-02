@@ -246,6 +246,41 @@ public class FilesControllerIntegrationTests : IClassFixture<WebApplicationFacto
     }
 
     [Fact]
+    public async Task Delete_删除后_树返回Deleting墓碑()
+    {
+        // 上传一个文件
+        string guid = Guid.NewGuid().ToString("N")[..8];
+        string remotePath = $"/tombstone-{guid}.txt";
+        string localFile = Path.Combine(_tempDir, $"_tomb_{guid}.txt");
+        await File.WriteAllTextAsync(localFile, "to be tombstoned");
+
+        using MultipartFormDataContent form = new MultipartFormDataContent();
+        await using var fs = File.OpenRead(localFile);
+        form.Add(new StreamContent(fs), "file", "tomb.txt");
+        form.Add(new StringContent(remotePath), "path");
+        form.Add(new StringContent("0"), "baseVersion");
+        form.Add(new StringContent(DateTime.UtcNow.ToString("O")), "lastModified");
+        var up = await _client.PostAsync("/api/files/upload", form);
+        up.EnsureSuccessStatusCode();
+        var upBody = await up.Content.ReadFromJsonAsync<JsonElement>(JsonOptions);
+        int version = upBody.GetProperty("data").GetProperty("version").GetInt32();
+
+        // 删除
+        var del = await _client.PostAsJsonAsync("/api/files/delete",
+            new { path = remotePath, baseVersion = 0 }, JsonOptions);
+        del.EnsureSuccessStatusCode();
+
+        // 客户端以删除前版本为游标拉增量 → 收到 Deleting 墓碑（F-05 删除传播到客户端）
+        var tree = await _client.GetAsync($"/api/files/tree?sinceVersion={version}");
+        tree.EnsureSuccessStatusCode();
+        var treeBody = await tree.Content.ReadFromJsonAsync<JsonElement>(JsonOptions);
+        var item = treeBody.GetProperty("data").EnumerateArray()
+            .FirstOrDefault(d => d.GetProperty("path").GetString() == remotePath);
+        Assert.NotEqual(default, item);
+        Assert.Equal((int)CloudPan.Shared.FileState.Deleting, item.GetProperty("state").GetInt32());
+    }
+
+    [Fact]
     public async Task Move_重命名_成功()
     {
         string guid = Guid.NewGuid().ToString("N")[..8];
