@@ -21,7 +21,7 @@ public class FileOperationServiceTests : Infrastructure.TestBase
         var storage = new FileStorageService(SyncRoot);
         var index = new FileIndexService(dbFactory);
         var version = new VersionService(dbFactory);
-        var trash = new TrashService(storage, index, version);
+        var trash = new TrashService(storage, index, version, NullLogger<TrashService>.Instance);
         var syncLog = new SyncLogService(dbFactory, NullLogger<SyncLogService>.Instance);
         var svc = new FileOperationService(storage, index, version, trash, syncLog,
             NullLogger<FileOperationService>.Instance);

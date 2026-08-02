@@ -1,12 +1,14 @@
+using System.Text.Json.Nodes;
 using CloudPan.Contract;
 using CloudPan.Infrastructure.Storage;
 using CloudPan.Server.Core;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace CloudPan.Tests.Server.Services;
 
 /// <summary>
-/// TrashService 单元测试——回收站移入/列表/恢复/清空（脱离 ASP.NET，直接注入领域服务）。
+/// TrashService 单元测试——回收站移入/列表/恢复/清空/保留期清理（脱离 ASP.NET，直接注入领域服务）。
 /// 注意：同步根使用 TempDir/sync，回收站位于 TempDir/.cloudpan/.trash，随测试实例隔离。
 /// </summary>
 public class TrashServiceTests : Infrastructure.TestBase
@@ -27,7 +29,15 @@ public class TrashServiceTests : Infrastructure.TestBase
         await index.UpsertFileAsync($"/{fileName}", FileType.File, "hash", content.Length,
             DateTime.UtcNow.ToString("O"), 1);
 
-        return new TrashService(storage, index, version);
+        return new TrashService(storage, index, version, NullLogger<TrashService>.Instance);
+    }
+
+    /// <summary>把指定元数据文件的 DeletedAt 改写为给定时间（模拟历史保留期场景）。</summary>
+    private static async Task RewriteDeletedAtAsync(string metaFile, DateTime deletedAt)
+    {
+        var node = JsonNode.Parse(await File.ReadAllTextAsync(metaFile))!.AsObject();
+        node["DeletedAt"] = deletedAt.ToString("O");
+        await File.WriteAllTextAsync(metaFile, node.ToJsonString());
     }
 
     [Fact]
@@ -121,5 +131,102 @@ public class TrashServiceTests : Infrastructure.TestBase
         // 穿越被拒绝：外部诱饵未被动过，回收站自身元数据未误删
         Assert.True(File.Exists(decoyPath));
         Assert.Single(Directory.GetFiles(TrashDir, "*.json"));
+    }
+
+    // ==================== T-026 保留期清理 PurgeExpiredAsync ====================
+
+    [Fact]
+    public async Task PurgeExpired_过期条目_实体与元数据一并清理()
+    {
+        var svc = await CreateServiceAsync("a.txt", "old content");
+        await svc.MoveToTrashAsync("/a.txt", isDirectory: false);
+        string metaFile = Directory.GetFiles(TrashDir, "*.json").Single();
+        await RewriteDeletedAtAsync(metaFile, DateTime.UtcNow.AddDays(-40)); // 40 天前删除，超过 30 天保留期
+
+        int purged = await svc.PurgeExpiredAsync(TimeSpan.FromDays(30));
+
+        Assert.Equal(1, purged);
+        // 元数据与实体文件均已清理
+        Assert.Empty(Directory.GetFiles(TrashDir, "*.json"));
+        Assert.Empty(Directory.GetFiles(TrashDir));
+    }
+
+    [Fact]
+    public async Task PurgeExpired_未过期条目_保留()
+    {
+        var svc = await CreateServiceAsync("a.txt", "fresh content");
+        await svc.MoveToTrashAsync("/a.txt", isDirectory: false); // DeletedAt = 现在
+
+        int purged = await svc.PurgeExpiredAsync(TimeSpan.FromDays(30));
+
+        Assert.Equal(0, purged);
+        // 元数据与实体均保留
+        Assert.Single(Directory.GetFiles(TrashDir, "*.json"));
+        Assert.Single(Directory.GetFiles(TrashDir), f => !f.EndsWith(".json"));
+    }
+
+    [Fact]
+    public async Task PurgeExpired_边界_恰好满保留期_清理()
+    {
+        var svc = await CreateServiceAsync("a.txt", "boundary");
+        await svc.MoveToTrashAsync("/a.txt", isDirectory: false);
+        string metaFile = Directory.GetFiles(TrashDir, "*.json").Single();
+        // 恰好等于保留期（30 天前同一时刻），应视为过期清理
+        await RewriteDeletedAtAsync(metaFile, DateTime.UtcNow.AddDays(-30));
+
+        int purged = await svc.PurgeExpiredAsync(TimeSpan.FromDays(30));
+
+        Assert.Equal(1, purged);
+        Assert.Empty(Directory.GetFiles(TrashDir, "*.json"));
+    }
+
+    [Fact]
+    public async Task PurgeExpired_元数据异常_损坏JSON跳过不误删()
+    {
+        var svc = await CreateServiceAsync("a.txt", "content");
+        await svc.MoveToTrashAsync("/a.txt", isDirectory: false);
+        string metaFile = Directory.GetFiles(TrashDir, "*.json").Single();
+        await RewriteDeletedAtAsync(metaFile, DateTime.UtcNow.AddDays(-40));
+        // 伪造损坏 JSON 元数据：解析失败应被跳过，不得中断整体清理、不得误删
+        string corrupt = Path.Combine(TrashDir, "corrupt.json");
+        await File.WriteAllTextAsync(corrupt, "{ 这不是合法 JSON ]");
+
+        int purged = await svc.PurgeExpiredAsync(TimeSpan.FromDays(30));
+
+        // 合法过期条目清理，损坏条目原样保留
+        Assert.Equal(1, purged);
+        Assert.Single(Directory.GetFiles(TrashDir, "*.json")); // 仅 corrupt.json 幸存
+        Assert.Equal("corrupt.json", Path.GetFileName(Directory.GetFiles(TrashDir, "*.json").Single()));
+        Assert.False(File.Exists(metaFile));
+    }
+
+    [Fact]
+    public async Task PurgeExpired_元数据异常_缺字段或时间不可解析_跳过()
+    {
+        var svc = await CreateServiceAsync("a.txt", "content");
+        await svc.MoveToTrashAsync("/a.txt", isDirectory: false);
+        // 缺 TrashFileName 的异常条目
+        var badMeta = Path.Combine(TrashDir, "bad.json");
+        await File.WriteAllTextAsync(badMeta, """{"OriginalPath":"/a.txt","FileSize":1,"IsDirectory":false,"DeletedAt":"2026-01-01T00:00:00.0000000Z"}""");
+        // 时间不可解析的异常条目
+        var badTime = Path.Combine(TrashDir, "badtime.json");
+        await File.WriteAllTextAsync(badTime, """{"OriginalPath":"/a.txt","TrashFileName":"x.bin","FileSize":1,"IsDirectory":false,"DeletedAt":"不是时间"}""");
+
+        int purged = await svc.PurgeExpiredAsync(TimeSpan.FromDays(30));
+
+        // 两条异常条目均被跳过（保留），不影响既有合法条目（未移入实体故 0 清理）
+        Assert.Equal(0, purged);
+        Assert.True(File.Exists(badMeta));
+        Assert.True(File.Exists(badTime));
+    }
+
+    [Fact]
+    public async Task PurgeExpired_回收站不存在_返回0()
+    {
+        var svc = await CreateServiceAsync("a.txt", "x"); // 未移入回收站，trashDir 不存在
+
+        int purged = await svc.PurgeExpiredAsync(TimeSpan.FromDays(30));
+
+        Assert.Equal(0, purged);
     }
 }

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using CloudPan.Contract;
 using CloudPan.Infrastructure.Storage;
+using Microsoft.Extensions.Logging;
 
 namespace CloudPan.Server.Core;
 
@@ -10,12 +11,15 @@ public class TrashService : ITrashService
     private readonly IFileStorageService _storage;
     private readonly IFileIndexService _index;
     private readonly IVersionService _version;
+    private readonly ILogger<TrashService> _logger;
 
-    public TrashService(IFileStorageService storage, IFileIndexService index, IVersionService version)
+    public TrashService(IFileStorageService storage, IFileIndexService index, IVersionService version,
+        ILogger<TrashService> logger)
     {
         _storage = storage;
         _index = index;
         _version = version;
+        _logger = logger;
     }
 
     /// <inheritdoc />
@@ -159,6 +163,64 @@ public class TrashService : ITrashService
             Directory.CreateDirectory(trashDir);
         }
         return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task<int> PurgeExpiredAsync(TimeSpan retention)
+    {
+        string trashDir = GetTrashDir();
+        if (!Directory.Exists(trashDir))
+        {
+            return Task.FromResult(0);
+        }
+
+        DateTime cutoff = DateTime.UtcNow - retention;
+        int purged = 0;
+        foreach (string metaFile in Directory.GetFiles(trashDir, "*.json"))
+        {
+            try
+            {
+                string json = File.ReadAllText(metaFile);
+                var entry = JsonSerializer.Deserialize<TrashEntry>(json);
+
+                // 元数据异常容错：损坏 JSON / 缺 TrashFileName / DeletedAt 无法解析的条目
+                // 一律跳过（保留不误删），不中断整体清理。
+                // DeletedAt 按 ISO 8601（"O"，UTC "Z"）RoundtripKind 解析，与 cutoff（Utc）同基准比较，
+                // 不受运行机时区影响（原组合根 DateTime.TryParse 默认转为本地时区，会偏离保留窗口）。
+                if (entry == null
+                    || string.IsNullOrEmpty(entry.TrashFileName)
+                    || !DateTime.TryParse(entry.DeletedAt, System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.RoundtripKind, out DateTime deletedAt))
+                {
+                    _logger.LogWarning("跳过回收站异常元数据: {MetaFile}", Path.GetFileName(metaFile));
+                    continue;
+                }
+
+                if (deletedAt >= cutoff)
+                {
+                    continue; // 未过期，保留
+                }
+
+                string trashFile = Path.Combine(trashDir, entry.TrashFileName);
+                if (File.Exists(trashFile))
+                {
+                    File.Delete(trashFile);
+                }
+                else if (Directory.Exists(trashFile))
+                {
+                    Directory.Delete(trashFile, recursive: true);
+                }
+
+                File.Delete(metaFile);
+                purged++;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "清理回收站条目异常: {MetaFile}", metaFile);
+            }
+        }
+
+        return Task.FromResult(purged);
     }
 
     /// <inheritdoc />

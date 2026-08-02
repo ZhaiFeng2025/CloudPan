@@ -14,7 +14,6 @@ namespace CloudPan.Server.Host.Hosting;
 /// </summary>
 public sealed class BackgroundHostedService : IHostedService, IDisposable
 {
-    private readonly string _syncRoot;
     private readonly IServiceProvider _services;
     private readonly ILogger<BackgroundHostedService> _logger;
     private Timer? _trashTimer;
@@ -26,9 +25,11 @@ public sealed class BackgroundHostedService : IHostedService, IDisposable
     /// <summary>墓碑保留窗口（天）。与回收站 30 天清理对齐，保证客户端有足够时间同步删除。</summary>
     private static readonly TimeSpan TombstoneRetention = TimeSpan.FromDays(30);
 
-    public BackgroundHostedService(string syncRoot, IServiceProvider services, ILogger<BackgroundHostedService> logger)
+    /// <summary>回收站保留窗口（天）。清理策略归属 TrashService（T-026），组合根只传保留期。</summary>
+    private static readonly TimeSpan TrashRetention = TimeSpan.FromDays(30);
+
+    public BackgroundHostedService(IServiceProvider services, ILogger<BackgroundHostedService> logger)
     {
-        _syncRoot = syncRoot;
         _services = services;
         _logger = logger;
     }
@@ -63,55 +64,23 @@ public sealed class BackgroundHostedService : IHostedService, IDisposable
         _memTimer?.Dispose();
     }
 
-    // ==================== 回收站 30 天自动清理 ====================
+    // ==================== 回收站 30 天自动清理（策略在 TrashService，本处仅调度） ====================
 
     private void TrashCleanup(object? state)
     {
-        try
+        Task.Run(async () =>
         {
-            string trashDir = Path.Combine(_syncRoot, ".cloudpan", ".trash");
-            if (!Directory.Exists(trashDir))
+            try
             {
-                return;
-            }
-
-            DateTime cutoff = DateTime.UtcNow.AddDays(-30);
-            foreach (string metaFile in Directory.GetFiles(trashDir, "*.json"))
-            {
-                try
+                var trash = _services.GetRequiredService<ITrashService>();
+                int purged = await trash.PurgeExpiredAsync(TrashRetention);
+                if (purged > 0)
                 {
-                    string json = File.ReadAllText(metaFile);
-                    using System.Text.Json.JsonDocument doc = System.Text.Json.JsonDocument.Parse(json);
-                    var root = doc.RootElement;
-                    string? deletedAt = root.TryGetProperty("DeletedAt", out var da) ? da.GetString() : null;
-                    string? trashFileName = root.TryGetProperty("TrashFileName", out var tn) ? tn.GetString() : null;
-                    if (deletedAt != null && trashFileName != null
-                        && DateTime.TryParse(deletedAt, out DateTime delTime) && delTime < cutoff)
-                    {
-                        string trashFile = Path.Combine(trashDir, trashFileName);
-                        if (File.Exists(trashFile))
-                        {
-                            File.Delete(trashFile);
-                        }
-
-                        if (Directory.Exists(trashFile))
-                        {
-                            Directory.Delete(trashFile, recursive: true);
-                        }
-
-                        File.Delete(metaFile);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "清理回收站文件异常: {MetaFile}", metaFile);
+                    _logger.LogInformation("清理过期回收站条目: {Count} 条", purged);
                 }
             }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "回收站定时清理异常");
-        }
+            catch (Exception ex) { _logger.LogWarning(ex, "回收站定时清理异常"); }
+        });
     }
 
     // ==================== 墓碑物理清理（>30 天，客户端同步删除传播完成后可回收） ====================

@@ -1144,7 +1144,7 @@
       "title": "回收站保留期清理下沉 TrashService",
       "dimension": "architecture",
       "priority": "P1",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 3,
       "findingId": "F-26",
       "dependsOn": [],
@@ -1175,8 +1175,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "回收站 30 天保留期清理下沉 TrashService（F-26/T-026）：组合根不再裸拼路径/解析 JSON/File.Delete，仅作 IHostedService 调度器。\n①ITrashService 新增 PurgeExpiredAsync(TimeSpan retention)，TrashService 实现：回收站路径取本服务 GetTrashDir()（与 MoveToTrash/List/Restore/Empty 单一事实来源），经 JsonSerializer 解析 TrashEntry 元数据（DeletedAt/TrashFileName），DeletedAt 按 ISO 8601 RoundtripKind 解析（与 Utc 保留窗口同基准，不受机时区影响——原组合根 DateTime.TryParse 默认转本地会偏离保留窗口）与 UtcNow-retention 比较，过期条目删实体（文件/目录）+元数据，异常元数据（损坏 JSON/缺 TrashFileName/时间不可解析）跳过保留不误删，单条异常不中断整体清理。\n②BackgroundHostedService.TrashCleanup 改为 Task.Run 内解析 ITrashService 调 PurgeExpiredAsync(TrashRetention=30d)，保留窗口常量留在组合根；删除 _syncRoot 字段与构造函数 string 参数（T-026 后仅 TrashCleanup 用，DI 注册的 string syncRoot 仍由 TokenService 消费）。\n③顺带修复潜在路径不一致：原组合根清理扫 Path.Combine(_syncRoot,'.cloudpan','.trash')，而 TrashService 实际写/读同步根父目录下 .cloudpan/.trash，原定时清理实际空扫失效——下沉后按领域服务同一路径清理，30 天保留期清理真正生效。\n改动文件：CloudPan.Server.Core/Trash/{ITrashService,TrashService}.cs；CloudPan.Server.Host/Hosting/BackgroundHostedService.cs；CloudPan.Tests/Server/Services/{TrashServiceTests,FileOperationServiceTests}.cs。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Trash 21/21 通过（新增 6 用例：过期条目清理/未过期保留/边界恰好满保留期清理/损坏 JSON 跳过/缺字段或时间不可解析跳过/回收站不存在返回 0）；dotnet test --filter Architecture 10/10 通过；全量 dotnet test CloudPan.Tests -c Release 217/217 通过；验收 grep '.cloudpan.*.trash' BackgroundHostedService.cs 无匹配（exit 1）。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-027",
