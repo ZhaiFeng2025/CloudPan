@@ -27,14 +27,14 @@ public record FileTreeResponse(
 /// POST /api/files/upload 响应
 /// </summary>
 public record UploadResponse(
-    [property: JsonPropertyName("ok")]
-    bool Ok,
     [property: JsonPropertyName("data")]
-    UploadResponseData Data
+    UploadData Data
 );
 
-/// <summary>上传响应中的 data 字段。</summary>
-public record UploadResponseData(
+/// <summary>
+/// 上传响应中的 data 字段
+/// </summary>
+public record UploadData(
     [property: JsonPropertyName("path")]
     string Path,
     [property: JsonPropertyName("version")]
@@ -44,22 +44,66 @@ public record UploadResponseData(
     [property: JsonPropertyName("size")]
     long Size,
     [property: JsonPropertyName("conflictResolved")]
-    bool? ConflictResolved = null
+    bool ConflictResolved
 );
 
 /// <summary>
-/// POST /api/files/upload/chunk 响应
+/// POST /api/files/upload/chunk 响应（data 为进度或完成信息）
 /// </summary>
 public record ChunkUploadResponse(
-    [property: JsonPropertyName("ok")]
-    bool Ok,
+    [property: JsonPropertyName("data")]
+    ChunkUploadData Data
+);
+
+/// <summary>
+/// 分块上传响应 data——进度未完成含 chunkIndex/receivedCount/totalChunks/isComplete，完成含 status='complete'/version/hash/size
+/// </summary>
+public record ChunkUploadData(
+    [property: JsonPropertyName("path")]
+    string Path,
     [property: JsonPropertyName("chunkIndex")]
     int ChunkIndex,
-    [property: JsonPropertyName("received")]
-    int Received,
-    [property: JsonPropertyName("total")]
-    int Total,
-    [property: JsonPropertyName("done")]
-    bool Done
+    [property: JsonPropertyName("receivedCount")]
+    int ReceivedCount,
+    [property: JsonPropertyName("totalChunks")]
+    int TotalChunks,
+    [property: JsonPropertyName("isComplete")]
+    bool IsComplete,
+    [property: JsonPropertyName("version")]
+    int Version,
+    [property: JsonPropertyName("hash")]
+    string? Hash,
+    [property: JsonPropertyName("size")]
+    long Size,
+    [property: JsonPropertyName("status")]
+    string? Status
+);
+
+/// <summary>
+/// GET /api/files/upload/chunk/status 响应包装
+/// </summary>
+public record ChunkStatusResponse(
+    [property: JsonPropertyName("data")]
+    ChunkStatusData Data
+);
+
+/// <summary>
+/// 分块上传进度查询 data
+/// </summary>
+public record ChunkStatusData(
+    [property: JsonPropertyName("filePath")]
+    string? FilePath,
+    [property: JsonPropertyName("path")]
+    string? Path,
+    [property: JsonPropertyName("receivedChunks")]
+    int[] ReceivedChunks,
+    [property: JsonPropertyName("totalChunks")]
+    int TotalChunks,
+    [property: JsonPropertyName("isComplete")]
+    bool IsComplete,
+    [property: JsonPropertyName("deviceId")]
+    string? DeviceId,
+    [property: JsonPropertyName("createdAt")]
+    string? CreatedAt
 );
 

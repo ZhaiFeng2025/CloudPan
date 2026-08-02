@@ -4,7 +4,13 @@ namespace CloudPan.CodeGen.Generators;
 
 /// <summary>
 /// 从 shared-spec.json 的 api.responses 生成 API 响应包装 record。
-/// 替代 ApiClient.cs 中手写的 9 个响应 DTO。
+/// 替代 ApiClient.cs 中手写的 API 响应 DTO。
+///
+/// 响应类型字段格式（api.responses → {name}.fields）：
+///   "data: FileEntryDto[]"   → 数组（引用 DTO/嵌套响应类型）
+///   "nextCursor: string?"    → 可空引用类型
+///   "version: int"           → 基础类型
+/// 字段名即 JSON 属性名（camelCase），与服务端匿名对象返回形状一一对应。
 /// </summary>
 public static class ApiResponseGenerator
 {
@@ -32,85 +38,97 @@ public static class ApiResponseGenerator
 
         foreach (var (name, def) in responses)
         {
-            sb.AppendLine($"/// <summary>");
-            sb.AppendLine($"/// {def.Description}");
-            sb.AppendLine($"/// </summary>");
-
-            switch (name)
-            {
-                case "FileTreeResponse":
-                    GenerateFileTreeResponse(sb);
-                    break;
-                case "UploadResponse":
-                    GenerateUploadResponse(sb);
-                    break;
-                case "ChunkUploadResponse":
-                    GenerateChunkUploadResponse(sb);
-                    break;
-                default:
-                    sb.AppendLine($"// TODO: 未实现的响应类型生成: {name}");
-                    sb.AppendLine();
-                    break;
-            }
+            GenerateRecord(sb, name, def);
         }
 
         return sb.ToString();
     }
 
-    private static void GenerateFileTreeResponse(StringBuilder sb)
+    private static void GenerateRecord(StringBuilder sb, string name, ApiResponseDef def)
     {
-        sb.AppendLine("public record FileTreeResponse(");
-        sb.AppendLine("    [property: JsonPropertyName(\"data\")]");
-        sb.AppendLine("    FileEntryDto[] Data,");
-        sb.AppendLine("    [property: JsonPropertyName(\"nextCursor\")]");
-        sb.AppendLine("    string? NextCursor,");
-        sb.AppendLine("    [property: JsonPropertyName(\"hasMore\")]");
-        sb.AppendLine("    bool HasMore,");
-        sb.AppendLine("    [property: JsonPropertyName(\"maxVersion\")]");
-        sb.AppendLine("    int MaxVersion");
+        List<(string JsonName, string PropName, string CsType)> fields = ParseFields(def.Fields);
+
+        sb.AppendLine($"/// <summary>");
+        sb.AppendLine($"/// {def.Description}");
+        sb.AppendLine($"/// </summary>");
+        sb.AppendLine($"public record {name}(");
+
+        for (int i = 0; i < fields.Count; i++)
+        {
+            var (jsonName, propName, csType) = fields[i];
+            string comma = i < fields.Count - 1 ? "," : "";
+            sb.AppendLine($"    [property: JsonPropertyName(\"{jsonName}\")]");
+            sb.AppendLine($"    {csType} {propName}{comma}");
+        }
+
         sb.AppendLine(");");
         sb.AppendLine();
     }
 
-    private static void GenerateUploadResponse(StringBuilder sb)
+    /// <summary>
+    /// 解析字段描述 "propName: typeExpr"，返回（JSON 属性名，C# 属性名，C# 类型）。
+    /// 字段名为 camelCase，同时作 JSON 属性名；C# 属性名转 PascalCase（符合 .NET 命名规范）。
+    /// </summary>
+    private static List<(string JsonName, string PropName, string CsType)> ParseFields(List<string> fields)
     {
-        sb.AppendLine("public record UploadResponse(");
-        sb.AppendLine("    [property: JsonPropertyName(\"ok\")]");
-        sb.AppendLine("    bool Ok,");
-        sb.AppendLine("    [property: JsonPropertyName(\"data\")]");
-        sb.AppendLine("    UploadResponseData Data");
-        sb.AppendLine(");");
-        sb.AppendLine();
-        sb.AppendLine("/// <summary>上传响应中的 data 字段。</summary>");
-        sb.AppendLine("public record UploadResponseData(");
-        sb.AppendLine("    [property: JsonPropertyName(\"path\")]");
-        sb.AppendLine("    string Path,");
-        sb.AppendLine("    [property: JsonPropertyName(\"version\")]");
-        sb.AppendLine("    int Version,");
-        sb.AppendLine("    [property: JsonPropertyName(\"hash\")]");
-        sb.AppendLine("    string Hash,");
-        sb.AppendLine("    [property: JsonPropertyName(\"size\")]");
-        sb.AppendLine("    long Size,");
-        sb.AppendLine("    [property: JsonPropertyName(\"conflictResolved\")]");
-        sb.AppendLine("    bool? ConflictResolved = null");
-        sb.AppendLine(");");
-        sb.AppendLine();
+        List<(string, string, string)> result = new List<(string, string, string)>();
+        foreach (string field in fields)
+        {
+            int colon = field.IndexOf(':');
+            if (colon < 0)
+            {
+                continue;
+            }
+
+            string fieldName = field[..colon].Trim();
+            string typeExpr = field[(colon + 1)..].Trim();
+            result.Add((fieldName, ToPascalCase(fieldName), MapToCSharp(typeExpr)));
+        }
+
+        return result;
     }
 
-    private static void GenerateChunkUploadResponse(StringBuilder sb)
+    /// <summary>camelCase 字段名 → PascalCase C# 属性名（如 nextCursor → NextCursor）。</summary>
+    private static string ToPascalCase(string camelName)
     {
-        sb.AppendLine("public record ChunkUploadResponse(");
-        sb.AppendLine("    [property: JsonPropertyName(\"ok\")]");
-        sb.AppendLine("    bool Ok,");
-        sb.AppendLine("    [property: JsonPropertyName(\"chunkIndex\")]");
-        sb.AppendLine("    int ChunkIndex,");
-        sb.AppendLine("    [property: JsonPropertyName(\"received\")]");
-        sb.AppendLine("    int Received,");
-        sb.AppendLine("    [property: JsonPropertyName(\"total\")]");
-        sb.AppendLine("    int Total,");
-        sb.AppendLine("    [property: JsonPropertyName(\"done\")]");
-        sb.AppendLine("    bool Done");
-        sb.AppendLine(");");
-        sb.AppendLine();
+        if (string.IsNullOrEmpty(camelName))
+        {
+            return camelName;
+        }
+
+        return char.ToUpperInvariant(camelName[0]) + camelName[1..];
+    }
+
+    /// <summary>
+    /// 类型表达式 → C# 类型。支持基础类型映射、可空后缀 "?"、数组后缀 "[]"；
+    /// 其余视为引用类型（DTO 或嵌套响应 record），直接保留原名。
+    /// </summary>
+    private static string MapToCSharp(string typeExpr)
+    {
+        string t = typeExpr;
+
+        bool nullable = t.EndsWith("?");
+        if (nullable)
+        {
+            t = t[..^1];
+        }
+
+        bool array = t.EndsWith("[]");
+        if (array)
+        {
+            t = t[..^2];
+        }
+
+        string baseType = t switch
+        {
+            "string" => "string",
+            "int" => "int",
+            "long" => "long",
+            "bool" => "bool",
+            _ => t // 引用类型（FileEntryDto / UploadData / ChunkUploadData / ChunkStatusData 等）
+        };
+
+        string csType = baseType + (array ? "[]" : "") + (nullable ? "?" : "");
+        return csType;
     }
 }

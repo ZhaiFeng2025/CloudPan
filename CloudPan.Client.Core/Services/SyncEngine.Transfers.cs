@@ -26,7 +26,7 @@ public partial class SyncEngine
         try { preUploadHash = await ComputeSha256Async(localPath); }
         catch (Exception ex) { _logger.LogWarning(ex, "上传前计算文件哈希失败: {Path}", item.FilePath); }
 
-        UploadApiResponse? result;
+        UploadResponse? result;
         try
         {
             result = await _api.UploadChunkedAsync(localPath, item.FilePath, item.BaseVersion ?? 0, lastModified, ct: ct);

@@ -76,7 +76,7 @@ public class ApiClient : IApiClient, IDisposable
     }
 
     /// <summary>获取文件树（增量）。</summary>
-    public async Task<FileTreeApiResponse?> GetFileTreeAsync(int sinceVersion, int limit = 5000, string? subPath = null, string? cursor = null, CancellationToken ct = default)
+    public async Task<FileTreeResponse?> GetFileTreeAsync(int sinceVersion, int limit = 5000, string? subPath = null, string? cursor = null, CancellationToken ct = default)
     {
         string url = $"/api/files/tree?sinceVersion={sinceVersion}&limit={limit}";
         if (!string.IsNullOrEmpty(subPath))
@@ -91,11 +91,11 @@ public class ApiClient : IApiClient, IDisposable
 
         var response = await _http.GetAsync(url, ct);
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<FileTreeApiResponse>(JsonOptions, ct);
+        return await response.Content.ReadFromJsonAsync<FileTreeResponse>(JsonOptions, ct);
     }
 
     /// <summary>上传文件。</summary>
-    public async Task<UploadApiResponse?> UploadAsync(
+    public async Task<UploadResponse?> UploadAsync(
         string localPath, string remotePath, int baseVersion, string lastModified,
         IProgress<long>? progress = null, CancellationToken ct = default)
     {
@@ -115,7 +115,7 @@ public class ApiClient : IApiClient, IDisposable
 
         var response = await _http.PostAsync("/api/files/upload", form, ct);
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<UploadApiResponse>(JsonOptions, ct);
+        return await response.Content.ReadFromJsonAsync<UploadResponse>(JsonOptions, ct);
     }
 
     /// <summary>下载文件。返回服务端文件最后修改时间和期望哈希。</summary>
@@ -223,7 +223,7 @@ public class ApiClient : IApiClient, IDisposable
     private const int ChunkSizeBytes = 4_194_304;           // 4MB
 
     /// <summary>分块上传文件（自动判断 <10MB 直传、>=10MB 分块）。</summary>
-    public async Task<UploadApiResponse?> UploadChunkedAsync(
+    public async Task<UploadResponse?> UploadChunkedAsync(
         string localPath, string remotePath, int baseVersion, string lastModified,
         IProgress<long>? progress = null, CancellationToken ct = default)
     {
@@ -241,7 +241,7 @@ public class ApiClient : IApiClient, IDisposable
 
         // 查询服务端进度（断点续传）
         var status = await GetChunkStatusAsync(remotePath, ct);
-        var receivedChunks = status?.Data?.ReceivedChunks ?? new List<int>();
+        var receivedChunks = status?.Data?.ReceivedChunks ?? Array.Empty<int>();
 
         await using var fileStream = File.OpenRead(localPath);
 
@@ -280,38 +280,23 @@ public class ApiClient : IApiClient, IDisposable
 
             response.EnsureSuccessStatusCode();
 
-            var chunkResult = await response.Content.ReadFromJsonAsync<ChunkApiResponse>(JsonOptions, ct);
+            var chunkResult = await response.Content.ReadFromJsonAsync<ChunkUploadResponse>(JsonOptions, ct);
             progress?.Report((i + 1) * 100L / totalChunks);
 
             // 服务端返回 complete，直接提取响应
             if (chunkResult?.Data?.Status == "complete")
             {
-                return new UploadApiResponse
-                {
-                    Data = new UploadDataDto
-                    {
-                        Path = chunkResult.Data.Path ?? remotePath,
-                        Version = chunkResult.Data.Version,
-                        Hash = chunkResult.Data.Hash ?? fileHash,
-                        Size = chunkResult.Data.Size,
-                        ConflictResolved = false
-                    }
-                };
+                return new UploadResponse(new UploadData(
+                    chunkResult.Data.Path,
+                    chunkResult.Data.Version,
+                    chunkResult.Data.Hash ?? fileHash,
+                    chunkResult.Data.Size,
+                    false));
             }
         }
 
         // 所有块上传完毕（理论上服务端会在最后一块完成时返回 complete）
-        return new UploadApiResponse
-        {
-            Data = new UploadDataDto
-            {
-                Path = remotePath,
-                Version = 0,
-                Hash = fileHash,
-                Size = fileSize,
-                ConflictResolved = false
-            }
-        };
+        return new UploadResponse(new UploadData(remotePath, 0, fileHash, fileSize, false));
     }
 
     /// <summary>查询分块上传进度。</summary>
@@ -327,7 +312,7 @@ public class ApiClient : IApiClient, IDisposable
             }
 
             response.EnsureSuccessStatusCode();
-            return await response.Content.ReadFromJsonAsync<ChunkApiStatusResponse>(JsonOptions, ct);
+            return await response.Content.ReadFromJsonAsync<ChunkStatusResponse>(JsonOptions, ct);
         }
         catch (OperationCanceledException)
         {
@@ -451,75 +436,6 @@ public class ApiClient : IApiClient, IDisposable
 
     public void Dispose() => _http.Dispose();
 }
-
-// ---- API 响应 DTO（与 shared-spec/apiMapping 对齐） ----
-
-/// <summary>文件树列表响应。</summary>
-public class FileTreeApiResponse
-{
-    public List<FileEntryDto> Data { get; set; } = new();
-    public string? NextCursor { get; set; }
-    public bool HasMore { get; set; }
-    public int MaxVersion { get; set; }
-}
-
-/// <summary>上传响应。</summary>
-public class UploadApiResponse
-{
-    public UploadDataDto Data { get; set; } = new();
-}
-
-/// <summary>上传结果数据。</summary>
-public class UploadDataDto
-{
-    public string Path { get; set; } = "";
-    public int Version { get; set; }
-    public string Hash { get; set; } = "";
-    public long Size { get; set; }
-    public bool ConflictResolved { get; set; }
-}
-
-// ---- 分块上传 DTO ----
-
-/// <summary>分块上传响应。</summary>
-public class ChunkApiResponse
-{
-    public ChunkApiData? Data { get; set; }
-}
-
-/// <summary>分块上传结果数据。</summary>
-public class ChunkApiData
-{
-    public string? Path { get; set; }
-    public string? Status { get; set; }    // "complete" 或 null
-    public int Version { get; set; }
-    public string? Hash { get; set; }
-    public long Size { get; set; }
-    public int ChunkIndex { get; set; }
-    public int ReceivedCount { get; set; }
-    public int TotalChunks { get; set; }
-    public bool IsComplete { get; set; }
-}
-
-/// <summary>分块接收状态响应。</summary>
-public class ChunkStatusResponse
-{
-    public ChunkStatusData? Data { get; set; }
-}
-
-/// <summary>分块接收状态数据。</summary>
-public class ChunkStatusData
-{
-    public List<int> ReceivedChunks { get; set; } = new();
-    public int TotalChunks { get; set; }
-    public bool IsComplete { get; set; }
-    public string? FilePath { get; set; }
-    public string? DeviceId { get; set; }
-    public string? CreatedAt { get; set; }
-}
-
-/// <summary>用于反序列化 chunk/status 响应的中间类。</summary>
-public class ChunkApiStatusResponse : ChunkStatusResponse { }
 
 /// <summary>下载结果——包含服务端最后修改时间和 X-File-Hash 期望哈希值。</summary>
 public class DownloadResult

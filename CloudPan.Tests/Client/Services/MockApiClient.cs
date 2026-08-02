@@ -25,7 +25,7 @@ public class MockApiClient : IApiClient
 
     public Task<bool> HealthCheckAsync(CancellationToken ct = default) => Task.FromResult(HealthOk);
 
-    public Task<FileTreeApiResponse?> GetFileTreeAsync(int sinceVersion, int limit = 5000, string? subPath = null, string? cursor = null, CancellationToken ct = default)
+    public Task<FileTreeResponse?> GetFileTreeAsync(int sinceVersion, int limit = 5000, string? subPath = null, string? cursor = null, CancellationToken ct = default)
     {
         List<FileEntryDto> items = Files
             .Where(kv => kv.Value.Version > sinceVersion)
@@ -40,16 +40,14 @@ public class MockApiClient : IApiClient
             ))
             .ToList();
 
-        return Task.FromResult<FileTreeApiResponse?>(new FileTreeApiResponse
-        {
-            Data = items,
-            HasMore = false,
-            NextCursor = null,
-            MaxVersion = items.Count > 0 ? items.Max(i => i.Version) : 0
-        });
+        return Task.FromResult<FileTreeResponse?>(new FileTreeResponse(
+            items.ToArray(),
+            null,
+            false,
+            items.Count > 0 ? items.Max(i => i.Version) : 0));
     }
 
-    public Task<UploadApiResponse?> UploadAsync(string localPath, string remotePath, int baseVersion, string lastModified, IProgress<long>? progress = null, CancellationToken ct = default)
+    public Task<UploadResponse?> UploadAsync(string localPath, string remotePath, int baseVersion, string lastModified, IProgress<long>? progress = null, CancellationToken ct = default)
     {
         UploadCalls.TryGetValue(remotePath, out int count);
         UploadCalls[remotePath] = count + 1;
@@ -59,17 +57,8 @@ public class MockApiClient : IApiClient
 
         Files[remotePath] = ("mock-hash", size, version);
 
-        return Task.FromResult<UploadApiResponse?>(new UploadApiResponse
-        {
-            Data = new UploadDataDto
-            {
-                Path = remotePath,
-                Version = version,
-                Hash = "mock-hash",
-                Size = size,
-                ConflictResolved = false
-            }
-        });
+        return Task.FromResult<UploadResponse?>(new UploadResponse(
+            new UploadData(remotePath, version, "mock-hash", size, false)));
     }
 
     public Task<DownloadResult?> DownloadAsync(string remotePath, string localPath, IProgress<long>? progress = null, CancellationToken ct = default)
@@ -120,7 +109,7 @@ public class MockApiClient : IApiClient
     }
 
     /// <summary>分块上传（Mock：<10MB 走直传，>=10MB 模拟分块）。</summary>
-    public Task<UploadApiResponse?> UploadChunkedAsync(
+    public Task<UploadResponse?> UploadChunkedAsync(
         string localPath, string remotePath, int baseVersion, string lastModified,
         IProgress<long>? progress = null, CancellationToken ct = default)
     {

@@ -1,3 +1,5 @@
+using CloudPan.Shared;
+
 namespace CloudPan.Client.Services;
 
 /// <summary>
@@ -10,10 +12,10 @@ public interface IApiClient
     Task<bool> HealthCheckAsync(CancellationToken ct = default);
 
     /// <summary>获取文件树（增量）。</summary>
-    Task<FileTreeApiResponse?> GetFileTreeAsync(int sinceVersion, int limit = 5000, string? subPath = null, string? cursor = null, CancellationToken ct = default);
+    Task<FileTreeResponse?> GetFileTreeAsync(int sinceVersion, int limit = 5000, string? subPath = null, string? cursor = null, CancellationToken ct = default);
 
     /// <summary>上传文件。返回服务端响应。</summary>
-    Task<UploadApiResponse?> UploadAsync(string localPath, string remotePath, int baseVersion, string lastModified, IProgress<long>? progress = null, CancellationToken ct = default);
+    Task<UploadResponse?> UploadAsync(string localPath, string remotePath, int baseVersion, string lastModified, IProgress<long>? progress = null, CancellationToken ct = default);
 
     /// <summary>下载文件。返回服务端文件最后修改时间和期望哈希。</summary>
     /// <exception cref="InvalidDataException">文件 SHA-256 与服务端不匹配。</exception>
@@ -29,7 +31,7 @@ public interface IApiClient
     Task MkdirAsync(string path, CancellationToken ct = default);
 
     /// <summary>分块上传文件（自动判断 <10MB 直传、>=10MB 分块）。</summary>
-    Task<UploadApiResponse?> UploadChunkedAsync(
+    Task<UploadResponse?> UploadChunkedAsync(
         string localPath, string remotePath, int baseVersion, string lastModified,
         IProgress<long>? progress = null, CancellationToken ct = default);
 

@@ -47,7 +47,7 @@ public partial class SyncEngine
             }
 
             await ApplyRemoteChangesAsync(db, response, ct);
-            processedCount += response.Data.Count;
+            processedCount += response.Data.Length;
             NotifyStatus($"首次同步 — 下载远程文件 ({processedCount} 项)");
             nextCursor = response.HasMore ? response.NextCursor : null;
             if (response.MaxVersion > maxVersion)
@@ -83,7 +83,7 @@ public partial class SyncEngine
         do
         {
             var response = await _api.GetFileTreeAsync(sinceVersion, cursor: nextCursor, ct: ct);
-            if (response == null || response.Data.Count == 0)
+            if (response == null || response.Data.Length == 0)
             {
                 break;
             }
@@ -119,7 +119,7 @@ public partial class SyncEngine
     // FullSyncAsync already creates cursor if null, so the 'else' branch only triggers for IncrementalSyncAsync.
 
     /// <summary>将服务端的文件变更应用到本地——FullSync 和 IncrementalSync 共用。</summary>
-    private async Task ApplyRemoteChangesAsync(ClientDbContext db, FileTreeApiResponse response, CancellationToken ct)
+    private async Task ApplyRemoteChangesAsync(ClientDbContext db, FileTreeResponse response, CancellationToken ct)
     {
         foreach (var item in response.Data)
         {

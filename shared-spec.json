@@ -438,11 +438,27 @@
       },
       "UploadResponse": {
         "description": "POST /api/files/upload 响应",
-        "fields": ["ok: bool", "data: { path, version, hash, size, conflictResolved? }"]
+        "fields": ["data: UploadData"]
+      },
+      "UploadData": {
+        "description": "上传响应中的 data 字段",
+        "fields": ["path: string", "version: int", "hash: string", "size: long", "conflictResolved: bool"]
       },
       "ChunkUploadResponse": {
-        "description": "POST /api/files/upload/chunk 响应",
-        "fields": ["ok: bool", "chunkIndex: int", "received: int", "total: int", "done: bool"]
+        "description": "POST /api/files/upload/chunk 响应（data 为进度或完成信息）",
+        "fields": ["data: ChunkUploadData"]
+      },
+      "ChunkUploadData": {
+        "description": "分块上传响应 data——进度未完成含 chunkIndex/receivedCount/totalChunks/isComplete，完成含 status='complete'/version/hash/size",
+        "fields": ["path: string", "chunkIndex: int", "receivedCount: int", "totalChunks: int", "isComplete: bool", "version: int", "hash: string?", "size: long", "status: string?"]
+      },
+      "ChunkStatusResponse": {
+        "description": "GET /api/files/upload/chunk/status 响应包装",
+        "fields": ["data: ChunkStatusData"]
+      },
+      "ChunkStatusData": {
+        "description": "分块上传进度查询 data",
+        "fields": ["filePath: string?", "path: string?", "receivedChunks: int[]", "totalChunks: int", "isComplete: bool", "deviceId: string?", "createdAt: string?"]
       }
     }
   },

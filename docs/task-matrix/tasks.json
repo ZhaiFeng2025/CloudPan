@@ -258,7 +258,7 @@
       "title": "文件类 Controller 领域逻辑下沉 Server.Core",
       "dimension": "architecture",
       "priority": "P0",
-      "status": "acceptance",
+      "status": "done",
       "batch": 1,
       "findingId": "F-02",
       "dependsOn": [
@@ -287,7 +287,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "在 Server.Core 新增领域服务，收敛文件类 Controller 的 DB 事务与文件操作（F-02 下沉）：ISharingService/ITrashService/IVersionHistoryService/IThumbnailService/IFileOperationService/IChunkedUploadService/IServerStatusService，Controller 退化为参数绑定与状态码适配，不再直接操作 DbContext/File/拼路径；路径转换统一经 _storage.ValidatePath（领域服务内部防线）。\n改动文件：\n新增 CloudPan.Server.Core/{Sharing,Trash,Versions,Thumbnails,Files,ChunkedUpload,Status,Domain}/（7 个领域服务 + DomainError 结果记录）；修改 CloudPan.Server.Core.csproj（加 SkiaSharp 4.150.1 供 ThumbnailService）；\n重写 CloudPan.Server.Host/Controllers/{Share,Trash,Versions,Thumbnails,Files,Files.FileOps,Files.ChunkedUpload} 为纯 HTTP 适配；顺带下沉 Admin/Devices/Health 只读 DbContext 查询至 IServerStatusService（满足验收 grep 全 Controllers 目录无 IDbContextFactory/IOFile，原亦违反 R-A3）；Program.cs 注册 7 个新服务；\n补 CloudPan.Tests/Server/Services/ 7 个单测文件（40 用例，脱离 ASP.NET 直注领域服务）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Architecture 9/9 通过；新增领域服务单测 40/40 通过；全量 dotnet test CloudPan.Tests -c Release 150/150 通过；验收 grep -rn 'IDbContextFactory|IOFile' CloudPan.Server.Host/Controllers/ 无匹配。\n备注：ISharingService 过期校验修复了原 ShareController 的 DateTime.TryParse 本地时区偏移缺陷（O 格式 Z 后缀被解析为 Local 导致 expired 误判），改经 InvariantCulture+AdjustToUniversal。",
+      "note": "在 Server.Core 新增领域服务，收敛文件类 Controller 的 DB 事务与文件操作（F-02 下沉）：ISharingService/ITrashService/IVersionHistoryService/IThumbnailService/IFileOperationService/IChunkedUploadService/IServerStatusService，Controller 退化为参数绑定与状态码适配，不再直接操作 DbContext/File/拼路径；路径转换统一经 _storage.ValidatePath（领域服务内部防线）。\n改动文件：\n新增 CloudPan.Server.Core/{Sharing,Trash,Versions,Thumbnails,Files,ChunkedUpload,Status,Domain}/（7 个领域服务 + DomainError 结果记录）；修改 CloudPan.Server.Core.csproj（加 SkiaSharp 4.150.1 供 ThumbnailService）；\n重写 CloudPan.Server.Host/Controllers/{Share,Trash,Versions,Thumbnails,Files,Files.FileOps,Files.ChunkedUpload} 为纯 HTTP 适配；顺带下沉 Admin/Devices/Health 只读 DbContext 查询至 IServerStatusService（满足验收 grep 全 Controllers 目录无 IDbContextFactory/IOFile，原亦违反 R-A3）；Program.cs 注册 7 个新服务；\n补 CloudPan.Tests/Server/Services/ 7 个单测文件（40 用例，脱离 ASP.NET 直注领域服务）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Architecture 9/9 通过；新增领域服务单测 40/40 通过；全量 dotnet test CloudPan.Tests -c Release 150/150 通过；验收 grep -rn 'IDbContextFactory|IOFile' CloudPan.Server.Host/Controllers/ 无匹配。\n备注：ISharingService 过期校验修复了原 ShareController 的 DateTime.TryParse 本地时区偏移缺陷（O 格式 Z 后缀被解析为 Local 导致 expired 误判），改经 InvariantCulture+AdjustToUniversal。\n【验收结论 2026-08-02】task-verifier 独立裁决：通过。验收标准①『dotnet test --filter Architecture』实测 9/9 通过（Failed 0 / Passed 9 / Skipped 0）；验收标准②『grep -rn ''IDbContextFactory|IOFile'' CloudPan.Server.Host/Controllers/ 无匹配』实测无匹配（exit 1）。补充独立核查：Controllers/ 下 10 个文件无 _db. 字段操作、无 DbContext/Microsoft.EntityFrameworkCore/System.IO.File 直接引用；HealthController.cs:86 一处 Path.Combine 仅用于构造配对页面展示用 token 文件路径字符串（实际读取经 Infrastructure SecretStore.ReadToken），非 DB/文件操作，不违反『Controller 只做 HTTP 适配』goal。两条自动标准全过，无手动项。",
       "updatedAt": "2026-08-02"
     },
     {
@@ -295,7 +295,7 @@
       "title": "客户端 API 响应 DTO 改用 Generated 类型",
       "dimension": "simplicity",
       "priority": "P0",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 1,
       "findingId": "F-03",
       "dependsOn": [],
@@ -321,8 +321,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "契约补全 + 客户端改用 Generated 类型。shared-spec.json api.responses 补齐分块契约（新增 UploadData/ChunkUploadData/ChunkStatusData，修正 ChunkUploadResponse 为嵌套 data 形状对齐服务端实际返回，UploadResponse 去除不存在的 ok 字段）；重写 ApiResponseGenerator 从 spec.fields 解析生成 record（PascalCase 属性名 + camelCase JSON 名）。\n改动文件：shared-spec.json（api.responses 段）；CloudPan.CodeGen/Generators/ApiResponseGenerator.cs；CloudPan.Contract/Generated/ApiResponses.g.cs（重新生成）；CloudPan.Client.Core/Services/ApiClient.cs（删 7 个手工 DTO FileTreeApiResponse/UploadApiResponse/UploadDataDto/ChunkApiResponse/ChunkApiData/ChunkStatusResponse/ChunkStatusData + 中间类 ChunkApiStatusResponse，改引用 Generated 类型）；CloudPan.Client.Core/Services/IApiClient.cs；CloudPan.Client.Core/Services/SyncEngine.Scan.cs（FileTreeResponse.Data 数组 .Count→.Length）；CloudPan.Client.Core/Services/SyncEngine.Transfers.cs；CloudPan.Tests/Client/Services/MockApiClient.cs。\n验证：dotnet run --project CloudPan.CodeGen -- --verify 7 项全部一致；dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 150/150 通过；grep -rn 'FileTreeApiResponse' CloudPan.Client.Core/ 无匹配。",
+      "updatedAt": "2026-08-02"
     },
     {
       "id": "T-004",
