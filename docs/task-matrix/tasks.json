@@ -610,7 +610,7 @@
       "title": "主窗口从日志中心改版为文件浏览主视图",
       "dimension": "ux",
       "priority": "P1",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 2,
       "findingId": "F-13",
       "dependsOn": [
@@ -638,8 +638,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "冲突取舍：文件浏览=功能更全 vs 技术简洁（YAGNI）——此为使命核心形态非推测性功能，复用现有 /api/tree 端点与 WinForms 原生控件，不引新依赖。",
-      "updatedAt": null
+      "note": "冲突取舍：文件浏览=功能更全 vs 技术简洁（YAGNI）——此为使命核心形态非推测性功能，复用现有 /api/tree 端点与 WinForms 原生控件，不引新依赖。\n实现（改版为文件浏览主视图）：\n改动文件：\n新增 CloudPan.Client.Core/Services/SyncEngine.Browse.cs（FileBrowseItem record + GetFileBrowserAsync——以 RemoteSnapshots（/api/tree 增量同步本地缓存）+ 本地文件系统为数据源：目录模式返回当前目录直接子项、搜索模式递归命中名称、Deleting 墓碑不展示、本地新增项并入 Modified/Uploading，默认排序目录优先再按名称）；\n新增 CloudPan.Client.UI/UI/FileBrowserView.cs（纯渲染控件，零数据访问：面包屑可点击导航+「上一级」+搜索框（宿主防抖）+列表/网格切换+排序[名称/大小/类型，列点击可切升降序]+每文件状态图标（StateResolver 由宿主注入叠加错误/冲突），全程 DesignTokens 令牌、交互控件触控目标≥MinTouchSize=44，文件夹/文件字形自绘 ImageList 供网格视图）；\n修改 CloudPan.Client.UI/UI/MainWindow.cs（顶部状态收敛为单行汇总——指示灯+状态+紧凑进度条+速率+汇总信息，操作按钮≥44px；日志移入右侧可折叠侧栏（SplitContainer Panel2 默认折叠，「日志」按钮切换展开/收起）；删除同步状态页签/欢迎面板/淡入淡出遮罩/FadePanel；T-009 每文件状态图标整合进文件浏览视图（ResolveBrowseState 叠加本地错误/冲突覆盖，优先级最高）；导航编排：双击子目录/点击面包屑段→进入目录、双击文件→系统打开本地副本（CloudOnly 未下载提示）、上一级→父目录、搜索输入防抖 300ms 重载、5s 定时刷新保留选中项）；\n修改 CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 GetFileBrowserAsync 4 用例）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 179/179 通过（原 175 + 新增 4：GetFileBrowser_根目录_返回直接子项 / 子目录_返回直接子项 / 搜索_递归命中文件 / 墓碑Deleting_不展示）；dotnet run --project CloudPan.CodeGen -- --verify 7 项全部一致。验收标准①为手动项（主窗口显示文件列表，可进入子目录、切换列表/网格、搜索命中文件），由验收者实机验证。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-014",

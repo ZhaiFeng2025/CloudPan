@@ -6,8 +6,9 @@ using CloudPan.Shared;
 namespace CloudPan.Client.UI;
 
 /// <summary>
-/// 主窗口——显示同步状态、字节级传输进度、传输速率、嵌入式错误计数和实时日志。
-/// WinForms 实现，包含 GDI+ 发光状态指示灯、带百分比文字的进度条、淡入淡出面板切换、统一日志过滤及系统托盘最小化。
+/// 主窗口——文件浏览主视图（T-013）。顶部一条同步状态汇总（指示灯+状态+进度+速率），
+/// 主区为文件浏览（面包屑/搜索/列表-网格切换/排序/每文件状态图标），日志移入可折叠侧栏（默认折叠）。
+/// WinForms 实现，包含 GDI+ 发光状态指示灯、带百分比文字的进度条、统一日志过滤及系统托盘最小化。
 /// </summary>
 public class MainWindow : Form
 {
@@ -15,29 +16,28 @@ public class MainWindow : Form
     // 控件
     // ================================================================
     private GlowDot _statusDot = null!;              // GDI+ 发光状态指示灯
-    private Label _statusLabel = null!;              // 状态文字
+    private Label _statusLabel = null!;              // 状态文字（顶部一条汇总）
     private Label _statusInfo = null!;               // 状态量化信息（文件计数/传输详情）
     private Label _speedLabel = null!;               // 传输速率
     private ProgressBarWithText _progressBar = null!; // 带百分比文字的进度条
-    private ListBox _logList = null!;                // 统一日志列表
+    private ListBox _logList = null!;                // 统一日志列表（可折叠侧栏内）
     private ComboBox _logFilterComboBox = null!;     // 日志过滤下拉框
     private Button _pauseButton = null!;
     private Button _openFolderButton = null!;
     private Button _retryButton = null!;
     private Button _conflictButton = null!;
-    private Panel _welcomePanel = null!;             // 空状态欢迎界面/首次同步引导
+    private Button _logToggleButton = null!;          // 日志侧栏开关（T-013）
     private Label _errorCountLabel = null!;          // 状态栏右侧错误计数
-    private FadePanel _fadeOverlay = null!;          // 淡入淡出遮罩
-    private TabControl _contentTabs = null!;         // 内容区页签（同步状态/最近活动）
-    private ListView _statusList = null!;            // 每文件同步状态列表（T-009）
-    private System.Windows.Forms.Timer _statusRefreshTimer = null!; // 状态列表定时刷新
-    private bool _statusRefreshBusy;                 // 防重入：状态刷新进行中跳过本次定时触发
+    private SplitContainer _splitter = null!;         // 主区：文件浏览 + 日志侧栏（T-013）
+    private FileBrowserView _fileBrowser = null!;     // 文件浏览主视图（T-013）
+    private System.Windows.Forms.Timer _browserRefreshTimer = null!; // 文件浏览定时刷新（T-013）
+    private bool _browserRefreshBusy;                 // 防重入：刷新进行中跳过本次定时触发
+    private System.Windows.Forms.Timer _searchDebounceTimer = null!; // 搜索防抖定时器（T-013）
+    private int _logSidebarWidth = 320;               // 日志侧栏展开宽度（T-013）
 
-    // 淡入淡出过渡
-    private System.Windows.Forms.Timer _fadeTimer = null!;
-    private float _fadeAlpha;
-    private bool _fadeToWelcome;
-    private bool _fadeTransitionActive;
+    // 文件浏览导航状态（T-013）
+    private string _currentPath = "/";
+    private string? _searchText;
 
     private readonly SyncEngine _engine;
     private bool _paused;
@@ -53,10 +53,6 @@ public class MainWindow : Form
     private int _lastFileTotal;
     private int _lastFileCompleted;
     private DateTime? _lastSyncTime;
-
-    // 首次同步跟踪
-    private bool _firstSyncActive;
-    private string _firstSyncPhase = ""; // scanning, uploading, downloading, done
 
     // ================================================================
     // 错误管理
@@ -89,23 +85,23 @@ public class MainWindow : Form
 
         // ── 窗口属性 ──
         Text = "CloudPan — 文件同步";
-        Size = new Size(720, 540);
-        MinimumSize = new Size(560, 400);
+        Size = new Size(980, 640);
+        MinimumSize = new Size(700, 480);
         StartPosition = FormStartPosition.CenterScreen;
         Icon = CloudPanIcon.Create();
         BackColor = CloudPanColors.BackgroundWhite;
         Font = SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont;
 
-        // 淡入淡出定时器
-        _fadeTimer = new System.Windows.Forms.Timer { Interval = 30 };
-        _fadeTimer.Tick += FadeTimerTick;
-
         BuildLayout();
         BindEvents();
 
-        // 每文件同步状态列表定时刷新（T-009）；5 秒周期覆盖传输/错误/冲突状态变化
-        _statusRefreshTimer = new System.Windows.Forms.Timer { Interval = 5000 };
-        _statusRefreshTimer.Tick += StatusRefreshTimer_Tick;
+        // 文件浏览定时刷新（T-013）；5 秒周期覆盖同步/错误/冲突状态变化
+        _browserRefreshTimer = new System.Windows.Forms.Timer { Interval = 5000 };
+        _browserRefreshTimer.Tick += BrowserRefreshTimer_Tick;
+
+        // 搜索防抖（T-013）：停止输入 300ms 后触发一次重载
+        _searchDebounceTimer = new System.Windows.Forms.Timer { Interval = 300 };
+        _searchDebounceTimer.Tick += SearchDebounceTimer_Tick;
     }
 
     // ================================================================
@@ -116,24 +112,19 @@ public class MainWindow : Form
     {
         var baseFont = SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont;
 
-        // ── 顶部状态栏（TableLayoutPanel） ──
-        // 第 0 行：状态指示 + 量化信息（左）+ 操作按钮（右）
-        // 第 1 行：状态详情（当前文件/文件计数）
-        // 第 2 行：进度条（带百分比文字）
+        // ── 顶部状态栏（单行汇总，T-013：同步状态收敛为顶部一条） ──
         TableLayoutPanel statusTable = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 90,
-            Padding = new Padding(10, 8, 10, 4),
+            Height = 48,
+            Padding = new Padding(10, 2, 10, 2),
             BackColor = CloudPanColors.BackgroundGray,
         };
         statusTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         statusTable.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        statusTable.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
-        statusTable.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
-        statusTable.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+        statusTable.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
 
-        // ── 第 0 行，第 0 列：状态指示灯 + 文字 ──
+        // 左列：指示灯 + 状态文字 + 紧凑进度条 + 速率 + 汇总信息
         FlowLayoutPanel leftFlow = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -141,14 +132,22 @@ public class MainWindow : Form
             WrapContents = false,
         };
 
-        _statusDot = new GlowDot();
+        _statusDot = new GlowDot { Margin = new Padding(0, 14, 8, 0) };
         _statusLabel = new Label
         {
             Text = "连接中...",
             Font = new Font(baseFont.FontFamily, CloudPanFonts.SizeBody, FontStyle.Bold),
             AutoSize = true,
             TextAlign = ContentAlignment.MiddleLeft,
-            Margin = new Padding(0, 2, 12, 0),
+            Margin = new Padding(0, 11, 12, 0),
+        };
+
+        _progressBar = new ProgressBarWithText
+        {
+            Width = 110,
+            Height = 20,
+            Margin = new Padding(0, 12, 8, 0),
+            Visible = false,
         };
 
         _speedLabel = new Label
@@ -157,19 +156,30 @@ public class MainWindow : Form
             AutoSize = true,
             TextAlign = ContentAlignment.MiddleLeft,
             ForeColor = CloudPanColors.TextMuted,
-            Margin = new Padding(0, 4, 0, 0),
+            Margin = new Padding(0, 14, 8, 0),
         };
 
-        leftFlow.Controls.AddRange(new Control[] { _statusDot, _statusLabel, _speedLabel });
+        _statusInfo = new Label
+        {
+            Text = "",
+            AutoSize = true,
+            Font = new Font(baseFont.FontFamily, CloudPanFonts.SizeBodySmall),
+            ForeColor = CloudPanColors.TextSecondary,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Margin = new Padding(0, 15, 0, 0),
+        };
+
+        leftFlow.Controls.AddRange(new Control[] { _statusDot, _statusLabel, _progressBar, _speedLabel, _statusInfo });
         statusTable.Controls.Add(leftFlow, 0, 0);
 
-        // ── 第 0 行，第 1 列：操作按钮（右对齐，LTR 顺序） ──
+        // 右列：操作按钮（触控目标 ≥ MinTouchSize=44，T-013）
         FlowLayoutPanel buttonPanel = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
         };
+        const int btnHeight = CloudPanSpacing.MinTouchSize;
 
         // 错误计数（在按钮左侧，点击弹出错误列表）
         _errorCountLabel = new Label
@@ -180,7 +190,7 @@ public class MainWindow : Form
             ForeColor = CloudPanColors.TextError,
             Font = new Font(baseFont.FontFamily, CloudPanFonts.SizeBodySmall),
             Cursor = Cursors.Hand,
-            Margin = new Padding(0, 5, 4, 0),
+            Margin = new Padding(0, 15, 4, 0),
             Visible = false,
         };
         _errorCountLabel.Click += ErrorCountLabel_Click;
@@ -191,20 +201,33 @@ public class MainWindow : Form
         {
             Text = "打开文件夹",
             Width = CloudPanSpacing.ButtonWidth,
-            Height = 26,
+            Height = btnHeight,
             FlatStyle = FlatStyle.Flat,
+            Margin = new Padding(0, 2, 0, 0),
             UseVisualStyleBackColor = true,
         };
         _openFolderButton.FlatAppearance.BorderColor = CloudPanColors.ButtonBorderGray;
         _openFolderButton.Click += OpenFolderButton_Click;
 
+        _logToggleButton = new Button
+        {
+            Text = "日志",
+            Width = 64,
+            Height = btnHeight,
+            FlatStyle = FlatStyle.Flat,
+            Margin = new Padding(4, 2, 0, 0),
+            UseVisualStyleBackColor = true,
+        };
+        _logToggleButton.FlatAppearance.BorderColor = CloudPanColors.ButtonBorderGray;
+        _logToggleButton.Click += LogToggleButton_Click;
+
         _pauseButton = new Button
         {
             Text = "暂停",
             Width = 68,
-            Height = 26,
+            Height = btnHeight,
             FlatStyle = FlatStyle.Flat,
-            Margin = new Padding(4, 0, 0, 0),
+            Margin = new Padding(4, 2, 0, 0),
             UseVisualStyleBackColor = false,
             BackColor = CloudPanColors.BackgroundLight,
         };
@@ -217,9 +240,9 @@ public class MainWindow : Form
         {
             Text = "冲突",
             Width = 68,
-            Height = 26,
+            Height = btnHeight,
             FlatStyle = FlatStyle.Flat,
-            Margin = new Padding(4, 0, 0, 0),
+            Margin = new Padding(4, 2, 0, 0),
             UseVisualStyleBackColor = false,
             BackColor = CloudPanColors.WarningBgLight,
             Visible = false,
@@ -233,9 +256,9 @@ public class MainWindow : Form
         {
             Text = "重试",
             Width = 68,
-            Height = 26,
+            Height = btnHeight,
             FlatStyle = FlatStyle.Flat,
-            Margin = new Padding(4, 0, 0, 0),
+            Margin = new Padding(4, 2, 0, 0),
             UseVisualStyleBackColor = false,
             BackColor = CloudPanColors.ErrorBgLight,
             Visible = false,
@@ -243,51 +266,28 @@ public class MainWindow : Form
         _retryButton.FlatAppearance.BorderColor = CloudPanColors.ErrorRed;
         _retryButton.Click += RetryButton_Click;
 
-        // LTR 顺序：错误计数 | 打开文件夹 | 暂停 | 冲突(条件) | 重试(条件)
+        // LTR 顺序：错误计数 | 打开文件夹 | 日志 | 暂停 | 冲突(条件) | 重试(条件)
         buttonPanel.Controls.Add(_errorCountLabel);
         buttonPanel.Controls.Add(_openFolderButton);
+        buttonPanel.Controls.Add(_logToggleButton);
         buttonPanel.Controls.Add(_pauseButton);
         buttonPanel.Controls.Add(_conflictButton);
         buttonPanel.Controls.Add(_retryButton);
         statusTable.Controls.Add(buttonPanel, 1, 0);
 
-        // ── 第 1 行：状态量化信息（跨两列） ──
-        _statusInfo = new Label
-        {
-            Text = "",
-            Dock = DockStyle.Fill,
-            Font = new Font(baseFont.FontFamily, CloudPanFonts.SizeBodySmall),
-            ForeColor = CloudPanColors.TextSecondary,
-            TextAlign = ContentAlignment.MiddleLeft,
-            Margin = new Padding(2, 0, 0, 0),
-        };
-        statusTable.Controls.Add(_statusInfo, 0, 1);
-        statusTable.SetColumnSpan(_statusInfo, 2);
+        // ── 主区：文件浏览主视图（左）+ 日志侧栏（右，可折叠） ──
+        _fileBrowser = new FileBrowserView { Dock = DockStyle.Fill };
 
-        // ── 第 2 行：自定义进度条（带百分比文字，跨两列） ──
-        _progressBar = new ProgressBarWithText
-        {
-            Dock = DockStyle.Fill,
-            Value = 0,
-            Margin = new Padding(0, 4, 0, 0),
-            Visible = false,
-        };
-        statusTable.Controls.Add(_progressBar, 0, 2);
-        statusTable.SetColumnSpan(_progressBar, 2);
-
-        // ── 最近文件活动 + 过滤下拉框 ──
-        Panel activityPanel = new Panel
-        {
-            Dock = DockStyle.Top,
-            Height = 28,
-        };
-        Label activityLabel = new Label
+        // 日志侧栏
+        Panel logSidebar = new Panel { Dock = DockStyle.Fill, BackColor = CloudPanColors.BackgroundLight };
+        Panel logHeader = new Panel { Dock = DockStyle.Top, Height = 36, BackColor = CloudPanColors.BackgroundGray };
+        Label logTitle = new Label
         {
             Text = "  最近活动",
             Dock = DockStyle.Left,
-            Font = new Font(baseFont.FontFamily, 9, FontStyle.Bold),
+            Font = new Font(baseFont.FontFamily, CloudPanFonts.SizeBody, FontStyle.Bold),
             ForeColor = CloudPanColors.TextMuted,
-            Height = 28,
+            Height = 36,
             TextAlign = ContentAlignment.MiddleLeft,
             AutoSize = true,
         };
@@ -298,36 +298,13 @@ public class MainWindow : Form
             Dock = DockStyle.Right,
             Width = 130,
             Font = new Font(baseFont.FontFamily, CloudPanFonts.SizeCaption),
-            Margin = new Padding(0, 2, 8, 0),
+            Margin = new Padding(0, 6, 8, 0),
         };
         _logFilterComboBox.Items.AddRange(new object[] { "全部", "仅文件操作", "仅错误" });
         _logFilterComboBox.SelectedIndex = 0;
         _logFilterComboBox.SelectedIndexChanged += LogFilter_SelectedIndexChanged;
-
-        activityPanel.Controls.Add(activityLabel);
-        activityPanel.Controls.Add(_logFilterComboBox);
-
-        // ── 内容区页签：同步状态（每文件图标，T-009）+ 最近活动（日志） ──
-        _contentTabs = new TabControl { Dock = DockStyle.Fill };
-
-        // 同步状态页：每文件状态列表（状态图标 + 文件名，图标/颜色双通道标识 FileState）
-        _statusList = new ListView
-        {
-            Dock = DockStyle.Fill,
-            View = View.Details,
-            FullRowSelect = true,
-            HideSelection = false,
-            BorderStyle = BorderStyle.None,
-            BackColor = CloudPanColors.BackgroundLight,
-            Font = new Font(baseFont.FontFamily, CloudPanFonts.SizeBody),
-        };
-        _statusList.Columns.Add("状态", 70);
-        _statusList.Columns.Add("文件", 480);
-        TabPage statusTab = new TabPage("同步状态") { BackColor = CloudPanColors.BackgroundLight };
-        statusTab.Controls.Add(_statusList);
-
-        // 最近活动页：原有日志过滤 + 统一日志列表
-        TabPage logTab = new TabPage("最近活动") { BackColor = CloudPanColors.BackgroundLight };
+        logHeader.Controls.Add(logTitle);
+        logHeader.Controls.Add(_logFilterComboBox);
 
         _logList = new ListBox
         {
@@ -337,96 +314,31 @@ public class MainWindow : Form
             BackColor = CloudPanColors.BackgroundLight,
             BorderStyle = BorderStyle.None,
         };
-
         var ver = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version;
         string verStr = ver != null ? $"v{ver.Major}.{ver.Minor}.{ver.Build}" : "(开发版本)";
         _logList.Items.Add($"CloudPan 客户端 {verStr}");
         _logList.Items.Add("正在连接服务端，首次连接可能需要数秒...");
 
-        activityPanel.Dock = DockStyle.Top;
-        logTab.Controls.Add(_logList);
-        logTab.Controls.Add(activityPanel);
+        logSidebar.Controls.Add(_logList);
+        logSidebar.Controls.Add(logHeader);
 
-        _contentTabs.TabPages.Add(statusTab);
-        _contentTabs.TabPages.Add(logTab);
-
-        // ── 空状态欢迎面板（覆盖日志列表上方，空闲/首次同步时显示） ──
-        _welcomePanel = new Panel
+        _splitter = new SplitContainer
         {
             Dock = DockStyle.Fill,
-            BackColor = CloudPanColors.BackgroundLight,
-            Visible = false,
+            Orientation = Orientation.Vertical,
+            Panel1MinSize = 360,
+            Panel2MinSize = 220,
+            FixedPanel = FixedPanel.Panel2,
+            BackColor = CloudPanColors.BorderLight,
         };
+        _splitter.Panel1.Controls.Add(_fileBrowser);
+        _splitter.Panel2.Controls.Add(logSidebar);
+        _splitter.Panel2Collapsed = true; // 日志侧栏默认折叠，主视图为文件浏览
 
-        // 垂直居中布局
-        TableLayoutPanel welcomeLayout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 4,
-            BackColor = Color.Transparent,
-        };
-        welcomeLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
-        welcomeLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        welcomeLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        welcomeLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
-
-        Label welcomeLabel = new Label
-        {
-            Text = "连接成功，等待同步...",
-            Font = new Font(CloudPanFonts.FontFamily, CloudPanFonts.SizeTitle, FontStyle.Bold),
-            ForeColor = CloudPanColors.SuccessGreen,
-            TextAlign = ContentAlignment.MiddleCenter,
-            Dock = DockStyle.Fill,
-            Padding = new Padding(40, 0, 40, 4),
-        };
-
-        Label guideLabel = new Label
-        {
-            Text = "将文件放入同步目录，CloudPan 将自动同步到家庭服务器。\n点击上方「打开文件夹」可快速进入同步目录。",
-            Font = new Font(baseFont.FontFamily, CloudPanFonts.SizeBody),
-            ForeColor = CloudPanColors.TextSecondary,
-            TextAlign = ContentAlignment.MiddleCenter,
-            Dock = DockStyle.Fill,
-            Padding = new Padding(40, 0, 40, 0),
-        };
-
-        welcomeLayout.Controls.Add(new Panel(), 0, 0);
-        welcomeLayout.Controls.Add(welcomeLabel, 0, 1);
-        welcomeLayout.Controls.Add(guideLabel, 0, 2);
-        welcomeLayout.Controls.Add(new Panel(), 0, 3);
-
-        _welcomePanel.Controls.Add(welcomeLayout);
-
-        Label fileCountLabel = new Label
-        {
-            Text = "",
-            Font = new Font(baseFont.FontFamily, CloudPanFonts.SizeBody),
-            ForeColor = CloudPanColors.TextMuted,
-            TextAlign = ContentAlignment.TopCenter,
-            Dock = DockStyle.Top,
-            Height = 30,
-        };
-        _welcomePanel.Controls.Add(fileCountLabel);
-
-        // 欢迎面板置于「最近活动」页签内（覆盖该页的日志列表，空闲/首次同步时显示）。
-        // 不覆盖整个窗体，避免遮住页签栏导致「同步状态」页无法访问（T-009）。
-        logTab.Controls.Add(_welcomePanel);
-
-        // ── 淡入淡出遮罩（覆盖内容区，过渡期间可见） ──
-        _fadeOverlay = new FadePanel
-        {
-            Dock = DockStyle.Fill,
-            Visible = false,
-        };
-
-        // ── 控件入窗体（z-order 从下到上） ──
-        Controls.Add(_contentTabs);   // 0: 内容区页签（同步状态/最近活动，最底层）
-        Controls.Add(_fadeOverlay);   // 1: 淡入淡出遮罩
-        Controls.Add(statusTable);    // 2: 状态栏
-
-        // ── 状态栏与内容区之间 1px 分隔线 ──
-        Controls.Add(new Panel { Dock = DockStyle.Top, Height = 1, BackColor = CloudPanColors.BorderLight });
+        // ── 控件入窗体（z-order：状态栏最上，分隔线次之，主区填充） ──
+        Controls.Add(statusTable);    // 顶部状态栏
+        Controls.Add(new Panel { Dock = DockStyle.Top, Height = 1, BackColor = CloudPanColors.BorderLight }); // 状态栏与主区分隔线
+        Controls.Add(_splitter);      // 主区：文件浏览 + 日志侧栏
     }
 
     // ================================================================
@@ -441,6 +353,13 @@ public class MainWindow : Form
         _engine.ConflictDetected += OnConflictDetected;
         FormClosing += OnFormClosing;
         Shown += OnShown;
+
+        // 文件浏览导航（T-013）
+        _fileBrowser.DirectoryActivated += FileBrowser_DirectoryActivated;
+        _fileBrowser.FileActivated += FileBrowser_FileActivated;
+        _fileBrowser.UpRequested += FileBrowser_UpRequested;
+        _fileBrowser.SearchTextChanged += FileBrowser_SearchTextChanged;
+        _fileBrowser.StateResolver = ResolveBrowseState;
     }
 
     // ================================================================
@@ -458,40 +377,11 @@ public class MainWindow : Form
     }
 
     /// <summary>
-    /// 根据状态字符串更新指示灯颜色、欢迎面板可见性、首次同步阶段和量化状态文字。
-    /// 欢迎面板与日志列表之间使用淡入淡出过渡。
+    /// 根据状态字符串更新顶部汇总：状态文字、指示灯颜色、上次同步时间与量化信息。
     /// </summary>
     private void ApplyStatus(string status)
     {
         _statusLabel.Text = status;
-
-        // ── 首次同步阶段跟踪 ──
-        if (status.Contains("首次"))
-        {
-            _firstSyncActive = true;
-        }
-
-        if (_firstSyncActive)
-        {
-            if (status.Contains("扫描"))
-            {
-                _firstSyncPhase = "scanning";
-            }
-            else if (status.Contains("上传"))
-            {
-                _firstSyncPhase = "uploading";
-            }
-            else if (status.Contains("下载"))
-            {
-                _firstSyncPhase = "downloading";
-            }
-            else if (status.Contains("就绪") || status.Contains("运行中"))
-            {
-                _firstSyncPhase = "done";
-                _firstSyncActive = false;
-                _lastSyncTime = DateTime.Now;
-            }
-        }
 
         // ── 状态→颜色映射 ──
         var color = status switch
@@ -513,17 +403,10 @@ public class MainWindow : Form
             _statusDot.Invalidate();
         }
 
-        // ── 欢迎面板与日志列表切换（淡入淡出） ──
-        bool shouldShowWelcome = _firstSyncActive || !IsActiveStatus(status);
-        if (shouldShowWelcome != _welcomePanel.Visible && !_fadeTransitionActive)
+        // ── 上次同步时间（供顶部汇总展示） ──
+        if (status.Contains("就绪") || status.Contains("运行中"))
         {
-            StartFadeTransition(shouldShowWelcome);
-        }
-
-        if (shouldShowWelcome)
-        {
-            // 更新欢迎面板的文本
-            UpdateWelcomePanel(status);
+            _lastSyncTime = DateTime.Now;
         }
 
         // ── 量化的状态文字 ──
@@ -540,83 +423,7 @@ public class MainWindow : Form
         return status.Contains("同步") || status.Contains("上传") || status.Contains("下载");
     }
 
-    /// <summary>更新欢迎面板的文本（首次同步阶段引导或空闲引导）。</summary>
-    private void UpdateWelcomePanel(string status)
-    {
-        // 获取 welcomeLabel 和 guideLabel（在 _welcomePanel 的 TableLayoutPanel 中）
-        TableLayoutPanel layout = (TableLayoutPanel)_welcomePanel.Controls[0];
-        Label welcomeLabel = (Label)layout.Controls[1];
-        Label guideLabel = (Label)layout.Controls[2];
-        Label fileCountLabel = (Label)_welcomePanel.Controls[1]; // 顶部 docked
-
-        if (_firstSyncActive)
-        {
-            // 首次同步阶段显示
-            switch (_firstSyncPhase)
-            {
-                case "scanning":
-                    welcomeLabel.Text = "首次同步 — 扫描中...";
-                    guideLabel.Text = "正在扫描本地文件和服务端文件，计算差异...";
-                    fileCountLabel.Text = _lastFileTotal > 0
-                        ? $"已发现 {_lastFileTotal} 个文件需要同步"
-                        : "请稍候，正在扫描文件系统...";
-                    break;
-
-                case "uploading":
-                    welcomeLabel.Text = "首次同步 — 上传中...";
-                    guideLabel.Text = string.IsNullOrEmpty(_lastCurrentFile)
-                        ? "正在将本地文件上传到服务端..."
-                        : $"正在上传: {_lastCurrentFile}";
-                    fileCountLabel.Text = _lastFileTotal > 0 && _lastFileCompleted > 0
-                        ? $"已同步 {_lastFileCompleted}/{_lastFileTotal} 个文件"
-                        : "正在上传文件...";
-                    break;
-
-                case "downloading":
-                    welcomeLabel.Text = "首次同步 — 下载中...";
-                    guideLabel.Text = string.IsNullOrEmpty(_lastCurrentFile)
-                        ? "正在从服务端下载文件..."
-                        : $"正在下载: {_lastCurrentFile}";
-                    fileCountLabel.Text = _lastFileTotal > 0 && _lastFileCompleted > 0
-                        ? $"已同步 {_lastFileCompleted}/{_lastFileTotal} 个文件"
-                        : "正在下载文件...";
-                    break;
-
-                case "done":
-                    welcomeLabel.Text = $"同步完成！";
-                    guideLabel.Text = _lastFileTotal > 0
-                        ? $"共 {_lastFileTotal} 个文件已同步到本地\n将文件放入同步目录即可自动同步"
-                        : "文件已保持最新状态\n将文件放入同步目录即可自动同步";
-                    welcomeLabel.ForeColor = CloudPanColors.SuccessGreen;
-                    fileCountLabel.Text = _lastSyncTime.HasValue
-                        ? $"上次同步: {_lastSyncTime.Value:HH:mm}"
-                        : "";
-                    break;
-            }
-        }
-        else
-        {
-            // 空闲状态：区分首次同步完成 vs 从未同步过
-            if (status.Contains("就绪") || status.Contains("运行中") || status.Contains("等待"))
-            {
-                bool hasSynced = _lastFileTotal > 0 || _lastSyncTime.HasValue;
-                string fileInfo = _lastFileTotal > 0
-                    ? $"已同步 {_lastFileCompleted}/{_lastFileTotal} 文件"
-                    : "";
-                string timeInfo = _lastSyncTime.HasValue
-                    ? $"上次同步: {_lastSyncTime.Value:HH:mm}"
-                    : "";
-
-                welcomeLabel.Text = hasSynced ? "同步已就绪" : "连接成功，等待同步...";
-                guideLabel.Text = hasSynced
-                    ? "文件已保持最新。\n将文件放入同步目录，CloudPan 将自动同步到家庭服务器。"
-                    : "将文件放入同步目录，CloudPan 将自动同步到家庭服务器。\n点击上方「打开文件夹」可快速进入同步目录。";
-                fileCountLabel.Text = string.Join(" · ", new[] { fileInfo, timeInfo }.Where(s => !string.IsNullOrEmpty(s)));
-            }
-        }
-    }
-
-    /// <summary>更新量化状态文字（状态栏第二行）。同步中信息由 ApplyQueueProgress 通过 SyncStatus 对象设置，此处只处理空闲状态。</summary>
+    /// <summary>更新顶部汇总的量化状态文字。同步中信息由 ApplyQueueProgress 通过 SyncStatus 对象设置，此处只处理空闲状态。</summary>
     private void UpdateStatusInfoText(string status)
     {
         // 同步中时保留 ApplyQueueProgress 设置的详细进度信息，不覆盖
@@ -726,11 +533,6 @@ public class MainWindow : Form
             _statusInfo.Text = $"已同步 {status.CompletedFiles}/{status.TotalFiles} 文件 · {timeInfo}";
         }
 
-        // ── 欢迎面板同步引导（首次同步时） ──
-        if (_firstSyncActive && _welcomePanel.Visible)
-        {
-            UpdateWelcomePanel(_statusLabel.Text);
-        }
     }
 
     // ================================================================
@@ -803,6 +605,8 @@ public class MainWindow : Form
     private void ConflictButton_Click(object? sender, EventArgs e) => ShowConflictList();
 
     private void RetryButton_Click(object? sender, EventArgs e) => RetrySync();
+
+    private void LogToggleButton_Click(object? sender, EventArgs e) => ToggleLogSidebar();
 
     private void LogFilter_SelectedIndexChanged(object? sender, EventArgs e) => ApplyLogFilter();
 
@@ -1147,84 +951,154 @@ public class MainWindow : Form
     }
 
     // ================================================================
-    // 每文件同步状态列表（T-009）
+    // 文件浏览主视图（T-013）
     // ================================================================
 
-    /// <summary>窗口首次显示/再次显示时启动状态列表刷新并立即刷新一次。</summary>
+    /// <summary>窗口首次显示/再次显示时启动文件浏览定时刷新并立即加载一次。</summary>
     private void OnShown(object? sender, EventArgs e)
     {
-        _statusRefreshTimer.Start();
-        StatusRefreshTimer_Tick(sender, e);
+        _browserRefreshTimer.Start();
+        BrowserRefreshTimer_Tick(sender, e);
     }
 
-    /// <summary>定时刷新每文件同步状态（UI 定时器回调，async void + 顶层 try-catch 符合 CLAUDE.md 7.2）。</summary>
-    private async void StatusRefreshTimer_Tick(object? sender, EventArgs e)
+    /// <summary>定时刷新文件浏览（UI 定时器回调，async void + 顶层 try-catch 符合 CLAUDE.md 7.2）。</summary>
+    private async void BrowserRefreshTimer_Tick(object? sender, EventArgs e)
     {
-        if (_statusRefreshBusy)
+        if (_browserRefreshBusy)
         {
             return; // 上一次刷新仍在进行，跳过本次定时触发（防重入）
         }
 
-        _statusRefreshBusy = true;
+        _browserRefreshBusy = true;
         try
         {
-            await RefreshFileStatusAsync();
+            await LoadBrowserAsync();
         }
         catch (Exception ex)
         {
             // 刷新失败不影响主界面，下次定时器触发自动重试
-            System.Diagnostics.Debug.WriteLine($"刷新每文件状态失败: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"刷新文件浏览失败: {ex.Message}");
         }
         finally
         {
-            _statusRefreshBusy = false;
+            _browserRefreshBusy = false;
         }
     }
 
-    /// <summary>从 SyncEngine 查询每文件同步状态并渲染到列表（数据查询在 Client.Core，UI 只渲染）。</summary>
-    private async Task RefreshFileStatusAsync()
+    /// <summary>搜索防抖定时器 Tick：停止输入后重载当前浏览目录（保持搜索关键字）。UI 定时器回调，async void + 顶层 try-catch 符合 CLAUDE.md 7.2。</summary>
+    private async void SearchDebounceTimer_Tick(object? sender, EventArgs e)
     {
-        IReadOnlyList<FileSyncStatusItem> items = await _engine.GetFileSyncStatusesAsync();
-        if (InvokeRequired)
-        {
-            Invoke(() => ApplyFileStatuses(items));
-            return;
-        }
-        ApplyFileStatuses(items);
-    }
-
-    /// <summary>将每文件状态写入列表：状态图标（✓↻!✗☁）+ 状态色双通道。</summary>
-    private void ApplyFileStatuses(IReadOnlyList<FileSyncStatusItem> items)
-    {
-        _statusList.BeginUpdate();
+        _searchDebounceTimer.Stop();
         try
         {
-            _statusList.Items.Clear();
-            foreach (var item in items)
-            {
-                (string icon, Color color) = ResolveDisplayState(item);
-                string name = item.IsDirectory ? item.RelativePath + "/" : item.RelativePath;
-                ListViewItem lvi = new ListViewItem(icon);
-                lvi.SubItems.Add(name);
-                lvi.ForeColor = color;
-                _statusList.Items.Add(lvi);
-            }
+            await LoadBrowserAsync();
         }
-        finally
+        catch (Exception ex)
         {
-            _statusList.EndUpdate();
+            System.Diagnostics.Debug.WriteLine($"搜索刷新失败: {ex.Message}");
         }
     }
 
-    /// <summary>将每文件状态映射为（图标, 颜色）双通道。错误/冲突覆盖优先级最高（瞬时状态优先可见），其余按 FileState 枚举。</summary>
-    private (string Icon, Color Color) ResolveDisplayState(FileSyncStatusItem item)
+    /// <summary>从 SyncEngine 查询文件浏览数据并渲染（数据查询在 Client.Core，UI 只渲染）。</summary>
+    private async Task LoadBrowserAsync()
     {
-        if (_errors.Any(e => string.Equals(e.FilePath, item.RelativePath, StringComparison.OrdinalIgnoreCase)))
+        IReadOnlyList<FileBrowseItem> items = await _engine.GetFileBrowserAsync(_currentPath, _searchText);
+        if (InvokeRequired)
+        {
+            Invoke(() => ApplyBrowser(items));
+            return;
+        }
+        ApplyBrowser(items);
+    }
+
+    /// <summary>将文件浏览数据交给文件浏览视图渲染。</summary>
+    private void ApplyBrowser(IReadOnlyList<FileBrowseItem> items)
+    {
+        _fileBrowser.ShowItems(_currentPath, items, _searchText);
+    }
+
+    /// <summary>导航到指定目录（清空搜索时经 SearchTextChanged 重载，否则直接重载）。UI 事件上下文，async void + 顶层 try-catch 符合 CLAUDE.md 7.2。</summary>
+    private async void NavigateTo(string path)
+    {
+        _currentPath = path;
+        try
+        {
+            if (!string.IsNullOrEmpty(_searchText))
+            {
+                _fileBrowser.ClearSearch(); // 触发 SearchTextChanged → 以新路径、空搜索重载
+            }
+            else
+            {
+                await LoadBrowserAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"导航到 {path} 失败: {ex.Message}");
+        }
+    }
+
+    /// <summary>双击子目录 / 点击面包屑段：进入目录。</summary>
+    private void FileBrowser_DirectoryActivated(string path) => NavigateTo(path);
+
+    /// <summary>双击文件：尝试用系统默认程序打开本地副本。</summary>
+    private void FileBrowser_FileActivated(string path) => OpenFile(path);
+
+    /// <summary>点击「上一级」：进入父目录。</summary>
+    private void FileBrowser_UpRequested() => NavigateTo(GetParentPath(_currentPath));
+
+    /// <summary>搜索框内容变化：记录搜索关键字并启动防抖重载。</summary>
+    private void FileBrowser_SearchTextChanged(string text)
+    {
+        _searchText = string.IsNullOrWhiteSpace(text) ? null : text;
+        _searchDebounceTimer.Stop();
+        _searchDebounceTimer.Start();
+    }
+
+    /// <summary>计算目录的父目录路径（"/" 的父目录为 "/"）。</summary>
+    private static string GetParentPath(string path)
+    {
+        string p = path.TrimEnd('/');
+        if (p.Length == 0)
+        {
+            return "/";
+        }
+
+        int idx = p.LastIndexOf('/');
+        return idx <= 0 ? "/" : p[..idx];
+    }
+
+    /// <summary>打开文件浏览视图中的文件：本地存在则系统打开，CloudOnly 未下载则提示。</summary>
+    private void OpenFile(string relativePath)
+    {
+        string localPath = System.IO.Path.Combine(
+            Program.SyncRoot, relativePath.TrimStart('/').Replace('/', System.IO.Path.DirectorySeparatorChar));
+        if (System.IO.File.Exists(localPath))
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo(localPath) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                AddLog($"打开文件失败: {relativePath} — {ex.Message}");
+            }
+        }
+        else
+        {
+            AddLog($"该文件仅在云端（CloudOnly），未下载到本地，暂无法打开: {relativePath}");
+        }
+    }
+
+    /// <summary>将 FileBrowseItem 映射为（图标, 颜色）双通道。错误/冲突覆盖优先级最高（瞬时状态优先可见），其余按 FileState 枚举。</summary>
+    private (string Icon, Color Color) ResolveBrowseState(FileBrowseItem item)
+    {
+        if (_errors.Any(e => string.Equals(e.FilePath, item.Path, StringComparison.OrdinalIgnoreCase)))
         {
             return ("✗", CloudPanColors.ErrorRed);
         }
 
-        if (_conflicts.Any(c => string.Equals(c.Info.RelativePath, item.RelativePath, StringComparison.OrdinalIgnoreCase)))
+        if (_conflicts.Any(c => string.Equals(c.Info.RelativePath, item.Path, StringComparison.OrdinalIgnoreCase)))
         {
             return ("!", CloudPanColors.WarningOrange);
         }
@@ -1235,59 +1109,10 @@ public class MainWindow : Form
             (int)FileState.Uploading => ("↻", CloudPanColors.AccentBlue),
             (int)FileState.Downloading => ("↻", CloudPanColors.AccentBlue),
             (int)FileState.Modified => ("↻", CloudPanColors.AccentBlue),
-            (int)FileState.Deleting => ("↻", CloudPanColors.TextMuted),
             (int)FileState.CloudOnly => ("☁", CloudPanColors.TextMuted),
             (int)FileState.Conflict => ("!", CloudPanColors.WarningOrange),
             _ => ("✓", CloudPanColors.SuccessGreen)
         };
-    }
-
-    // ================================================================
-    // 淡入淡出过渡
-    // ================================================================
-
-    /// <summary>启动欢迎面板与日志列表之间的淡入淡出过渡。</summary>
-    private void StartFadeTransition(bool toWelcome)
-    {
-        if (_fadeTransitionActive)
-        {
-            return;
-        }
-
-        _fadeTransitionActive = true;
-
-        _fadeToWelcome = toWelcome;
-        _fadeAlpha = 1.0f;
-        _fadeOverlay.Alpha = 1.0f;
-        _fadeOverlay.Visible = true;
-
-        if (toWelcome)
-        {
-            _welcomePanel.Visible = true;  // 欢迎面板在遮罩下方等待揭示
-        }
-        else
-        {
-            _welcomePanel.Visible = false;  // 日志在遮罩下方，遮罩消退后可见
-        }
-
-        _fadeTimer.Start();
-    }
-
-    /// <summary>淡入淡出定时器 Tick——每帧降低遮罩透明度。</summary>
-    private void FadeTimerTick(object? sender, EventArgs e)
-    {
-        _fadeAlpha -= 0.08f;
-        if (_fadeAlpha <= 0f)
-        {
-            _fadeAlpha = 0f;
-            _fadeTimer.Stop();
-            _fadeOverlay.Alpha = 0f;
-            _fadeOverlay.Visible = false;
-            _fadeTransitionActive = false;
-            return;
-        }
-        _fadeOverlay.Alpha = _fadeAlpha;
-        _fadeOverlay.Invalidate();
     }
 
     // ================================================================
@@ -1309,6 +1134,23 @@ public class MainWindow : Form
         _pauseButton.ForeColor = _paused ? CloudPanColors.ErrorRed : CloudPanColors.TextSecondary;
         _pauseButton.BackColor = _paused ? CloudPanColors.WarningBgLight : CloudPanColors.BackgroundLight;
         AddLog(_paused ? "同步已暂停" : "同步已恢复");
+    }
+
+    /// <summary>切换日志侧栏的展开/折叠（T-013：日志不再占主界面，默认折叠）。</summary>
+    private void ToggleLogSidebar()
+    {
+        if (_splitter.Panel2Collapsed)
+        {
+            _splitter.Panel2Collapsed = false;
+            _splitter.SplitterDistance = Math.Max(_splitter.Width - _logSidebarWidth, _splitter.Panel1MinSize);
+            _logToggleButton.Text = "收起日志";
+        }
+        else
+        {
+            _logSidebarWidth = Math.Max(_splitter.Width - _splitter.SplitterDistance, _splitter.Panel2MinSize);
+            _splitter.Panel2Collapsed = true;
+            _logToggleButton.Text = "日志";
+        }
     }
 
     private void OpenSyncFolder()
@@ -1711,7 +1553,8 @@ public class MainWindow : Form
 
             e.Cancel = true;
             Hide();
-            _statusRefreshTimer.Stop(); // 隐藏到托盘后停止状态列表刷新（Shown 时重启）
+            _browserRefreshTimer.Stop(); // 隐藏到托盘后停止文件浏览刷新（Shown 时重启）
+            _searchDebounceTimer.Stop();
             TrayAppContext.TrayIcon?.ShowBalloonTip(3000, "CloudPan",
                 "仍在后台运行，双击托盘图标重新打开。", ToolTipIcon.Info);
         }
@@ -1872,33 +1715,4 @@ public class MainWindow : Form
         }
     }
 
-    /// <summary>淡入淡出遮罩面板——支持透明度绘制，用于两个面板之间的过渡动画。</summary>
-    private class FadePanel : Panel
-    {
-        private float _alpha;
-
-        public float Alpha
-        {
-            get => _alpha;
-            set { _alpha = Math.Clamp(value, 0f, 1f); Invalidate(); }
-        }
-
-        public FadePanel()
-        {
-            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
-                     ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw |
-                     ControlStyles.SupportsTransparentBackColor, true);
-            BackColor = Color.Transparent;
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            if (_alpha > 0.001f)
-            {
-                int alpha = (int)(_alpha * 255);
-                using SolidBrush b = new SolidBrush(Color.FromArgb(alpha, CloudPanColors.BackgroundWhite));
-                e.Graphics.FillRectangle(b, ClientRectangle);
-            }
-        }
-    }
 }

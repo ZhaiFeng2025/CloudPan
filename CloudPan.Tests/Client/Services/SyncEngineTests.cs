@@ -542,6 +542,101 @@ public class SyncEngineTests : IDisposable
         Assert.Equal((int)FileState.Modified, item.State);
         Assert.True(item.LocalExists);
     }
+
+    // ============================================================
+    // GetFileBrowserAsync 文件浏览测试（T-013）
+    // ============================================================
+
+    [Fact]
+    public async Task GetFileBrowser_根目录_返回直接子项()
+    {
+        // 服务端快照：/photos 目录（CloudOnly）+ /photos/summer.jpg（CloudOnly，深层）+ /readme.md（Synced）
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.AddRange(
+                new RemoteSnapshot { Path = "/photos", Type = (int)FileType.Directory, State = (int)FileState.CloudOnly, Version = 1 },
+                new RemoteSnapshot { Path = "/photos/summer.jpg", Type = (int)FileType.File, State = (int)FileState.CloudOnly, Version = 1 },
+                new RemoteSnapshot { Path = "/readme.md", Type = (int)FileType.File, State = (int)FileState.Synced, Version = 1 });
+            await setupDb.SaveChangesAsync();
+        }
+
+        // 本地新增文件（快照无 → Modified）
+        await File.WriteAllTextAsync(Path.Combine(_syncRoot, "mylocal.txt"), "new local");
+
+        var items = await _engine.GetFileBrowserAsync("/");
+
+        // 目录优先：/photos 在最前
+        Assert.Equal("/photos", items[0].Path);
+        Assert.True(items[0].IsDirectory);
+
+        // 目录模式不返回深层子项
+        Assert.DoesNotContain(items, i => i.Path == "/photos/summer.jpg");
+
+        // 本地新文件并入（Modified，本地存在，大小可读）
+        var local = items.Single(i => i.Path == "/mylocal.txt");
+        Assert.False(local.IsDirectory);
+        Assert.Equal((int)FileState.Modified, local.State);
+        Assert.True(local.LocalExists);
+        Assert.True(local.Size > 0);
+
+        // 快照文件包含在根目录
+        Assert.Contains(items, i => i.Path == "/readme.md");
+        Assert.Equal(3, items.Count);
+    }
+
+    [Fact]
+    public async Task GetFileBrowser_子目录_返回直接子项()
+    {
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.AddRange(
+                new RemoteSnapshot { Path = "/photos", Type = (int)FileType.Directory, State = (int)FileState.CloudOnly, Version = 1 },
+                new RemoteSnapshot { Path = "/photos/summer.jpg", Type = (int)FileType.File, State = (int)FileState.CloudOnly, Version = 1 },
+                new RemoteSnapshot { Path = "/photos/sub/video.mp4", Type = (int)FileType.File, State = (int)FileState.CloudOnly, Version = 1 });
+            await setupDb.SaveChangesAsync();
+        }
+
+        var items = await _engine.GetFileBrowserAsync("/photos");
+
+        // 仅 /photos 的直接子项（排除自身与深层）
+        Assert.Single(items);
+        Assert.Equal("/photos/summer.jpg", items[0].Path);
+    }
+
+    [Fact]
+    public async Task GetFileBrowser_搜索_递归命中文件()
+    {
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.AddRange(
+                new RemoteSnapshot { Path = "/photos/summer.jpg", Type = (int)FileType.File, State = (int)FileState.CloudOnly, Version = 1 },
+                new RemoteSnapshot { Path = "/docs/report.docx", Type = (int)FileType.File, State = (int)FileState.Synced, Version = 1 });
+            await setupDb.SaveChangesAsync();
+        }
+
+        var items = await _engine.GetFileBrowserAsync("/", "summer");
+
+        // 搜索递归命中深层文件，且仅名称匹配项
+        Assert.Single(items);
+        Assert.Equal("/photos/summer.jpg", items[0].Path);
+    }
+
+    [Fact]
+    public async Task GetFileBrowser_墓碑Deleting_不展示()
+    {
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.AddRange(
+                new RemoteSnapshot { Path = "/gone.txt", Type = (int)FileType.File, State = (int)FileState.Deleting, Version = 2 },
+                new RemoteSnapshot { Path = "/alive.txt", Type = (int)FileType.File, State = (int)FileState.Synced, Version = 1 });
+            await setupDb.SaveChangesAsync();
+        }
+
+        var items = await _engine.GetFileBrowserAsync("/");
+
+        Assert.DoesNotContain(items, i => i.Path == "/gone.txt");
+        Assert.Contains(items, i => i.Path == "/alive.txt");
+    }
 }
 
 /// <summary>测试用 ClientDbContext 工厂。</summary>
