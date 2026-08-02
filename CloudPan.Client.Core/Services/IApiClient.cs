@@ -46,4 +46,16 @@ public interface IApiClient
 
     /// <summary>清空回收站。</summary>
     Task EmptyTrashAsync(CancellationToken ct = default);
+
+    /// <summary>创建分享链接（/api/shares，T-018）。</summary>
+    Task<ShareCreateResponse?> CreateShareAsync(string filePath, string? password, string? expiresAt, int? maxDownloads, CancellationToken ct = default);
+
+    /// <summary>撤销分享链接（DELETE /api/shares/{shareId}，T-018）。返回 false 表示分享不存在或已失效。</summary>
+    Task<bool> RevokeShareAsync(string shareId, CancellationToken ct = default);
+
+    /// <summary>获取文件历史版本列表（GET /api/versions，T-018，按版本倒序）。</summary>
+    Task<List<VersionItem>> GetVersionsAsync(string path, int limit = 50, CancellationToken ct = default);
+
+    /// <summary>回滚文件到指定历史版本（POST /api/versions/restore，T-018）。</summary>
+    Task<VersionRestoreResponse?> RestoreVersionAsync(string filePath, int version, CancellationToken ct = default);
 }

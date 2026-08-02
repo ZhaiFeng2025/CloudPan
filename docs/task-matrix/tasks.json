@@ -783,7 +783,7 @@
       "title": "分享创建/撤销 + 版本历史回滚 UI 入口",
       "dimension": "ux",
       "priority": "P1",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 2,
       "findingId": "F-18",
       "dependsOn": [
@@ -810,8 +810,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "分享创建/撤销 + 版本历史回滚 UI 入口（F-18/T-018）：服务端 /api/shares、/api/versions、/share/{id} 已就绪（T-002 下沉领域服务），客户端补齐 IApiClient/ApiClient 端点 + SyncEngine 转发 + FileBrowserView/MainWindow UI + 托盘入口。\n①契约（规则 0）：shared-spec.json api.responses 新增 ShareCreateResponse/ShareCreateData/ShareRevokeResponse/ShareRevokeData/VersionItem/VersionListResponse/VersionRestoreResponse/VersionRestoreData，重跑 CodeGen 生成 CloudPan.Contract/Generated/ApiResponses.g.cs——客户端不手抄分享/版本 DTO，改 spec 一处生效。\n②ApiClient/IApiClient：新增 CreateShareAsync（POST /api/shares，expiresAt 传 ISO 8601 UTC O 格式）、RevokeShareAsync（DELETE /api/shares/{shareId}，404 返回 false）、GetVersionsAsync（GET /api/versions）、RestoreVersionAsync（POST /api/versions/restore）。\n③新增 SyncEngine.Share.cs / SyncEngine.Versions.cs 转发（容错：失败返回 null/false/空列表，不抛给 UI）。\n④FileBrowserView：工具栏新增「分享」「版本」按钮（仅选中非目录项可用，目录/未选中禁用），新增 ShareRequested/VersionHistoryRequested 事件；UpdateSelection 联动启用。\n⑤MainWindow：ShowShareDialog——≤3 步（浏览选中→密码/过期→生成并复制链接），生成后提供「复制链接」+「撤销分享」（服务端无分享列表端点，故管理分享=生成后直接撤销）；ShowVersionHistoryDialogAsync——版本列表（版本/大小/时间/设备）+「回滚到选中版本」带确认，回滚后刷新浏览；公开 OpenShareForSelection/OpenVersionHistoryForSelection 供托盘复用。\n⑥TrayAppContext：托盘菜单新增「分享当前文件…」「版本历史…」（对文件浏览当前选中文件生效，未选中提示）。\n⑦测试：MockApiClient 增分享/版本 mock（Shares 字典 / VersionHistory 字典，CreateShare 模拟文件不存在 404，Restore 模拟回滚提升版本号并记录来源）；SyncEngineTests 增 7 用例（创建成功返回链接与分享ID / 文件不存在返回null / 撤销成功 / 分享不存在返回false / 版本列表 / 回滚成功返回新版本号 / 版本不存在返回null）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误（10 项目全编译）；dotnet test CloudPan.Tests -c Release 201/201 通过（原 194 + 新增 7）；--filter Share|Version 28/28 通过；架构测试 10/10 通过；dotnet run --project CloudPan.CodeGen -- --verify 7 项全部一致。验收标准①为手动项（文件→分享 ≤3 步得链接；版本历史可回滚），由验收者实机验证。\n【依赖说明】T-013 已 done（用户实机验收通过），dependsOn 满足。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-019",

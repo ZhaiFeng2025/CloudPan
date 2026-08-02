@@ -133,3 +133,91 @@ public record TrashListResponse(
     TrashItem[] Data
 );
 
+/// <summary>
+/// POST /api/shares 响应包装
+/// </summary>
+public record ShareCreateResponse(
+    [property: JsonPropertyName("data")]
+    ShareCreateData Data
+);
+
+/// <summary>
+/// 创建分享链接响应 data
+/// </summary>
+public record ShareCreateData(
+    [property: JsonPropertyName("shareId")]
+    string ShareId,
+    [property: JsonPropertyName("url")]
+    string Url,
+    [property: JsonPropertyName("expiresAt")]
+    string? ExpiresAt,
+    [property: JsonPropertyName("maxDownloads")]
+    int? MaxDownloads
+);
+
+/// <summary>
+/// DELETE /api/shares/{shareId} 响应包装
+/// </summary>
+public record ShareRevokeResponse(
+    [property: JsonPropertyName("data")]
+    ShareRevokeData Data
+);
+
+/// <summary>
+/// 撤销分享链接响应 data
+/// </summary>
+public record ShareRevokeData(
+    [property: JsonPropertyName("revoked")]
+    string Revoked
+);
+
+/// <summary>
+/// 历史版本记录（列表展示用）
+/// </summary>
+public record VersionItem(
+    [property: JsonPropertyName("version")]
+    int Version,
+    [property: JsonPropertyName("hash")]
+    string Hash,
+    [property: JsonPropertyName("size")]
+    long Size,
+    [property: JsonPropertyName("timestamp")]
+    string Timestamp,
+    [property: JsonPropertyName("deviceId")]
+    string DeviceId,
+    [property: JsonPropertyName("restoredFromVersion")]
+    int? RestoredFromVersion
+);
+
+/// <summary>
+/// GET /api/versions 响应包装
+/// </summary>
+public record VersionListResponse(
+    [property: JsonPropertyName("data")]
+    VersionItem[] Data
+);
+
+/// <summary>
+/// POST /api/versions/restore 响应包装
+/// </summary>
+public record VersionRestoreResponse(
+    [property: JsonPropertyName("data")]
+    VersionRestoreData Data
+);
+
+/// <summary>
+/// 版本回滚响应 data
+/// </summary>
+public record VersionRestoreData(
+    [property: JsonPropertyName("path")]
+    string Path,
+    [property: JsonPropertyName("version")]
+    int Version,
+    [property: JsonPropertyName("hash")]
+    string Hash,
+    [property: JsonPropertyName("size")]
+    long Size,
+    [property: JsonPropertyName("restoredFromVersion")]
+    int? RestoredFromVersion
+);
+

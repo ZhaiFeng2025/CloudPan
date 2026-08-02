@@ -806,6 +806,99 @@ public class SyncEngineTests : IDisposable
         Assert.True(ok);
         Assert.Empty(_api.TrashItems);
     }
+
+    // ============================================================
+    // 分享 + 版本历史转发测试（T-018）
+    // ============================================================
+
+    [Fact]
+    public async Task CreateShare_成功_返回链接与分享ID()
+    {
+        _api.Files["/share-me.txt"] = ("mock-hash", 10, 1);
+
+        var result = await _engine.CreateShareAsync("/share-me.txt", "1234", "2026-08-10T00:00:00.0000000Z", null);
+
+        Assert.NotNull(result?.Data);
+        Assert.False(string.IsNullOrEmpty(result.Data.ShareId));
+        Assert.Equal("http://localhost:8443/share/" + result.Data.ShareId, result.Data.Url);
+        Assert.Equal("2026-08-10T00:00:00.0000000Z", result.Data.ExpiresAt);
+        Assert.True(_api.Shares.ContainsKey(result.Data.ShareId)); // 已写入 mock 服务端
+    }
+
+    [Fact]
+    public async Task CreateShare_文件不存在_返回null()
+    {
+        // 文件不存在 → mock 抛 404 → SyncEngine 容错返回 null（不抛给 UI）
+        var result = await _engine.CreateShareAsync("/no-such.txt", null, null, null);
+
+        Assert.Null(result);
+        Assert.Empty(_api.Shares);
+    }
+
+    [Fact]
+    public async Task RevokeShare_撤销成功_返回true()
+    {
+        string shareId = "mockshare0001";
+        _api.Shares[shareId] = new ShareCreateData(shareId, "http://localhost:8443/share/" + shareId, null, null);
+
+        bool ok = await _engine.RevokeShareAsync(shareId);
+
+        Assert.True(ok);
+        Assert.Empty(_api.Shares);
+    }
+
+    [Fact]
+    public async Task RevokeShare_分享不存在_返回false()
+    {
+        bool ok = await _engine.RevokeShareAsync("no-such-share");
+
+        Assert.False(ok);
+    }
+
+    [Fact]
+    public async Task GetVersionHistory_返回版本列表()
+    {
+        _api.VersionHistory["/photo.jpg"] = new List<VersionItem>
+        {
+            new VersionItem(3, "hash3", 30, "2026-08-03T01:00:00.0000000Z", "dev-a", null),
+            new VersionItem(2, "hash2", 20, "2026-08-02T01:00:00.0000000Z", "dev-b", null)
+        };
+
+        var versions = await _engine.GetVersionHistoryAsync("/photo.jpg");
+
+        Assert.Equal(2, versions.Count);
+        Assert.Equal(3, versions[0].Version);
+        Assert.Equal("dev-a", versions[0].DeviceId);
+    }
+
+    [Fact]
+    public async Task RestoreVersion_回滚成功_返回新版本号()
+    {
+        _api.VersionHistory["/photo.jpg"] = new List<VersionItem>
+        {
+            new VersionItem(3, "hash3", 30, "2026-08-03T01:00:00.0000000Z", "dev-a", null)
+        };
+
+        var result = await _engine.RestoreVersionAsync("/photo.jpg", 3);
+
+        Assert.NotNull(result?.Data);
+        Assert.Equal("/photo.jpg", result.Data.Path);
+        Assert.Equal(4, result.Data.Version);       // 回滚后提升到新版本
+        Assert.Equal(3, result.Data.RestoredFromVersion); // 记录回滚来源
+    }
+
+    [Fact]
+    public async Task RestoreVersion_版本不存在_返回null()
+    {
+        _api.VersionHistory["/photo.jpg"] = new List<VersionItem>
+        {
+            new VersionItem(3, "hash3", 30, "2026-08-03T01:00:00.0000000Z", "dev-a", null)
+        };
+
+        var result = await _engine.RestoreVersionAsync("/photo.jpg", 99);
+
+        Assert.Null(result);
+    }
 }
 
 /// <summary>测试用 ClientDbContext 工厂。</summary>

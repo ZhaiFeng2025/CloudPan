@@ -24,6 +24,12 @@ public class MockApiClient : IApiClient
     /// <summary>回收站条目（模拟服务端 /api/trash 列表）。</summary>
     public List<TrashItem> TrashItems { get; } = new();
 
+    /// <summary>已创建的分享链接（模拟服务端 /api/shares 记录，Key=shareId）。</summary>
+    public Dictionary<string, ShareCreateData> Shares { get; } = new();
+
+    /// <summary>历史版本记录（模拟服务端 /api/versions，Key=文件路径）。</summary>
+    public Dictionary<string, List<VersionItem>> VersionHistory { get; } = new();
+
     public bool HealthOk { get; set; } = true;
 
     public Task<bool> HealthCheckAsync(CancellationToken ct = default) => Task.FromResult(HealthOk);
@@ -174,6 +180,62 @@ public class MockApiClient : IApiClient
         return Task.CompletedTask;
     }
 
+    /// <summary>创建分享链接（模拟服务端 /api/shares）。</summary>
+    public Task<ShareCreateResponse?> CreateShareAsync(
+        string filePath, string? password, string? expiresAt, int? maxDownloads, CancellationToken ct = default)
+    {
+        // 模拟服务端：文件不存在时返回 NOT_FOUND（对齐 SharingService.CreateShareAsync 语义）
+        if (!Files.ContainsKey(filePath) && !Files.ContainsKey(filePath + "/"))
+        {
+            throw new HttpRequestException("文件不存在", null, System.Net.HttpStatusCode.NotFound);
+        }
+
+        string shareId = Guid.NewGuid().ToString("N")[..16];
+        var data = new ShareCreateData(
+            shareId,
+            $"http://localhost:8443/share/{shareId}",
+            expiresAt,
+            maxDownloads);
+        Shares[shareId] = data;
+        return Task.FromResult<ShareCreateResponse?>(new ShareCreateResponse(data));
+    }
+
+    /// <summary>撤销分享链接（模拟服务端 DELETE /api/shares/{shareId}）。</summary>
+    public Task<bool> RevokeShareAsync(string shareId, CancellationToken ct = default)
+    {
+        return Task.FromResult(Shares.Remove(shareId));
+    }
+
+    /// <summary>获取文件历史版本列表（模拟服务端 /api/versions）。</summary>
+    public Task<List<VersionItem>> GetVersionsAsync(string path, int limit = 50, CancellationToken ct = default)
+    {
+        return Task.FromResult(VersionHistory.TryGetValue(path, out var list)
+            ? list.Take(limit).ToList()
+            : new List<VersionItem>());
+    }
+
+    /// <summary>回滚到指定历史版本（模拟服务端 /api/versions/restore）。</summary>
+    public Task<VersionRestoreResponse?> RestoreVersionAsync(string filePath, int version, CancellationToken ct = default)
+    {
+        if (!VersionHistory.TryGetValue(filePath, out var list))
+        {
+            return Task.FromResult<VersionRestoreResponse?>(null);
+        }
+
+        var target = list.FirstOrDefault(v => v.Version == version);
+        if (target == null)
+        {
+            return Task.FromResult<VersionRestoreResponse?>(null);
+        }
+
+        // 模拟服务端回滚：以目标版本内容更新当前文件（列表最前一条）并提升版本号
+        int newVersion = (list.Count > 0 ? list.Max(v => v.Version) : 0) + 1;
+        list.Insert(0, new VersionItem(newVersion, target.Hash, target.Size,
+            DateTime.UtcNow.ToString("O"), "mock-device", version));
+        return Task.FromResult<VersionRestoreResponse?>(new VersionRestoreResponse(
+            new VersionRestoreData(filePath, newVersion, target.Hash, target.Size, version)));
+    }
+
     /// <summary>重置所有 mock 状态。</summary>
     public void Reset()
     {
@@ -182,6 +244,8 @@ public class MockApiClient : IApiClient
         DownloadCalls.Clear();
         DeleteCalls.Clear();
         TrashItems.Clear();
+        Shares.Clear();
+        VersionHistory.Clear();
         HealthOk = true;
     }
 }

@@ -467,6 +467,38 @@
       "TrashListResponse": {
         "description": "GET /api/trash 响应包装",
         "fields": ["data: TrashItem[]"]
+      },
+      "ShareCreateResponse": {
+        "description": "POST /api/shares 响应包装",
+        "fields": ["data: ShareCreateData"]
+      },
+      "ShareCreateData": {
+        "description": "创建分享链接响应 data",
+        "fields": ["shareId: string", "url: string", "expiresAt: string?", "maxDownloads: int?"]
+      },
+      "ShareRevokeResponse": {
+        "description": "DELETE /api/shares/{shareId} 响应包装",
+        "fields": ["data: ShareRevokeData"]
+      },
+      "ShareRevokeData": {
+        "description": "撤销分享链接响应 data",
+        "fields": ["revoked: string"]
+      },
+      "VersionItem": {
+        "description": "历史版本记录（列表展示用）",
+        "fields": ["version: int", "hash: string", "size: long", "timestamp: string", "deviceId: string", "restoredFromVersion: int?"]
+      },
+      "VersionListResponse": {
+        "description": "GET /api/versions 响应包装",
+        "fields": ["data: VersionItem[]"]
+      },
+      "VersionRestoreResponse": {
+        "description": "POST /api/versions/restore 响应包装",
+        "fields": ["data: VersionRestoreData"]
+      },
+      "VersionRestoreData": {
+        "description": "版本回滚响应 data",
+        "fields": ["path: string", "version: int", "hash: string", "size: long", "restoredFromVersion: int?"]
       }
     }
   },

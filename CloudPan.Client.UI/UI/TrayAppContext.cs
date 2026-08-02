@@ -285,6 +285,19 @@ public class TrayAppContext : ApplicationContext
         menu.Items.Add(conflictItem);
         menu.Items.Add(new ToolStripSeparator());
 
+        // T-018：分享 + 版本历史入口（对文件浏览当前选中文件生效；未选中时提示）
+        menu.Items.Add("分享当前文件…", null, (_, _) =>
+        {
+            ShowWindow();
+            _mainWindow.OpenShareForSelection();
+        });
+        menu.Items.Add("版本历史…", null, (_, _) =>
+        {
+            ShowWindow();
+            _mainWindow.OpenVersionHistoryForSelection();
+        });
+        menu.Items.Add(new ToolStripSeparator());
+
         // 开机自启
         var autoStartItem = new ToolStripMenuItem("开机自动启动")
         {

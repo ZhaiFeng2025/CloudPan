@@ -33,6 +33,12 @@ public class FileBrowserView : UserControl
     /// <summary>点击「回收站」→ 打开最近删除入口（T-014）。</summary>
     public event Action? TrashRequested;
 
+    /// <summary>点击「分享」（有选中文件）→ 参数为选中的文件（T-018，宿主负责创建/撤销分享）。</summary>
+    public event Action<FileBrowseItem>? ShareRequested;
+
+    /// <summary>点击「版本」（有选中文件）→ 参数为选中的文件（T-018，宿主负责版本历史列表/回滚）。</summary>
+    public event Action<FileBrowseItem>? VersionHistoryRequested;
+
     /// <summary>状态解析器（由宿主注入，叠加本地错误/冲突覆盖）。未注入时使用默认 FileState → 图标/颜色映射。</summary>
     public Func<FileBrowseItem, (string Icon, Color Color)>? StateResolver { get; set; }
 
@@ -56,6 +62,8 @@ public class FileBrowserView : UserControl
     private Button _gridViewButton = null!;
     private Button _deleteButton = null!; // T-014：删除（进回收站）
     private Button _trashButton = null!;  // T-014：回收站入口
+    private Button _shareButton = null!;  // T-018：分享（仅文件）
+    private Button _versionButton = null!; // T-018：版本历史（仅文件）
     private ComboBox _sortCombo = null!;
     private ListView _list = null!;
     private Label _emptyLabel = null!;
@@ -192,6 +200,33 @@ public class FileBrowserView : UserControl
         _trashButton.FlatAppearance.BorderColor = CloudPanColors.ButtonBorderGray;
         _trashButton.Click += TrashButton_Click;
         viewPanel.Controls.Add(_trashButton);
+
+        // T-018：分享 + 版本历史（仅对选中文件可用，目录/未选中禁用）
+        _shareButton = new Button
+        {
+            Text = "分享",
+            Width = 64,
+            Height = CloudPanSpacing.MinTouchSize,
+            FlatStyle = FlatStyle.Flat,
+            Margin = new Padding(4, 0, 0, 0),
+            Enabled = false,
+        };
+        _shareButton.FlatAppearance.BorderColor = CloudPanColors.ButtonBorderGray;
+        _shareButton.Click += ShareButton_Click;
+        viewPanel.Controls.Add(_shareButton);
+
+        _versionButton = new Button
+        {
+            Text = "版本",
+            Width = 64,
+            Height = CloudPanSpacing.MinTouchSize,
+            FlatStyle = FlatStyle.Flat,
+            Margin = new Padding(4, 0, 0, 0),
+            Enabled = false,
+        };
+        _versionButton.FlatAppearance.BorderColor = CloudPanColors.ButtonBorderGray;
+        _versionButton.Click += VersionButton_Click;
+        viewPanel.Controls.Add(_versionButton);
 
         toolbar.Controls.Add(viewPanel, 1, 0);
 
@@ -371,12 +406,14 @@ public class FileBrowserView : UserControl
         }
     }
 
-    /// <summary>同步选中项状态（SelectedItem / 删除按钮可用性）。</summary>
+    /// <summary>同步选中项状态（SelectedItem / 删除按钮可用性；T-018 分享/版本仅对文件可用）。</summary>
     private void UpdateSelection(FileBrowseItem? item)
     {
         SelectedItem = item;
         _selectedPath = item?.Path;
         _deleteButton.Enabled = item != null;
+        _shareButton.Enabled = item != null && !item.IsDirectory;
+        _versionButton.Enabled = item != null && !item.IsDirectory;
     }
 
     /// <summary>将 FileBrowseItem 映射为（图标, 颜色）双通道；未注入 StateResolver 时使用默认 FileState 映射。</summary>
@@ -582,6 +619,24 @@ public class FileBrowserView : UserControl
 
     /// <summary>T-014：点击「回收站」→ 打开最近删除入口。</summary>
     private void TrashButton_Click(object? sender, EventArgs e) => TrashRequested?.Invoke();
+
+    /// <summary>T-018：点击「分享」→ 转发选中的文件给宿主（创建/撤销分享）。</summary>
+    private void ShareButton_Click(object? sender, EventArgs e)
+    {
+        if (SelectedItem != null && !SelectedItem.IsDirectory)
+        {
+            ShareRequested?.Invoke(SelectedItem);
+        }
+    }
+
+    /// <summary>T-018：点击「版本」→ 转发选中的文件给宿主（版本历史列表/回滚）。</summary>
+    private void VersionButton_Click(object? sender, EventArgs e)
+    {
+        if (SelectedItem != null && !SelectedItem.IsDirectory)
+        {
+            VersionHistoryRequested?.Invoke(SelectedItem);
+        }
+    }
 
     private void List_ItemActivate(object? sender, EventArgs e)
     {
