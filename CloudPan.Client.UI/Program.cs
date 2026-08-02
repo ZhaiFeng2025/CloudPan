@@ -287,10 +287,9 @@ public static class Program
                     {
                         Log.Warning(ex, "备份损坏数据库失败，继续重建");
                     }
-                    // 删除并重建
+                    // 删除并重建（重建走 Migrate 建全表）
                     checkDb.Database.EnsureDeleted();
-                    // 注: 当前使用 EnsureCreated()。后续版本考虑迁移至 EF Core Migrations 以获得增量迁移能力
-                    checkDb.Database.EnsureCreated();
+                    checkDb.Database.Migrate();
                     checkDb.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
                     Log.Information("数据库已重建");
                 }
@@ -490,9 +489,34 @@ public static class Program
     private static void EnsureDbCreated(string dbPath)
     {
         using ClientDbContext db = new ClientDbContext(dbPath);
-        // 注: 当前使用 EnsureCreated()。后续版本考虑迁移至 EF Core Migrations 以获得增量迁移能力
-        db.Database.EnsureCreated();
+        // EF Migrations 建库/升级（初始迁移幂等：全新库建全表，旧库已有表跳过、缺失的表补建，T-008）
+        db.Database.Migrate();
         db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
+        // 旧库列级兼容：EnsureCreated 时代创建的 SyncQueue 缺 TargetPath 列（重命名操作字段），
+        // 经 PRAGMA 判断后 ALTER 补列（SQLite ALTER ADD COLUMN 无 IF NOT EXISTS，先查后补保证幂等）
+        EnsureSyncQueueTargetPathColumn(db);
+    }
+
+    /// <summary>
+    /// 旧库兼容：EnsureCreated 时代的 SyncQueue 表缺 TargetPath 列时补列（保留数据，幂等）。
+    /// </summary>
+    private static void EnsureSyncQueueTargetPathColumn(ClientDbContext db)
+    {
+        try
+        {
+            bool hasColumn = db.Database.SqlQueryRaw<int>(
+                "SELECT COUNT(*) FROM pragma_table_info('SyncQueue') WHERE name='TargetPath';")
+                .ToList().FirstOrDefault() > 0;
+            if (!hasColumn)
+            {
+                db.Database.ExecuteSqlRaw("ALTER TABLE SyncQueue ADD COLUMN TargetPath TEXT NULL;");
+                Log.Information("旧客户端库 SyncQueue 已补 TargetPath 列");
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "SyncQueue TargetPath 列兼容检查失败（非致命）");
+        }
     }
 }
 

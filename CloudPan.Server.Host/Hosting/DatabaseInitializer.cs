@@ -38,29 +38,9 @@ public static class DatabaseInitializer
 
         using var db = dbFactory.CreateDbContext();
 
-        // 建库（当前 EnsureCreated；迁移至 EF Migrations 中，见 CLAUDE.md 规则 2）
-        db.Database.EnsureCreated();
-
-        // 兼容层：EnsureCreated 不补建旧库新增的表（迁移落地前的轻量兼容，见 CLAUDE.md 技术约束）。
-        // 表名为单数 Device（契约 [Table("Device")]），旧代码误用 Devices 导致在线状态重置失效
-        try
-        {
-            db.Database.ExecuteSqlRaw("""
-                CREATE TABLE IF NOT EXISTS Device (
-                    Id      TEXT NOT NULL PRIMARY KEY,
-                    Name    TEXT NOT NULL DEFAULT '',
-                    Person  TEXT,
-                    LastSeen TEXT NOT NULL DEFAULT '',
-                    Online  INTEGER NOT NULL DEFAULT 0,
-                    RegisteredAt TEXT NOT NULL DEFAULT ''
-                );
-                """);
-            db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS idx_devices_lastseen ON Device (LastSeen);");
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "schema 兼容补建失败（非致命，后续 EnsureCreated 可恢复）");
-        }
+        // 建库/升级：EF Migrations（初始迁移幂等——全新库建全表，旧库已有表/索引跳过、缺失的表补建）。
+        // 迁移取代 EnsureCreated 与手写建表兼容层（ADR-5 / T-008），schema 可演进，旧库数据保留。
+        db.Database.Migrate();
 
         // 启动时 DB 完整性检查
         try

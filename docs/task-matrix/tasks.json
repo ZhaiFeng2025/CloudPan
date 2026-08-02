@@ -431,7 +431,7 @@
       "title": "分享下载端点补过期校验",
       "dimension": "function",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 1,
       "findingId": "F-07",
       "dependsOn": [],
@@ -450,7 +450,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "过期校验补在领域服务（F-02 下沉载体）：SharingService.PrepareDownloadAsync 在密码校验前新增过期校验——复用与 GetShareInfoAsync（SharePage 同一来源）一致的解析逻辑（CultureInfo.InvariantCulture + DateTimeStyles.AdjustToUniversal，ISO 8601 'Z' 后缀解析为 Utc 避免时区偏移误判），过期返回 HttpErrorCode.BAD_REQUEST/「分享链接已过期」（与 SharePage 一致），且过期分享不再放行下载、不递增下载计数。Controller（ShareController.ShareDownload）本就只做适配，未改动。\n改动文件：CloudPan.Server.Core/Sharing/SharingService.cs（PrepareDownloadAsync 加过期校验）；CloudPan.Tests/Server/Services/SharingServiceTests.cs（新增 ShareDownload_过期分享_返回错误、ShareDownload_未过期分享_正常下载 两用例——方法名用 ShareDownload 前缀，使 FQN 含 'Share' 子串可被验收命令 --filter Share 命中，类名 SharingServiceTests 拼写为 Sharing 不含子串 Share）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Share 10/10 通过（含新增 ShareDownload_过期分享_返回错误：断言 !Success、Content 为 null、错误码 BAD_REQUEST、消息『分享链接已过期』；以及未过期分享正常下载对照用例）；全量 dotnet test CloudPan.Tests -c Release 163/163 通过（原 161 + 新增 2）。",
+      "note": "过期校验补在领域服务（F-02 下沉载体）：SharingService.PrepareDownloadAsync 在密码校验前新增过期校验——复用与 GetShareInfoAsync（SharePage 同一来源）一致的解析逻辑（CultureInfo.InvariantCulture + DateTimeStyles.AdjustToUniversal，ISO 8601 'Z' 后缀解析为 Utc 避免时区偏移误判），过期返回 HttpErrorCode.BAD_REQUEST/「分享链接已过期」（与 SharePage 一致），且过期分享不再放行下载、不递增下载计数。Controller（ShareController.ShareDownload）本就只做适配，未改动。\n改动文件：CloudPan.Server.Core/Sharing/SharingService.cs（PrepareDownloadAsync 加过期校验）；CloudPan.Tests/Server/Services/SharingServiceTests.cs（新增 ShareDownload_过期分享_返回错误、ShareDownload_未过期分享_正常下载 两用例——方法名用 ShareDownload 前缀，使 FQN 含 'Share' 子串可被验收命令 --filter Share 命中，类名 SharingServiceTests 拼写为 Sharing 不含子串 Share）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Share 10/10 通过（含新增 ShareDownload_过期分享_返回错误：断言 !Success、Content 为 null、错误码 BAD_REQUEST、消息『分享链接已过期』；以及未过期分享正常下载对照用例）；全量 dotnet test CloudPan.Tests -c Release 163/163 通过（原 161 + 新增 2）。\n【验收结论 2026-08-02】task-verifier 独立裁决：通过。验收标准『dotnet test --filter Share』实测 10/10 通过（Failed 0 / Passed 10 / Skipped 0），其中关键用例 ShareDownload_过期分享_返回错误 断言过期分享（ExpiresAt 设为 -1h）下载返回 !Success、Content null、HttpErrorCode.BAD_REQUEST、消息『分享链接已过期』——直接覆盖『过期分享下载返回错误』验收场景；对照用例 ShareDownload_未过期分享_正常下载（ExpiresAt +1h）返回 Success 且内容为 'hello'，证明过期校验不误伤正常分享。独立核查代码路径：SharingService.PrepareDownloadAsync 在密码校验之前新增过期校验，解析逻辑与 GetShareInfoAsync（SharePage 同一来源）一致（CultureInfo.InvariantCulture + DateTimeStyles.AdjustToUniversal，ISO 8601 'Z' 解析为 Utc），过期即返回 DomainError(BAD_REQUEST,『分享链接已过期』)，且早于下载计数递增逻辑——过期分享不放行下载、不递增计数，满足 requirements『ShareDownload 先查 ExpiresAt，过期返回错误（与 SharePage 一致）』。单条自动标准通过，无手动项。",
       "updatedAt": "2026-08-02"
     },
     {
@@ -458,7 +458,7 @@
       "title": "EF Migrations 替换 EnsureCreated（服务端+客户端）",
       "dimension": "architecture",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 1,
       "findingId": "F-08",
       "dependsOn": [],
@@ -484,8 +484,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "EF Migrations 替换 EnsureCreated（F-08）：服务端与客户端各生成初始迁移，DatabaseInitializer 与客户端初始化改为 Migrate()，删除服务端手写建表兼容层。迁移 Up() 改造为 IF NOT EXISTS 幂等——全新库建全表；旧库（EnsureCreated 时代，无 __EFMigrationsHistory）已有表/索引跳过（数据保留）、缺失的表补建，替代原手写兼容层。\n改动文件：\n新增 CloudPan.Infrastructure/Migrations/{20260802155716_InitialCreate.cs（幂等 Up）, .Designer.cs, CloudPanDbContextModelSnapshot.cs}、CloudPan.Infrastructure/Persistence/CloudPanDbContextFactory.cs（dotnet ef 设计时工厂）；CloudPan.Infrastructure.csproj 加 Microsoft.EntityFrameworkCore.Design 8.0.22（PrivateAssets=all）；\n新增 CloudPan.Client.Core/Migrations/{20260802155743_InitialCreate.cs（幂等 Up）, .Designer.cs, ClientDbContextModelSnapshot.cs}、CloudPan.Client.Core/Models/ClientDbContextFactory.cs；CloudPan.Client.Core.csproj 加 Design 包；\n修改 CloudPan.Server.Host/Hosting/DatabaseInitializer.cs（EnsureCreated→Migrate()，删除 CREATE TABLE IF NOT EXISTS Device 兼容层）；\n修改 CloudPan.Client.UI/Program.cs（EnsureDbCreated 与损坏重建路径 EnsureCreated→Migrate()，新增 EnsureSyncQueueTargetPathColumn 旧库列兼容）；\n修改两端 DbContext 注释（EnsureCreated→Migrations）；\n新增 CloudPan.Tests/Infrastructure/MigrationsTests.cs（4 用例：服务端/客户端全新库 Migrate 建全表、服务端旧库升级数据保留且缺失表补建、客户端旧库 SyncQueue 缺 TargetPath 升级补列数据保留）。\n验证：dotnet ef migrations list 两项目均有初始迁移（20260802155716_InitialCreate / 20260802155743_InitialCreate，且 has-pending-model-changes 无差异）；dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 167/167 通过（原 163 + 新增 4）。真实旧库复制品实测（dotnet ef database update）：CloudPanSync/.cloudpan/server.db、~/CloudPan/.cloudpan/server.db、CloudPan_Client/.cloudpan/client.db 全部升级成功——表与 Device 数据保留（1/2 行）、__EFMigrationsHistory 记录迁移、客户端 SyncQueue 经运行时 PRAGMA+ALTER 补 TargetPath 列。\n旧库数据保护说明：幂等迁移保留 EnsureCreated 时代库的全部数据（Device 种子、版本记录等）；~/CloudPan 旧库遗留的误建 Devices 空表保留不删（无害）；客户端旧库 SyncQueue 缺 TargetPath 列（重命名操作字段）由运行时 EnsureSyncQueueTargetPathColumn 先 PRAGMA 判断后 ALTER 补列——SQLite ALTER ADD COLUMN 无 IF NOT EXISTS，无法在迁移内条件化，故列级兼容置于运行时（迁移负责表级幂等）。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-009",

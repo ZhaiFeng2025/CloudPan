@@ -6,8 +6,7 @@ namespace CloudPan.Server.Data;
 /// <summary>
 /// CloudPan 服务端数据库上下文。
 /// SQLite + WAL 模式，EF Core Code-First。
-/// 当前使用 EnsureCreated 策略（自动建表/删表重建），
-/// 未启用 EF Core Migrations。Phase 1 应迁移至 Migrations。
+/// schema 由 EF Core Migrations 管理（初始迁移幂等，兼容 EnsureCreated 时代的旧库，T-008）。
 /// </summary>
 public class CloudPanDbContext : DbContext
 {
