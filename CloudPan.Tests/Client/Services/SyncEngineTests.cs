@@ -465,6 +465,83 @@ public class SyncEngineTests : IDisposable
         int remaining = await dbFinal.SyncQueue.CountAsync(q => q.FilePath == "/concurrent-edit.txt");
         Assert.Equal(1, remaining);
     }
+
+    // ============================================================
+    // 每文件同步状态查询测试（T-009）
+    // ============================================================
+
+    [Fact]
+    public async Task GetFileSyncStatuses_已同步文件_状态为Synced且本地存在()
+    {
+        string filePath = Path.Combine(_syncRoot, "synced.txt");
+        await File.WriteAllTextAsync(filePath, "content");
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.Add(new RemoteSnapshot
+            {
+                Path = "/synced.txt", Type = (int)FileType.File,
+                Size = 7, Version = 1, State = (int)FileState.Synced, Hash = "h"
+            });
+            await setupDb.SaveChangesAsync();
+        }
+
+        var statuses = await _engine.GetFileSyncStatusesAsync();
+        var item = statuses.Single(s => s.RelativePath == "/synced.txt");
+        Assert.Equal((int)FileState.Synced, item.State);
+        Assert.True(item.LocalExists);
+    }
+
+    [Fact]
+    public async Task GetFileSyncStatuses_CloudOnly文件_本地无副本()
+    {
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.Add(new RemoteSnapshot
+            {
+                Path = "/cloud-only.txt", Type = (int)FileType.File,
+                Size = 5, Version = 2, State = (int)FileState.CloudOnly, Hash = "h"
+            });
+            await setupDb.SaveChangesAsync();
+        }
+
+        var statuses = await _engine.GetFileSyncStatusesAsync();
+        var item = statuses.Single(s => s.RelativePath == "/cloud-only.txt");
+        Assert.Equal((int)FileState.CloudOnly, item.State);
+        Assert.False(item.LocalExists);
+    }
+
+    [Fact]
+    public async Task GetFileSyncStatuses_待上传队列项_状态为Uploading()
+    {
+        string filePath = Path.Combine(_syncRoot, "pending-upload.txt");
+        await File.WriteAllTextAsync(filePath, "pending");
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.SyncQueue.Add(new SyncQueueItem
+            {
+                FilePath = "/pending-upload.txt",
+                Operation = (int)SyncOperation.Upload,
+                Priority = (int)QueuePriority.High
+            });
+            await setupDb.SaveChangesAsync();
+        }
+
+        var statuses = await _engine.GetFileSyncStatusesAsync();
+        var item = statuses.Single(s => s.RelativePath == "/pending-upload.txt");
+        Assert.Equal((int)FileState.Uploading, item.State);
+    }
+
+    [Fact]
+    public async Task GetFileSyncStatuses_本地新文件_状态为Modified待上传()
+    {
+        string filePath = Path.Combine(_syncRoot, "local-only.txt");
+        await File.WriteAllTextAsync(filePath, "new local");
+
+        var statuses = await _engine.GetFileSyncStatusesAsync();
+        var item = statuses.Single(s => s.RelativePath == "/local-only.txt");
+        Assert.Equal((int)FileState.Modified, item.State);
+        Assert.True(item.LocalExists);
+    }
 }
 
 /// <summary>测试用 ClientDbContext 工厂。</summary>

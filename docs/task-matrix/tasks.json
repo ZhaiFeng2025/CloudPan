@@ -458,7 +458,7 @@
       "title": "EF Migrations 替换 EnsureCreated（服务端+客户端）",
       "dimension": "architecture",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 1,
       "findingId": "F-08",
       "dependsOn": [],
@@ -484,7 +484,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "EF Migrations 替换 EnsureCreated（F-08）：服务端与客户端各生成初始迁移，DatabaseInitializer 与客户端初始化改为 Migrate()，删除服务端手写建表兼容层。迁移 Up() 改造为 IF NOT EXISTS 幂等——全新库建全表；旧库（EnsureCreated 时代，无 __EFMigrationsHistory）已有表/索引跳过（数据保留）、缺失的表补建，替代原手写兼容层。\n改动文件：\n新增 CloudPan.Infrastructure/Migrations/{20260802155716_InitialCreate.cs（幂等 Up）, .Designer.cs, CloudPanDbContextModelSnapshot.cs}、CloudPan.Infrastructure/Persistence/CloudPanDbContextFactory.cs（dotnet ef 设计时工厂）；CloudPan.Infrastructure.csproj 加 Microsoft.EntityFrameworkCore.Design 8.0.22（PrivateAssets=all）；\n新增 CloudPan.Client.Core/Migrations/{20260802155743_InitialCreate.cs（幂等 Up）, .Designer.cs, ClientDbContextModelSnapshot.cs}、CloudPan.Client.Core/Models/ClientDbContextFactory.cs；CloudPan.Client.Core.csproj 加 Design 包；\n修改 CloudPan.Server.Host/Hosting/DatabaseInitializer.cs（EnsureCreated→Migrate()，删除 CREATE TABLE IF NOT EXISTS Device 兼容层）；\n修改 CloudPan.Client.UI/Program.cs（EnsureDbCreated 与损坏重建路径 EnsureCreated→Migrate()，新增 EnsureSyncQueueTargetPathColumn 旧库列兼容）；\n修改两端 DbContext 注释（EnsureCreated→Migrations）；\n新增 CloudPan.Tests/Infrastructure/MigrationsTests.cs（4 用例：服务端/客户端全新库 Migrate 建全表、服务端旧库升级数据保留且缺失表补建、客户端旧库 SyncQueue 缺 TargetPath 升级补列数据保留）。\n验证：dotnet ef migrations list 两项目均有初始迁移（20260802155716_InitialCreate / 20260802155743_InitialCreate，且 has-pending-model-changes 无差异）；dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 167/167 通过（原 163 + 新增 4）。真实旧库复制品实测（dotnet ef database update）：CloudPanSync/.cloudpan/server.db、~/CloudPan/.cloudpan/server.db、CloudPan_Client/.cloudpan/client.db 全部升级成功——表与 Device 数据保留（1/2 行）、__EFMigrationsHistory 记录迁移、客户端 SyncQueue 经运行时 PRAGMA+ALTER 补 TargetPath 列。\n旧库数据保护说明：幂等迁移保留 EnsureCreated 时代库的全部数据（Device 种子、版本记录等）；~/CloudPan 旧库遗留的误建 Devices 空表保留不删（无害）；客户端旧库 SyncQueue 缺 TargetPath 列（重命名操作字段）由运行时 EnsureSyncQueueTargetPathColumn 先 PRAGMA 判断后 ALTER 补列——SQLite ALTER ADD COLUMN 无 IF NOT EXISTS，无法在迁移内条件化，故列级兼容置于运行时（迁移负责表级幂等）。",
+      "note": "EF Migrations 替换 EnsureCreated（F-08）：服务端与客户端各生成初始迁移，DatabaseInitializer 与客户端初始化改为 Migrate()，删除服务端手写建表兼容层。迁移 Up() 改造为 IF NOT EXISTS 幂等——全新库建全表；旧库（EnsureCreated 时代，无 __EFMigrationsHistory）已有表/索引跳过（数据保留）、缺失的表补建，替代原手写兼容层。\n改动文件：\n新增 CloudPan.Infrastructure/Migrations/{20260802155716_InitialCreate.cs（幂等 Up）, .Designer.cs, CloudPanDbContextModelSnapshot.cs}、CloudPan.Infrastructure/Persistence/CloudPanDbContextFactory.cs（dotnet ef 设计时工厂）；CloudPan.Infrastructure.csproj 加 Microsoft.EntityFrameworkCore.Design 8.0.22（PrivateAssets=all）；\n新增 CloudPan.Client.Core/Migrations/{20260802155743_InitialCreate.cs（幂等 Up）, .Designer.cs, ClientDbContextModelSnapshot.cs}、CloudPan.Client.Core/Models/ClientDbContextFactory.cs；CloudPan.Client.Core.csproj 加 Design 包；\n修改 CloudPan.Server.Host/Hosting/DatabaseInitializer.cs（EnsureCreated→Migrate()，删除 CREATE TABLE IF NOT EXISTS Device 兼容层）；\n修改 CloudPan.Client.UI/Program.cs（EnsureDbCreated 与损坏重建路径 EnsureCreated→Migrate()，新增 EnsureSyncQueueTargetPathColumn 旧库列兼容）；\n修改两端 DbContext 注释（EnsureCreated→Migrations）；\n新增 CloudPan.Tests/Infrastructure/MigrationsTests.cs（4 用例：服务端/客户端全新库 Migrate 建全表、服务端旧库升级数据保留且缺失表补建、客户端旧库 SyncQueue 缺 TargetPath 升级补列数据保留）。\n验证：dotnet ef migrations list 两项目均有初始迁移（20260802155716_InitialCreate / 20260802155743_InitialCreate，且 has-pending-model-changes 无差异）；dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 167/167 通过（原 163 + 新增 4）。真实旧库复制品实测（dotnet ef database update）：CloudPanSync/.cloudpan/server.db、~/CloudPan/.cloudpan/server.db、CloudPan_Client/.cloudpan/client.db 全部升级成功——表与 Device 数据保留（1/2 行）、__EFMigrationsHistory 记录迁移、客户端 SyncQueue 经运行时 PRAGMA+ALTER 补 TargetPath 列。\n旧库数据保护说明：幂等迁移保留 EnsureCreated 时代库的全部数据（Device 种子、版本记录等）；~/CloudPan 旧库遗留的误建 Devices 空表保留不删（无害）；客户端旧库 SyncQueue 缺 TargetPath 列（重命名操作字段）由运行时 EnsureSyncQueueTargetPathColumn 先 PRAGMA 判断后 ALTER 补列——SQLite ALTER ADD COLUMN 无 IF NOT EXISTS，无法在迁移内条件化，故列级兼容置于运行时（迁移负责表级幂等）。\n【验收结论 2026-08-03】task-verifier 独立裁决：通过。验收标准①『dotnet ef migrations list 两项目均有初始迁移』实测：服务端（--project CloudPan.Infrastructure）列表显示 20260802155716_InitialCreate (Pending)；客户端（--project CloudPan.Client.Core）列表显示 20260802155743_InitialCreate (Pending)——两项目均有初始迁移，(Pending) 表示未连接实库未应用，属正常。验收标准②『dotnet test CloudPan.Tests -c Release』实测 167/167 通过（Failed 0 / Passed 167 / Skipped 0），其中 MigrationsTests 4 用例全过：服务端/客户端全新库 Migrate 建全表（含 __EFMigrationsHistory 与全部表）、服务端旧库（EnsureCreated 时代）升级后种子数据保留且缺失表补建、客户端旧库 SyncQueue 缺 TargetPath 列升级补列数据保留。独立核查改动真实性：DatabaseInitializer.cs:43 db.Database.Migrate()（取代 EnsureCreated 与手写建表兼容层，注释 ADR-5/T-008）；客户端 Program.cs EnsureDbCreated(:493) 与损坏重建路径(:292) 均走 Migrate()，EnsureSyncQueueTargetPathColumn 以 PRAGMA 判断+ALTER 幂等补列；两端迁移 Up() 均为 CREATE TABLE/INDEX IF NOT EXISTS 幂等建表（服务端 7 表+11 索引，客户端 3 表+1 索引）；两端 IDesignTimeDbContextFactory 设计时工厂存在（CloudPanDesignTimeDbContextFactory/ClientDesignTimeDbContextFactory）。requirements 全部落实：①服务端+客户端各补初始迁移 ②DatabaseInitializer 改 Migrate() 删除手写建表兼容层 ③旧库升级路径（幂等迁移保留数据+运行时补列）。两条自动标准全过，无手动项。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -492,7 +492,7 @@
       "title": "Windows 客户端每文件同步状态图标",
       "dimension": "ux",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 1,
       "findingId": "F-09",
       "dependsOn": [],
@@ -511,8 +511,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "判定：当前 MainWindow 为状态+日志形态，无 T-013 的完整文件浏览视图，但每文件状态列表可在现有界面独立落地（不预占 T-013 面包屑/网格/搜索形态），故选择实现而非阻塞。\n实现：MainWindow 新增「同步状态」页签（ListView 状态图标+文件名，图标/颜色双通道），欢迎面板移入「最近活动」页签内避免遮住页签栏；每文件状态由 Client.Core SyncEngine.GetFileSyncStatusesAsync 查询（快照 FileState + 待处理队列瞬态 + 本地存在性），冲突(!)/错误(✗)由 UI 本地列表叠加覆盖，其余按 FileState 枚举映射 ✓(Synced)/↻(Uploading·Downloading·Modified·Deleting)/☁(CloudOnly)/!(Conflict)。\n改动文件：新增 CloudPan.Client.Core/Services/SyncEngine.Status.cs（FileSyncStatusItem + GetFileSyncStatusesAsync）；修改 CloudPan.Client.UI/UI/MainWindow.cs（内容区改页签容器 + 状态列表 + 5s 定时刷新，Shown 启动/隐藏托盘停止，async void 顶层 try-catch 防异常丢失）；CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 4 用例：Synced/CloudOnly/Uploading/本地新文件 Modified）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 171/171 通过（原 167 + 新增 4）；架构测试 9/9 通过。验收标准为手动（同步目录文件显示对应状态图标），由验收者实机验证。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-010",

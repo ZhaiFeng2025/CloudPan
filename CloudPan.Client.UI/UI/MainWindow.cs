@@ -28,6 +28,10 @@ public class MainWindow : Form
     private Panel _welcomePanel = null!;             // 空状态欢迎界面/首次同步引导
     private Label _errorCountLabel = null!;          // 状态栏右侧错误计数
     private FadePanel _fadeOverlay = null!;          // 淡入淡出遮罩
+    private TabControl _contentTabs = null!;         // 内容区页签（同步状态/最近活动）
+    private ListView _statusList = null!;            // 每文件同步状态列表（T-009）
+    private System.Windows.Forms.Timer _statusRefreshTimer = null!; // 状态列表定时刷新
+    private bool _statusRefreshBusy;                 // 防重入：状态刷新进行中跳过本次定时触发
 
     // 淡入淡出过渡
     private System.Windows.Forms.Timer _fadeTimer = null!;
@@ -98,6 +102,10 @@ public class MainWindow : Form
 
         BuildLayout();
         BindEvents();
+
+        // 每文件同步状态列表定时刷新（T-009）；5 秒周期覆盖传输/错误/冲突状态变化
+        _statusRefreshTimer = new System.Windows.Forms.Timer { Interval = 5000 };
+        _statusRefreshTimer.Tick += StatusRefreshTimer_Tick;
     }
 
     // ================================================================
@@ -299,8 +307,27 @@ public class MainWindow : Form
         activityPanel.Controls.Add(activityLabel);
         activityPanel.Controls.Add(_logFilterComboBox);
 
-        // ── 统一日志列表 ──
-        Panel logContainer = new Panel { Dock = DockStyle.Fill };
+        // ── 内容区页签：同步状态（每文件图标，T-009）+ 最近活动（日志） ──
+        _contentTabs = new TabControl { Dock = DockStyle.Fill };
+
+        // 同步状态页：每文件状态列表（状态图标 + 文件名，图标/颜色双通道标识 FileState）
+        _statusList = new ListView
+        {
+            Dock = DockStyle.Fill,
+            View = View.Details,
+            FullRowSelect = true,
+            HideSelection = false,
+            BorderStyle = BorderStyle.None,
+            BackColor = CloudPanColors.BackgroundLight,
+            Font = new Font(baseFont.FontFamily, CloudPanFonts.SizeBody),
+        };
+        _statusList.Columns.Add("状态", 70);
+        _statusList.Columns.Add("文件", 480);
+        TabPage statusTab = new TabPage("同步状态") { BackColor = CloudPanColors.BackgroundLight };
+        statusTab.Controls.Add(_statusList);
+
+        // 最近活动页：原有日志过滤 + 统一日志列表
+        TabPage logTab = new TabPage("最近活动") { BackColor = CloudPanColors.BackgroundLight };
 
         _logList = new ListBox
         {
@@ -317,8 +344,11 @@ public class MainWindow : Form
         _logList.Items.Add("正在连接服务端，首次连接可能需要数秒...");
 
         activityPanel.Dock = DockStyle.Top;
-        logContainer.Controls.Add(_logList);
-        logContainer.Controls.Add(activityPanel);
+        logTab.Controls.Add(_logList);
+        logTab.Controls.Add(activityPanel);
+
+        _contentTabs.TabPages.Add(statusTab);
+        _contentTabs.TabPages.Add(logTab);
 
         // ── 空状态欢迎面板（覆盖日志列表上方，空闲/首次同步时显示） ──
         _welcomePanel = new Panel
@@ -379,6 +409,10 @@ public class MainWindow : Form
         };
         _welcomePanel.Controls.Add(fileCountLabel);
 
+        // 欢迎面板置于「最近活动」页签内（覆盖该页的日志列表，空闲/首次同步时显示）。
+        // 不覆盖整个窗体，避免遮住页签栏导致「同步状态」页无法访问（T-009）。
+        logTab.Controls.Add(_welcomePanel);
+
         // ── 淡入淡出遮罩（覆盖内容区，过渡期间可见） ──
         _fadeOverlay = new FadePanel
         {
@@ -387,10 +421,9 @@ public class MainWindow : Form
         };
 
         // ── 控件入窗体（z-order 从下到上） ──
-        Controls.Add(logContainer);   // 0: 日志（最底层）
-        Controls.Add(_welcomePanel);  // 1: 欢迎面板
-        Controls.Add(_fadeOverlay);   // 2: 淡入淡出遮罩
-        Controls.Add(statusTable);    // 3: 状态栏
+        Controls.Add(_contentTabs);   // 0: 内容区页签（同步状态/最近活动，最底层）
+        Controls.Add(_fadeOverlay);   // 1: 淡入淡出遮罩
+        Controls.Add(statusTable);    // 2: 状态栏
 
         // ── 状态栏与内容区之间 1px 分隔线 ──
         Controls.Add(new Panel { Dock = DockStyle.Top, Height = 1, BackColor = CloudPanColors.BorderLight });
@@ -407,6 +440,7 @@ public class MainWindow : Form
         _engine.ErrorOccurred += OnErrorOccurred;
         _engine.ConflictDetected += OnConflictDetected;
         FormClosing += OnFormClosing;
+        Shown += OnShown;
     }
 
     // ================================================================
@@ -1113,6 +1147,102 @@ public class MainWindow : Form
     }
 
     // ================================================================
+    // 每文件同步状态列表（T-009）
+    // ================================================================
+
+    /// <summary>窗口首次显示/再次显示时启动状态列表刷新并立即刷新一次。</summary>
+    private void OnShown(object? sender, EventArgs e)
+    {
+        _statusRefreshTimer.Start();
+        StatusRefreshTimer_Tick(sender, e);
+    }
+
+    /// <summary>定时刷新每文件同步状态（UI 定时器回调，async void + 顶层 try-catch 符合 CLAUDE.md 7.2）。</summary>
+    private async void StatusRefreshTimer_Tick(object? sender, EventArgs e)
+    {
+        if (_statusRefreshBusy)
+        {
+            return; // 上一次刷新仍在进行，跳过本次定时触发（防重入）
+        }
+
+        _statusRefreshBusy = true;
+        try
+        {
+            await RefreshFileStatusAsync();
+        }
+        catch (Exception ex)
+        {
+            // 刷新失败不影响主界面，下次定时器触发自动重试
+            System.Diagnostics.Debug.WriteLine($"刷新每文件状态失败: {ex.Message}");
+        }
+        finally
+        {
+            _statusRefreshBusy = false;
+        }
+    }
+
+    /// <summary>从 SyncEngine 查询每文件同步状态并渲染到列表（数据查询在 Client.Core，UI 只渲染）。</summary>
+    private async Task RefreshFileStatusAsync()
+    {
+        IReadOnlyList<FileSyncStatusItem> items = await _engine.GetFileSyncStatusesAsync();
+        if (InvokeRequired)
+        {
+            Invoke(() => ApplyFileStatuses(items));
+            return;
+        }
+        ApplyFileStatuses(items);
+    }
+
+    /// <summary>将每文件状态写入列表：状态图标（✓↻!✗☁）+ 状态色双通道。</summary>
+    private void ApplyFileStatuses(IReadOnlyList<FileSyncStatusItem> items)
+    {
+        _statusList.BeginUpdate();
+        try
+        {
+            _statusList.Items.Clear();
+            foreach (var item in items)
+            {
+                (string icon, Color color) = ResolveDisplayState(item);
+                string name = item.IsDirectory ? item.RelativePath + "/" : item.RelativePath;
+                ListViewItem lvi = new ListViewItem(icon);
+                lvi.SubItems.Add(name);
+                lvi.ForeColor = color;
+                _statusList.Items.Add(lvi);
+            }
+        }
+        finally
+        {
+            _statusList.EndUpdate();
+        }
+    }
+
+    /// <summary>将每文件状态映射为（图标, 颜色）双通道。错误/冲突覆盖优先级最高（瞬时状态优先可见），其余按 FileState 枚举。</summary>
+    private (string Icon, Color Color) ResolveDisplayState(FileSyncStatusItem item)
+    {
+        if (_errors.Any(e => string.Equals(e.FilePath, item.RelativePath, StringComparison.OrdinalIgnoreCase)))
+        {
+            return ("✗", CloudPanColors.ErrorRed);
+        }
+
+        if (_conflicts.Any(c => string.Equals(c.Info.RelativePath, item.RelativePath, StringComparison.OrdinalIgnoreCase)))
+        {
+            return ("!", CloudPanColors.WarningOrange);
+        }
+
+        return item.State switch
+        {
+            (int)FileState.Synced => ("✓", CloudPanColors.SuccessGreen),
+            (int)FileState.Uploading => ("↻", CloudPanColors.AccentBlue),
+            (int)FileState.Downloading => ("↻", CloudPanColors.AccentBlue),
+            (int)FileState.Modified => ("↻", CloudPanColors.AccentBlue),
+            (int)FileState.Deleting => ("↻", CloudPanColors.TextMuted),
+            (int)FileState.CloudOnly => ("☁", CloudPanColors.TextMuted),
+            (int)FileState.Conflict => ("!", CloudPanColors.WarningOrange),
+            _ => ("✓", CloudPanColors.SuccessGreen)
+        };
+    }
+
+    // ================================================================
     // 淡入淡出过渡
     // ================================================================
 
@@ -1581,6 +1711,7 @@ public class MainWindow : Form
 
             e.Cancel = true;
             Hide();
+            _statusRefreshTimer.Stop(); // 隐藏到托盘后停止状态列表刷新（Shown 时重启）
             TrayAppContext.TrayIcon?.ShowBalloonTip(3000, "CloudPan",
                 "仍在后台运行，双击托盘图标重新打开。", ToolTipIcon.Info);
         }
