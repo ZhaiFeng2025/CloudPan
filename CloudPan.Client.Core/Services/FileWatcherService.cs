@@ -65,8 +65,8 @@ public class FileWatcherService : IDisposable
             NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.CreationTime,
             EnableRaisingEvents = true
         };
-        _ignoreWatcher.Changed += (_, _) => { _logger.LogInformation(".syncignore 已变更"); ReloadIgnorePatterns(); };
-        _ignoreWatcher.Created += (_, _) => ReloadIgnorePatterns();
+        _ignoreWatcher.Changed += OnIgnoreFileChanged;
+        _ignoreWatcher.Created += OnIgnoreFileChanged;
 
         // 兜底通道：5 分钟全量扫描（同步回调避免 async void 崩溃风险）
         _scanTimer = new System.Threading.Timer(_ =>
@@ -155,6 +155,13 @@ public class FileWatcherService : IDisposable
         {
             _logger.LogError($"重命名事件处理异常: {ex.Message}");
         }
+    }
+
+    /// <summary>.syncignore 文件变更时重载规则。</summary>
+    private void OnIgnoreFileChanged(object? sender, FileSystemEventArgs e)
+    {
+        _logger.LogInformation(".syncignore 已变更");
+        ReloadIgnorePatterns();
     }
 
     private void OnWatcherError(object sender, ErrorEventArgs e)

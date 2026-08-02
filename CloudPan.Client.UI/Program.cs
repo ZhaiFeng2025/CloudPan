@@ -25,25 +25,9 @@ public static class Program
         ApplicationConfiguration.Initialize();
 
         // 0. 全局异常处理（防止未处理异常静默崩溃进程）
-        Application.ThreadException += (_, e) =>
-        {
-            try { File.AppendAllText(GetCrashLogPath(), $"[UI线程异常] {DateTime.UtcNow:O}\n{e.Exception}\n\n"); }
-            catch { /* 最后一道防线——写文件也失败则放弃 */ }
-            MessageBox.Show($"CloudPan 遇到未处理的错误，即将退出。\n\n{e.Exception.Message}",
-                "CloudPan — 错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            Environment.Exit(1);
-        };
-        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
-        {
-            try { File.AppendAllText(GetCrashLogPath(), $"[未处理异常] {DateTime.UtcNow:O}\n{e.ExceptionObject}\n\n"); }
-            catch { }
-        };
-        TaskScheduler.UnobservedTaskException += (_, e) =>
-        {
-            try { File.AppendAllText(GetCrashLogPath(), $"[未观察Task异常] {DateTime.UtcNow:O}\n{e.Exception}\n\n"); }
-            catch { }
-            e.SetObserved(); // 防止进程崩溃
-        };
+        Application.ThreadException += OnThreadException;
+        AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
+        TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
 
         // 1. 解析命令行参数 / 读取保存的配置
         //   CloudPan.Client.exe [serverUrl] [syncRoot] [token]
@@ -453,14 +437,47 @@ public static class Program
         var wsClient = provider.GetRequiredService<WebSocketClient>();
 
         // 运行时连接状态追踪（同步 IsOffline 标志，供托盘和 UI 读取）
-        wsClient.OnConnected += () => IsOffline = false;
-        wsClient.OnDisconnected += () => IsOffline = true;
+        wsClient.OnConnected += OnWsConnected;
+        wsClient.OnDisconnected += OnWsDisconnected;
 
         // 关闭初始化进度提示，进入托盘常驻
         initForm.Close();
 
         Application.Run(new TrayAppContext(engine, wsClient));
     }
+
+    // ===== 全局异常处理器（具名方法，CP301：可退订） =====
+
+    /// <summary>UI 线程未处理异常：记录崩溃日志并退出。</summary>
+    private static void OnThreadException(object sender, System.Threading.ThreadExceptionEventArgs e)
+    {
+        try { File.AppendAllText(GetCrashLogPath(), $"[UI线程异常] {DateTime.UtcNow:O}\n{e.Exception}\n\n"); }
+        catch { /* 最后一道防线——写文件也失败则放弃 */ }
+        MessageBox.Show($"CloudPan 遇到未处理的错误，即将退出。\n\n{e.Exception.Message}",
+            "CloudPan — 错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        Environment.Exit(1);
+    }
+
+    /// <summary>AppDomain 未处理异常：记录崩溃日志。</summary>
+    private static void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)
+    {
+        try { File.AppendAllText(GetCrashLogPath(), $"[未处理异常] {DateTime.UtcNow:O}\n{e.ExceptionObject}\n\n"); }
+        catch { }
+    }
+
+    /// <summary>未观察 Task 异常：记录并标记已观察，防止进程崩溃。</summary>
+    private static void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
+    {
+        try { File.AppendAllText(GetCrashLogPath(), $"[未观察Task异常] {DateTime.UtcNow:O}\n{e.Exception}\n\n"); }
+        catch { }
+        e.SetObserved(); // 防止进程崩溃
+    }
+
+    /// <summary>WebSocket 连接建立：清除离线标志。</summary>
+    private static void OnWsConnected() => IsOffline = false;
+
+    /// <summary>WebSocket 断开：设置离线标志。</summary>
+    private static void OnWsDisconnected() => IsOffline = true;
 
     /// <summary>崩溃日志路径（%LocalAppData%\CloudPan\crash.log），用于全局异常处理器记录。</summary>
     private static string GetCrashLogPath()

@@ -197,13 +197,6 @@ public class WebSocketClient : IDisposable
         }
     }
 
-    /// <summary>重置退避计数器并触发立即重连。可从 UI 线程调用。</summary>
-    public void ImmediateReconnect()
-    {
-        _attempt = 0;
-        try { _reconnectWakeup.Release(); } catch (SemaphoreFullException ex) { _logger.LogWarning(ex, "ImmediateReconnect 信号量已满，无需重复释放"); }
-    }
-
     // ============================================================
     // 接收循环
     // ============================================================

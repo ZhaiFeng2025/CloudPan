@@ -1,9 +1,11 @@
 using System.Security.Principal;
 using System.ServiceProcess;
 using CloudPan.Server.Data;
+using CloudPan.Server.Services;
 using CloudPan.Shared;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 
@@ -107,9 +109,13 @@ public static class TrayAppRunner
             serverFaulted = true;
         }
 
-        var dbFactory = app.Services.GetRequiredService<IDbContextFactory<CloudPanDbContext>>();
-        ServerWindow window = new ServerWindow(dbFactory);
-        ServerTrayApp tray = new ServerTrayApp(app, window);
+        // 启动期设置解析（与服务端 Program.cs 同链，保证窗口/托盘显示与监听一致）
+        (string syncRoot, int effectivePort) = StartupSettingsResolver.Resolve(
+            app.Configuration.GetValue<string>("SyncRoot"),
+            app.Configuration.GetValue<int?>("Port"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "CloudPan"));
+        ServerWindow window = new ServerWindow(app.Services, effectivePort, syncRoot);
+        ServerTrayApp tray = new ServerTrayApp(app, window, effectivePort);
 
         if (serverFaulted)
         {
@@ -118,7 +124,7 @@ public static class TrayAppRunner
             if (ex.Message.Contains("address already in use", StringComparison.OrdinalIgnoreCase)
                 || ex.Message.Contains("Access denied", StringComparison.OrdinalIgnoreCase))
             {
-                window.AddLog($"端口 {SpecPorts.HttpPort} 被占用，请检查是否有其他 CloudPan 实例或程序正在使用该端口。");
+                window.AddLog($"端口 {effectivePort} 被占用，请检查是否有其他 CloudPan 实例或程序正在使用该端口。");
             }
             else
             {
@@ -166,7 +172,8 @@ public static class TrayAppRunner
         Log.CloseAndFlush();
     }
 
-    private static bool IsServiceInstalled(string serviceName)
+    /// <summary>检查 Windows 服务是否已安装（供设置页"重启服务"分支复用）。</summary>
+    public static bool IsServiceInstalled(string serviceName)
     {
         try
         {

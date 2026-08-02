@@ -1,9 +1,6 @@
 [**/Generated/**]
 generated_code = true
 
-[**/CloudPan.Client/UI/**]
-dotnet_diagnostic.CP001.severity = none
-
 [*.cs]
 # CP001: 错误码字面量 → error
 dotnet_diagnostic.CP001.severity = error

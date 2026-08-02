@@ -2,6 +2,24 @@
 
 本文件记录 CloudPan 各版本的变更。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/) 约定。
 
+## [1.1.0] - 2026-08-02
+
+服务端设置子系统 v1——管理窗口新增"设置"页签，三个设置项全部可写。
+
+### 新增
+
+- **设置页**：管理窗口加"设置"页签（网络/存储/安全三区），托盘菜单加"设置"入口
+- **Token 轮换**：立即生效；三处同步（DB 哈希权威源 / token.txt 尽力而为 / 内存缓存立即失效），轮换后旧 Token 即刻失效；可选断开所有已连接设备
+- **端口可配置**：`server-settings.json`（exe 目录）持久化，重启生效；CLI `--Port` 优先；UDP 局域网发现广播 URL 联动新端口
+- **同步根目录可改**：写入设置文件，重启生效；旧目录 `.cloudpan` 不迁移（含强警告）；检测旧安装 binPath 残留 `--SyncRoot` 并提示重装迁移
+- **契约驱动**：`shared-spec.json` 新增顶层 `settings` 段，CodeGen 生成 `Settings.g.cs`；`version` 升至 1.1.0
+
+### 缺陷修复
+
+- 托盘"显示/复制 Token"服务重启后失效（Token 静态字段仅首次启动赋值）——回退读 token.txt
+- `SecretStore` Token 文件 ACL 仅授 ReadData/WriteData，同步句柄读取被拒（Access denied）——改为当前用户 FullControl（安全语义不变）
+- 测试修复：`FileTreeResponse.Data` 迁移为数组后 `FileIndexServiceTests` 使用 `.Count` 编译失败——改 `.Length`
+
 ## [1.0.0] - 2026-08-02
 
 自托管家庭文件同步系统 v1.0.0 正式发布版。

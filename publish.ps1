@@ -101,7 +101,7 @@ chcp 65001 >nul
 echo.
 echo   CloudPan Client - Install
 echo.
-set /p SERVER="Server URL (https://x.x.x.x:8443): "
+set /p SERVER="Server URL (http://x.x.x.x:8443): "
 set /p FOLDER="Sync folder [%USERPROFILE%\CloudPan]: "
 if "%FOLDER%"=="" set FOLDER=%USERPROFILE%\CloudPan
 set /p TOKEN="Family Token: "
@@ -160,7 +160,7 @@ if (Test-Path ".\gradlew.bat") {
 }
 Pop-Location
 
-# === MSIX Package ===
+# === Setup Package（自解压安装包，非 MSIX） ===
 $msixDir = "$dist\CloudPan-Setup"
 New-Item -ItemType Directory -Path $msixDir -Force | Out-Null
 Copy-Item "$dist\Client\CloudPan.Client.exe" $msixDir -Force
@@ -197,7 +197,7 @@ echo     1. 在台式机上以管理员权限运行 install.bat
 echo     2. 在台式机上找到备份的 Token 文件：
 echo        CloudPan 同步目录下 .cloudpan\token.txt
 echo     3. 双击本机桌面 CloudPan 图标
-echo     4. 输入台式机的 IP 地址（如 https://192.168.1.100:8443）
+echo     4. 输入台式机的 IP 地址（如 http://192.168.1.100:8443）
 echo        和 Token 完成配置
 echo   ========================================
 echo.
@@ -205,7 +205,7 @@ echo   Double-click desktop icon to start.
 pause
 "@
 
-Write-Host "  MSIX/Setup: OK" -ForegroundColor Green
+Write-Host "  Setup: OK" -ForegroundColor Green
 
 # === Summary ===
 Write-Host "`n========================================" -ForegroundColor Green
@@ -221,5 +221,5 @@ Get-ChildItem $dist -Directory | ForEach-Object {
 
 Write-Host "`n  Next steps:" -ForegroundColor Yellow
 Write-Host "  1. Copy Server folder to desktop PC, run install.bat as Admin" -ForegroundColor White
-Write-Host "  2. Run SETUP.bat from Client-Setup folder (one-click install)" -ForegroundColor White
+Write-Host "  2. Run SETUP.bat from CloudPan-Setup folder (one-click install)" -ForegroundColor White
 Write-Host "  3. Copy CloudPan.apk to Android phone" -ForegroundColor White

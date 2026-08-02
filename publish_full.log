@@ -1,0 +1,80 @@
+========================================
+  CloudPan Build Script
+========================================
+
+[1/3] Building Server...
+  Determining projects to restore...
+  Restored E:\XiaoFeng\云盘\CloudPan.Server.Core\CloudPan.Server.Core.csproj (in 360 ms).
+  Restored E:\XiaoFeng\云盘\CloudPan.Infrastructure\CloudPan.Infrastructure.csproj (in 361 ms).
+  Restored E:\XiaoFeng\云盘\CloudPan.Analyzers\CloudPan.Analyzers.csproj (in 356 ms).
+  Restored E:\XiaoFeng\云盘\CloudPan.Contract\CloudPan.Contract.csproj (in 354 ms).
+  Restored E:\XiaoFeng\云盘\CloudPan.Server.UI\CloudPan.Server.UI.csproj (in 363 ms).
+  Restored E:\XiaoFeng\云盘\CloudPan.Server.Host\CloudPan.Server.Host.csproj (in 413 ms).
+  CloudPan.Analyzers -> E:\XiaoFeng\云盘\CloudPan.Analyzers\bin\Release\netstandard2.0\CloudPan.Analyzers.dll
+  CloudPan.Contract -> E:\XiaoFeng\云盘\CloudPan.Contract\bin\Release\net8.0\CloudPan.Contract.dll
+  CloudPan.Infrastructure -> E:\XiaoFeng\云盘\CloudPan.Infrastructure\bin\Release\net8.0-windows\CloudPan.Infrastructure.dll
+  CloudPan.Server.Core -> E:\XiaoFeng\云盘\CloudPan.Server.Core\bin\Release\net8.0-windows\CloudPan.Server.Core.dll
+E:\XiaoFeng\云盘\CloudPan.Server.UI\ServerWindow.cs(142,36): warning CP301: 事件 Resize 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Server.UI\CloudPan.Server.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Server.UI\ServerWindow.cs(194,31): warning CP301: 事件 Click 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Server.UI\CloudPan.Server.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Server.UI\ServerWindow.cs(213,31): warning CP301: 事件 Tick 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Server.UI\CloudPan.Server.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Server.UI\ServerWindow.cs(219,24): warning CP301: 事件 FormClosing 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Server.UI\CloudPan.Server.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Server.UI\ServerWindow.cs(236,19): warning CP301: 事件 Resize 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Server.UI\CloudPan.Server.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Server.UI\ServerWindow.cs(246,18): warning CP301: 事件 Shown 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Server.UI\CloudPan.Server.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Server.UI\ServerWindow.cs(318,31): warning CP301: 事件 HandleCreated 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Server.UI\CloudPan.Server.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Server.UI\ServerWindow.cs(319,24): warning CP301: 事件 Resize 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Server.UI\CloudPan.Server.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Server.UI\ServerWindow.cs(350,29): warning CP301: 事件 SizeChanged 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Server.UI\CloudPan.Server.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Server.UI\ServerWindow.cs(351,31): warning CP301: 事件 HandleCreated 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Server.UI\CloudPan.Server.UI.csproj]
+  CloudPan.Server.UI -> E:\XiaoFeng\云盘\CloudPan.Server.UI\bin\Release\net8.0-windows\win-x64\CloudPan.Server.UI.dll
+  CloudPan.Server.Host -> E:\XiaoFeng\云盘\CloudPan.Server.Host\bin\Release\net8.0-windows\win-x64\CloudPan.Server.dll
+  CloudPan.Server.Host -> E:\XiaoFeng\云盘\publish\win-x64\Server\
+  Server: OK
+
+[2/3] Building Client...
+  Determining projects to restore...
+  Restored E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj (in 396 ms).
+  Restored E:\XiaoFeng\云盘\CloudPan.Client.Core\CloudPan.Client.Core.csproj (in 396 ms).
+  3 of 5 projects are up-to-date for restore.
+  CloudPan.Analyzers -> E:\XiaoFeng\云盘\CloudPan.Analyzers\bin\Release\netstandard2.0\CloudPan.Analyzers.dll
+  CloudPan.Contract -> E:\XiaoFeng\云盘\CloudPan.Contract\bin\Release\net8.0\CloudPan.Contract.dll
+  CloudPan.Infrastructure -> E:\XiaoFeng\云盘\CloudPan.Infrastructure\bin\Release\net8.0-windows\CloudPan.Infrastructure.dll
+  CloudPan.Client.Core -> E:\XiaoFeng\云盘\CloudPan.Client.Core\bin\Release\net8.0-windows\CloudPan.Client.Core.dll
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\SetupForm.cs(89,32): error CS0103: The name 'SearchButton_Click' does not exist in the current context [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\SetupForm.cs(100,34): error CS0103: The name 'SearchAnimTimer_Tick' does not exist in the current context [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\SetupForm.cs(137,32): error CS0103: The name 'ServerUrlBox_Leave' does not exist in the current context [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\SetupForm.cs(138,31): error CS0103: The name 'SyncRootBox_Leave' does not exist in the current context [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\SetupForm.cs(139,28): error CS0103: The name 'TokenBox_Leave' does not exist in the current context [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\SetupForm.cs(142,38): error CS0103: The name 'ServerUrlBox_TextChanged' does not exist in the current context [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\SetupForm.cs(145,34): error CS0103: The name 'TokenBox_TextChanged' does not exist in the current context [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\SetupForm.cs(417,28): error CS0103: The name 'CancelBtn_Click' does not exist in the current context [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\TrayAppContext.cs(56,17): error CS0103: The name 'syncCtx' does not exist in the current context [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\TrayAppContext.cs(74,17): error CS0103: The name 'syncCtx' does not exist in the current context [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\SetupForm.cs(46,18): error CS0414: The field 'SetupForm._searchFound' is assigned but its value is never used [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\SetupForm.cs(44,17): error CS0414: The field 'SetupForm._searchAnimFrame' is assigned but its value is never used [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\SettingsForm.cs(429,27): warning CP301: 事件 Click 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\SettingsForm.cs(447,28): warning CP301: 事件 Click 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\SettingsForm.cs(349,26): warning CP301: 事件 Click 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\MainWindow.cs(178,35): warning CP301: 事件 Click 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\MainWindow.cs(191,36): warning CP301: 事件 Click 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\MainWindow.cs(206,31): warning CP301: 事件 Click 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\MainWindow.cs(220,34): warning CP301: 事件 Click 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\MainWindow.cs(236,31): warning CP301: 事件 Click 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\MainWindow.cs(297,52): warning CP301: 事件 SelectedIndexChanged 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\MainWindow.cs(825,30): warning CP301: 事件 MouseDown 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\MainWindow.cs(849,27): warning CP301: 事件 Click 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\MainWindow.cs(862,30): warning CP301: 事件 Click 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\MainWindow.cs(877,32): warning CP301: 事件 Click 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\MainWindow.cs(1283,29): warning CP301: 事件 Paint 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\MainWindow.cs(1307,30): warning CP301: 事件 Paint 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\MainWindow.cs(1347,27): warning CP301: 事件 Click 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\MainWindow.cs(1361,28): warning CP301: 事件 Click 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\MainWindow.cs(1375,26): warning CP301: 事件 Click 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\MainWindow.cs(1455,29): warning CP301: 事件 Click 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+E:\XiaoFeng\云盘\CloudPan.Client.UI\UI\MainWindow.cs(1485,27): warning CP301: 事件 Click 使用匿名 lambda 订阅，无法退订。建议改为具名方法以便在 Dispose() 中取消订阅 (https://github.com/cloudpan/spec) [E:\XiaoFeng\云盘\CloudPan.Client.UI\CloudPan.Client.UI.csproj]
+Set-Content : δ���ҵ�·����E:\XiaoFeng\����\publish\win-x64\Client\install.bat����һ���֡�
+����λ�� E:\XiaoFeng\����\publish.ps1:97 �ַ�: 1
++ Set-Content -Path "$dist\Client\install.bat" -Value @"
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (E:\XiaoFeng\����\...ent\install.bat:String) [Set-Content], DirectoryNotF
+o    undException
+    + FullyQualifiedErrorId : GetContentWriterDirectoryNotFoundError,Microsoft.PowerShell.Commands.SetContentCommand
+ 

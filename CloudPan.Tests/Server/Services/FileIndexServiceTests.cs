@@ -135,13 +135,13 @@ public class FileIndexServiceTests : Infrastructure.TestBase
 
         // 分页大小 2
         var page1 = await index.GetFileTreeAsync(sinceVersion: null, subPath: null, limit: 2);
-        Assert.Equal(2, page1.Data.Count);
+        Assert.Equal(2, page1.Data.Length);
         Assert.True(page1.HasMore);
         Assert.NotNull(page1.NextCursor);
 
         // 第二页
         var page2 = await index.GetFileTreeAsync(sinceVersion: null, subPath: null, limit: 2, cursor: page1.NextCursor);
-        Assert.Equal(2, page2.Data.Count);
+        Assert.Equal(2, page2.Data.Length);
 
         // 最后一页
         var page3 = await index.GetFileTreeAsync(sinceVersion: null, subPath: null, limit: 2, cursor: page2.NextCursor);
@@ -163,7 +163,7 @@ public class FileIndexServiceTests : Infrastructure.TestBase
             DateTime.UtcNow.ToString("O"), 10);
 
         var result = await index.GetFileTreeAsync(sinceVersion: 4);
-        Assert.Equal(2, result.Data.Count); // v5 和 v10
+        Assert.Equal(2, result.Data.Length); // v5 和 v10
         Assert.Contains(result.Data, d => d.Path == "/v5.txt");
         Assert.Contains(result.Data, d => d.Path == "/v10.txt");
     }

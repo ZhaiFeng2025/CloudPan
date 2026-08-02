@@ -56,13 +56,7 @@ public partial class FilesController : ControllerBase
         [FromQuery] string? cursor = null)
     {
         var result = await _index.GetFileTreeAsync(sinceVersion, path, Math.Min(limit, 10000), cursor);
-        return Ok(new
-        {
-            data = result.Data,
-            nextCursor = result.NextCursor,
-            hasMore = result.HasMore,
-            maxVersion = result.MaxVersion
-        });
+        return Ok(result);
     }
 
     /// <summary>

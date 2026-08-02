@@ -21,7 +21,7 @@ if not exist "%EXE%" (
     echo     1. 运行 publish.ps1（推荐）
     echo        ^> powershell -ExecutionPolicy Bypass -File publish.ps1
     echo.
-    echo     2. 或在 Visual Studio 中右键 CloudPan.Client ^> 发布
+    echo     2. 或在 Visual Studio 中右键 CloudPan.Client.UI ^> 发布
     echo.
     pause
     exit /b 1

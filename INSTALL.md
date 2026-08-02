@@ -13,7 +13,7 @@
 ```bash
 git clone https://github.com/cloudpan/cloudpan.git
 cd cloudpan
-dotnet run --project CloudPan.Server
+dotnet run --project CloudPan.Server.Host
 ```
 
 ### 方式二：发布版安装
@@ -22,7 +22,7 @@ dotnet run --project CloudPan.Server
 
 1. 编译发布：
 ```powershell
-dotnet publish CloudPan.Server -c Release -o publish/server
+dotnet publish CloudPan.Server.Host -c Release -o publish/server
 ```
 
 2. 以管理员身份运行安装脚本：
@@ -44,7 +44,7 @@ install-service.bat
 
 1. 编译发布：
 ```powershell
-dotnet publish CloudPan.Client -c Release -o publish/client
+dotnet publish CloudPan.Client.UI -c Release -o publish/client
 ```
 
 2. 直接运行 `CloudPan.Client.exe`，或在命令行指定参数：
@@ -56,8 +56,8 @@ CloudPan.Client.exe http://192.168.1.100:8443 C:\CloudPan <token>
 
 如需独立部署（无需安装 .NET Runtime）：
 ```powershell
-dotnet publish CloudPan.Server -c Release -o publish/server --self-contained true -r win-x64
-dotnet publish CloudPan.Client -c Release -o publish/client --self-contained true -r win-x64
+dotnet publish CloudPan.Server.Host -c Release -o publish/server --self-contained true -r win-x64
+dotnet publish CloudPan.Client.UI -c Release -o publish/client --self-contained true -r win-x64
 ```
 > 注意：独立部署包体积约 80MB。
 
@@ -93,6 +93,7 @@ Windows 防火墙规则在 `install-service.bat` 中自动添加。其他防火�
 | 配置项 | 路径 |
 |---|---|
 | 服务端数据库 | `{SyncRoot}\.cloudpan\server.db` |
+| 服务端设置 | 服务端 exe 目录的 `server-settings.json`（端口/同步根目录） |
 | 客户端数据库 | `{SyncRoot}\.cloudpan\client.db` |
 | 服务端日志 | `{SyncRoot}\.cloudpan\logs\server-*.log` |
 | 客户端配置 | `%LOCALAPPDATA%\CloudPan\client-config.json` |
@@ -122,4 +123,7 @@ Token 保存在服务端同步目录的 `.cloudpan\token.txt` 文件中。
 4. 检查 .NET 8 Runtime 是否已安装
 
 ### 端口被占用
-默认端口 8443 可能被其他程序占用。修改 `shared-spec.json → config.httpPort`，重跑 `dotnet run --project CloudPan.CodeGen`，然后重新编译。
+默认端口 8443 可能被其他程序占用。改端口有三种方式（优先级从高到低）：
+1. **设置页**（推荐）：管理窗口「设置」页修改端口，重启服务生效；或手动编辑服务端 exe 目录的 `server-settings.json`。
+2. **启动参数**：以 `--Port 9443` 启动（命令行优先于设置文件）。
+3. **修改默认值**：改 `shared-spec.json → config.httpPort`，重跑 `dotnet run --project CloudPan.CodeGen`，重新编译。

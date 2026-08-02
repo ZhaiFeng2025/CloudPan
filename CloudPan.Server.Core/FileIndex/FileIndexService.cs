@@ -60,7 +60,7 @@ public class FileIndexService : IFileIndexService
         int maxVersion = await db.FileEntries.MaxAsync(f => (int?)f.Version) ?? 0;
 
         return new FileTreeResponse(
-            items.Select(MapToDto).ToList(),
+            items.Select(MapToDto).ToArray(),
             hasMore ? items.Last().Path : null,
             hasMore,
             maxVersion
@@ -114,22 +114,6 @@ public class FileIndexService : IFileIndexService
         return existing;
     }
 
-    /// <summary>
-    /// 标记文件为删除状态（软删除）。
-    /// </summary>
-    public async Task MarkDeletedAsync(string path, int newVersion)
-    {
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        var entry = await db.FileEntries.FindAsync(path);
-        if (entry != null)
-        {
-            entry.State = (int)FileState.Deleting;
-            entry.Version = newVersion;
-            await db.SaveChangesAsync();
-        }
-    }
-
-    /// <summary>
     /// <summary>
     /// 物理删除文件条目及其子文件（递归删除文件夹）。
     /// 先删除关联的 VersionRecord（满足 FK 约束），再删除 FileEntry。
@@ -278,13 +262,3 @@ public class FileIndexService : IFileIndexService
         );
     }
 }
-
-/// <summary>
-/// 文件树 API 响应。
-/// </summary>
-public record FileTreeResponse(
-    List<FileEntryDto> Data,
-    string? NextCursor,
-    bool HasMore,
-    int MaxVersion
-);

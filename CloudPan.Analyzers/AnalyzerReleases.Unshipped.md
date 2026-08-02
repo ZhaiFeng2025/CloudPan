@@ -1,10 +1,3 @@
 ; Unshipped analyzer release
 
-### New Rules
-
-Rule ID | Category | Severity | Notes
---------|----------|----------|------
-CP400 | Correctness | Error | Middleware ordering: UseRateLimit must follow UseTokenAuth
-CP401 | Lifecycle | Error | Fire-and-forget async discard in Timer or void method
-CP402 | Correctness | Error | Stale DbContext reused in catch(DbUpdateException) block
-CP404 | Security | Error | Command injection via Process.Start cmd.exe with user input
+; 注：CP400/401/402/404 与 CP304 已于 v1.0.0 清理时移除（这些规则从未在任何配置文件中启用），见 git 历史。

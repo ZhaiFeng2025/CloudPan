@@ -37,7 +37,7 @@ git clone https://github.com/cloudpan/cloudpan.git
 cd cloudpan
 
 # 编译并运行
-dotnet run --project CloudPan.Server
+dotnet run --project CloudPan.Server.Host
 ```
 
 首次运行会自动生成 64 字符家庭共享 Token（仅显示一次，请妥善保存）。
@@ -46,7 +46,7 @@ dotnet run --project CloudPan.Server
 
 ```bash
 # 在同一台或另一台电脑上
-dotnet run --project CloudPan.Client
+dotnet run --project CloudPan.Client.UI
 ```
 
 首次运行时会弹出配置窗口，输入：

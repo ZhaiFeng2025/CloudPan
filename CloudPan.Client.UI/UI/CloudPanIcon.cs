@@ -6,17 +6,13 @@ namespace CloudPan.Client.UI;
 
 /// <summary>
 /// 运行时自绘 CloudPan 图标（无需外部 .ico 文件）。
-/// 支持多尺寸（16/32/64/256），高 DPI 适配，提供蓝色通用、蓝色+C 客户端、绿色+S 服务端三种变体。
+/// 支持多尺寸（16/32/64/256），高 DPI 适配，提供蓝色通用图标。
 /// </summary>
 public static class CloudPanIcon
 {
     private static readonly (Color Top, Color Bottom) BlueTheme = (
         Color.FromArgb(0x1E, 0x88, 0xE5),
         Color.FromArgb(0x15, 0x65, 0xC0));
-
-    private static readonly (Color Top, Color Bottom) GreenTheme = (
-        Color.FromArgb(0x43, 0xA0, 0x47),
-        Color.FromArgb(0x2E, 0x7D, 0x32));
 
     // 云朵相对坐标（相对于 32×32，缩放至目标尺寸）
     private static readonly (float X, float Y, float W, float H)[] CloudParts =
@@ -31,18 +27,6 @@ public static class CloudPanIcon
     public static Icon Create()
     {
         return IconFromBytes(BuildIcoBytes(BlueTheme, null));
-    }
-
-    /// <summary>生成蓝色 + 右下角 "C" 标记的客户端图标。</summary>
-    public static Icon CreateClient()
-    {
-        return IconFromBytes(BuildIcoBytes(BlueTheme, 'C'));
-    }
-
-    /// <summary>生成绿色 + 右下角 "S" 标记的服务端图标。</summary>
-    public static Icon CreateServer()
-    {
-        return IconFromBytes(BuildIcoBytes(GreenTheme, 'S'));
     }
 
     // ---- 私有实现 ----
@@ -324,22 +308,4 @@ public static class CloudPanIcon
         return ms.ToArray();
     }
 
-    /// <summary>获取或创建持久化的 .ico 文件路径。</summary>
-    public static string GetIconPath()
-    {
-        string path = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "CloudPan", "app.ico");
-        if (!File.Exists(path))
-        {
-            string? dir = Path.GetDirectoryName(path);
-            if (dir != null)
-            {
-                Directory.CreateDirectory(dir);
-            }
-
-            File.WriteAllBytes(path, BuildIcoBytes(BlueTheme, null));
-        }
-        return path;
-    }
 }

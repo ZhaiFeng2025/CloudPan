@@ -123,7 +123,7 @@ public static class DatabaseInitializer
             }
             else
             {
-                token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
+                token = TokenGenerator.Generate();
                 ServerTrayApp.Token = token; // 供托盘菜单显示/复制
                 Console.ForegroundColor = ConsoleColor.Yellow;
                 Console.WriteLine();

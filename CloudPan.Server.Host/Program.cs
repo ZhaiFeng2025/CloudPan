@@ -14,9 +14,11 @@ var builder = WebApplication.CreateBuilder(args);
 // Windows Service 支持
 builder.Host.UseWindowsService();
 
-// 同步根目录
-string syncRoot = builder.Configuration.GetValue<string>("SyncRoot")
-               ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "CloudPan");
+// 同步根目录 + HTTP 端口（优先级：CLI 参数 → server-settings.json → 默认值）
+(string syncRoot, int httpPort) = StartupSettingsResolver.Resolve(
+    builder.Configuration.GetValue<string>("SyncRoot"),
+    builder.Configuration.GetValue<int?>("Port"),
+    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "CloudPan"));
 
 // Serilog 结构化日志（日志目录创建失败则终止启动）
 string logDir = Path.Combine(syncRoot, ".cloudpan", "logs");
@@ -47,10 +49,10 @@ builder.Host.UseSerilog();
 
 string dbPath = Path.Combine(syncRoot, ".cloudpan", "server.db");
 
-// Kestrel HTTP 监听（Phase 0 未启用 TLS）
+// Kestrel HTTP 监听（Phase 0 未启用 TLS；端口可配置，重启生效）
 builder.WebHost.UseKestrel(options =>
 {
-    options.ListenAnyIP(SpecPorts.HttpPort);
+    options.ListenAnyIP(httpPort);
 });
 
 // ============ 依赖注入 ============
@@ -60,12 +62,15 @@ builder.Services.AddDbContextFactory<CloudPanDbContext>(options =>
 });
 
 // 领域服务（Core/Infrastructure）
-builder.Services.AddSingleton(syncRoot); // 供 BackgroundHostedService 注入
+builder.Services.AddSingleton(syncRoot); // 供 BackgroundHostedService/TokenService 注入
+builder.Services.AddSingleton(typeof(int), httpPort); // 供 UDP 广播/设置页/托盘获取"当前生效端口"
 builder.Services.AddSingleton<IFileStorageService>(new FileStorageService(syncRoot));
 builder.Services.AddSingleton<IFileIndexService, FileIndexService>();
 builder.Services.AddSingleton<IVersionService, VersionService>();
 builder.Services.AddSingleton<ISyncLogService, SyncLogService>();
 builder.Services.AddSingleton<IWebSocketHandler, WebSocketHandler>();
+builder.Services.AddSingleton<ISettingsService, SettingsService>();
+builder.Services.AddSingleton<ITokenService, TokenService>();
 
 builder.Services.AddMemoryCache();
 builder.Services.AddControllers();

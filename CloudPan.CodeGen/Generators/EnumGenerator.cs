@@ -92,7 +92,7 @@ public static class EnumGenerator
 
         foreach (var v in values)
         {
-            sb.AppendLine($"    public const string {ToPascalCase(v.Name!)} = \"{v.Name}\";");
+            sb.AppendLine($"    public const string {Naming.ToPascalCase(v.Name!)} = \"{v.Name}\";");
         }
 
         sb.AppendLine("}");
@@ -127,14 +127,4 @@ public static class EnumGenerator
         sb.AppendLine();
     }
 
-    private static string ToPascalCase(string input)
-    {
-        if (string.IsNullOrEmpty(input))
-        {
-            return input;
-        }
-        // 将 snake_case 转为 PascalCase: "auth_ok" → "AuthOk"
-        return string.Concat(input.Split('_')
-            .Select(part => part.Length > 0 ? char.ToUpper(part[0]) + part[1..].ToLower() : ""));
-    }
 }

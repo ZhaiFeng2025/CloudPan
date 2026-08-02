@@ -15,7 +15,8 @@ public record SpecDocument(
     Dictionary<string, EnumDef> Enums,
     Dictionary<string, EntityDef> Entities,
     ApiDef Api,
-    Dictionary<string, JsonElement> Config
+    Dictionary<string, JsonElement> Config,
+    SettingsDef? Settings = null   // v1.1.0: 服务端设置目录
 );
 
 // ---- 枚举 ----
@@ -167,4 +168,36 @@ public record ErrorResponseDef(
 public record ApiResponseDef(
     string Description,
     List<string> Fields
+);
+
+// ---- 设置（v1.1.0 新增） ----
+
+public record SettingsDef(
+    string Description,
+    List<SettingsGroupDef> Groups,
+    List<SettingsItemDef> Items
+);
+
+public record SettingsGroupDef(
+    string Id,
+    string Label
+);
+
+/// <summary>
+/// 服务端设置项定义。字段与 shared-spec.json → settings.items 一一对应。
+/// defaultRef: 指向 config 中默认值来源（如 "config.httpPort"），Default 由生成器解析。
+/// </summary>
+public record SettingsItemDef(
+    string Key,
+    string Label,
+    string Description,
+    string Type,              // "int" | "string" | "secret"
+    string? DefaultRef,       // 如 "config.httpPort"
+    string Persistence,       // "startup" | "appconfig"
+    bool RestartRequired,
+    string Group,             // group id，如 "network"
+    int? Min,
+    int? Max,
+    bool? IsPath,
+    string? Action            // "rotate" 等特殊动作
 );

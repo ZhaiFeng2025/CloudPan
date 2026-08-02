@@ -3,9 +3,13 @@
   "$id": "cloudpan-shared-spec",
   "title": "CloudPan 共享定义",
   "description": "所有枚举、实体、端点、字段名、错误码、配置值的唯一事实来源。所有代码和文档引用本文件，禁止各自重复定义。",
-  "version": "1.0.0",
-  "date": "2026-07-31",
+  "version": "1.1.0",
+  "date": "2026-08-02",
   "_changelog": [
+    { "version": "1.1.0", "date": "2026-08-02", "changes": [
+      "新增顶层 settings 契约段：服务端设置目录（port/sync_root/token_hash），驱动 Settings.g.cs",
+      "设置 UI：端口可配置（重启生效）、同步根目录可改（重启+数据迁移警告）、Token 轮换（立即生效）"
+    ]},
     { "version": "1.0.0", "date": "2026-07-31", "changes": [
       "v1.0 正式发布——版本号统一为 1.0.0",
       "运行时崩溃级 Bug 修复：FileWatcherService NRE、SyncIgnoreParser 未处理异常、GlobalExceptionMiddleware 运算符优先级、RateLimitMiddleware 锁内 await、ServerInstaller 命令注入",
@@ -478,5 +482,48 @@
       "conflictSuffixPattern": "冲突副本命名模式。占位符：yyyyMMdd=日期, HHmmss=时间。示例：report_冲突_20260728_143000.docx",
       "syncignoreFormat": ".syncignore 语法：每行一个 glob 模式。支持 *（单层通配）和 **（递归通配）。以 # 开头的行为注释。示例：*.tmp、**/node_modules/、# 这是注释"
     }
+  },
+
+  "settings": {
+    "description": "服务端设置目录——设置 UI 与设置服务的唯一事实来源（规则 0）。persistence=startup 走 server-settings.json（启动期参数，重启生效）；persistence=appconfig 存 AppConfig 表（运行时，立即生效）。",
+    "groups": [
+      { "id": "network",  "label": "网络" },
+      { "id": "storage",  "label": "存储" },
+      { "id": "security", "label": "安全" }
+    ],
+    "items": [
+      {
+        "key": "port",
+        "label": "服务端口",
+        "description": "Kestrel HTTP 监听端口。修改后需重启服务生效。",
+        "type": "int",
+        "defaultRef": "config.httpPort",
+        "persistence": "startup",
+        "restartRequired": true,
+        "group": "network",
+        "min": 1,
+        "max": 65535
+      },
+      {
+        "key": "sync_root",
+        "label": "同步根目录",
+        "description": "文件同步根目录（数据库/版本历史/Token 均存于其下 .cloudpan）。修改后需重启；旧目录数据不会自动迁移。",
+        "type": "string",
+        "persistence": "startup",
+        "restartRequired": true,
+        "group": "storage",
+        "isPath": true
+      },
+      {
+        "key": "token_hash",
+        "label": "家庭共享 Token",
+        "description": "仅存 SHA-256 哈希，明文存 token.txt（SecretStore）。支持轮换（重新生成），立即生效。",
+        "type": "secret",
+        "persistence": "appconfig",
+        "restartRequired": false,
+        "group": "security",
+        "action": "rotate"
+      }
+    ]
   }
 }

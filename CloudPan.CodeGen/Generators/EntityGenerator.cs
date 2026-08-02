@@ -119,7 +119,7 @@ public static class EntityGenerator
                 foreach (var (key, description) in entity.PredefinedKeys)
                 {
                     sb.AppendLine($"    /// <summary>{description}</summary>");
-                    sb.AppendLine($"    public const string {ToPascalCase(key)} = \"{key}\";");
+                    sb.AppendLine($"    public const string {Naming.ToPascalCase(key)} = \"{key}\";");
                 }
                 sb.AppendLine("}");
                 sb.AppendLine();
@@ -127,12 +127,6 @@ public static class EntityGenerator
         }
 
         return sb.ToString();
-    }
-
-    private static string ToPascalCase(string key)
-    {
-        return string.Concat(key.Split('_')
-            .Select(p => p.Length > 0 ? char.ToUpper(p[0]) + p[1..] : ""));
     }
 
     /// <summary>

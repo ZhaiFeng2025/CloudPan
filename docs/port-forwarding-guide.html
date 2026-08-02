@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CloudPan 路由端口转发配置指南（手把手版）</title>
+<style>
+  :root {
+    --bg: #f6f8fa;
+    --card: #ffffff;
+    --text: #1f2933;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --brand: #0e7490;
+    --brand-bg: #ecfeff;
+    --info: #1d4ed8;
+    --info-bg: #eff6ff;
+    --warn: #b45309;
+    --warn-bg: #fffbeb;
+    --danger: #b91c1c;
+    --danger-bg: #fef2f2;
+    --ok: #15803d;
+    --ok-bg: #f0fdf4;
+    --code-bg: #0f172a;
+    --code-text: #e2e8f0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+    line-height: 1.75;
+  }
+  .container { max-width: 920px; margin: 0 auto; padding: 24px 20px 80px; }
+  header.hero {
+    background: linear-gradient(135deg, #0e7490 0%, #155e75 60%, #134e4a 100%);
+    color: #fff;
+    padding: 40px 32px;
+    border-radius: 14px;
+    margin-bottom: 24px;
+  }
+  header.hero h1 { margin: 0 0 10px; font-size: 28px; line-height: 1.3; }
+  header.hero p { margin: 0; opacity: .92; font-size: 15px; }
+  .meta-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin: 20px 0 8px; }
+  .meta-card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .meta-card .k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .meta-card .v { font-size: 17px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .meta-card .v small { font-weight: 400; color: var(--muted); font-size: 12px; }
+
+  /* 目录 */
+  nav.toc {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px 22px; margin: 24px 0;
+  }
+  nav.toc h2 { margin: 0 0 10px; font-size: 16px; }
+  nav.toc ol { margin: 0; padding-left: 22px; }
+  nav.toc a { color: var(--brand); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 24px 28px; margin: 22px 0; }
+  section h2 { margin: 0 0 14px; font-size: 21px; border-bottom: 2px solid var(--brand-bg); padding-bottom: 8px; }
+  section h2 .step-no {
+    display: inline-block; background: var(--brand); color: #fff; border-radius: 6px;
+    font-size: 14px; padding: 2px 9px; margin-right: 8px; vertical-align: 3px;
+  }
+  section h3 { font-size: 16px; margin: 22px 0 8px; }
+  ol.steps > li, ul.tight > li { margin: 8px 0; }
+  code {
+    font-family: "Cascadia Code", Consolas, "Courier New", monospace;
+    background: #eef2f7; color: #0f3b57; padding: 1px 6px; border-radius: 4px; font-size: 13.5px;
+  }
+  pre {
+    background: var(--code-bg); color: var(--code-text); padding: 14px 16px; border-radius: 8px;
+    overflow-x: auto; font-size: 13.5px; line-height: 1.6;
+  }
+  pre code { background: transparent; color: inherit; padding: 0; font-size: 13.5px; }
+  pre .cmt { color: #94a3b8; }
+  .callout { border-radius: 10px; padding: 14px 18px; margin: 14px 0; font-size: 14.5px; }
+  .callout .t { font-weight: 700; display: block; margin-bottom: 4px; }
+  .callout.warn { background: var(--warn-bg); border: 1px solid #fde68a; }
+  .callout.warn .t { color: var(--warn); }
+  .callout.danger { background: var(--danger-bg); border: 1px solid #fecaca; }
+  .callout.danger .t { color: var(--danger); }
+  .callout.info { background: var(--info-bg); border: 1px solid #bfdbfe; }
+  .callout.info .t { color: var(--info); }
+  .callout.ok { background: var(--ok-bg); border: 1px solid #bbf7d0; }
+  .callout.ok .t { color: var(--ok); }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 8px 12px; text-align: left; vertical-align: top; }
+  th { background: #f8fafc; font-weight: 600; }
+  tr:nth-child(even) td { background: #fafbfc; }
+  .pill { display: inline-block; padding: 1px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; }
+  .pill.green { background: var(--ok-bg); color: var(--ok); }
+  .pill.red { background: var(--danger-bg); color: var(--danger); }
+  .pill.amber { background: var(--warn-bg); color: var(--warn); }
+  .pill.blue { background: var(--info-bg); color: var(--info); }
+  footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 30px; }
+  .form-sheet { border: 2px dashed var(--line); border-radius: 10px; padding: 16px 20px; margin: 14px 0; background: #fafbfc; }
+  .form-sheet table td:first-child { width: 160px; font-weight: 600; }
+  .small { font-size: 13px; color: var(--muted); }
+  @media (max-width: 640px) {
+    .container { padding: 12px 12px 60px; }
+    header.hero { padding: 28px 20px; }
+    section { padding: 18px 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header class="hero">
+  <h1>CloudPan 路由器端口转发配置指南</h1>
+  <p>手把手：把家庭局域网里的 CloudPan 服务端暴露到公网，实现外出也能同步文件。</p>
+  <div class="meta-cards">
+    <div class="meta-card"><div class="k">适用版本</div><div class="v">v1.0.0 正式版</div></div>
+    <div class="meta-card"><div class="k">HTTP 服务端口</div><div class="v">TCP 8443</div></div>
+    <div class="meta-card"><div class="k">局域网发现端口</div><div class="v">UDP 8450 <small>无需公网转发</small></div></div>
+    <div class="meta-card"><div class="k">传输协议</div><div class="v">HTTP <small>未启用 TLS</small></div></div>
+  </div>
+</header>
+
+<div class="callout danger">
+  <span class="t">⚠️ 开始之前，请务必读完这一段</span>
+  CloudPan v1.0 服务端监听 <code>TCP 8443</code>，且为<b>纯 HTTP（无 TLS/HTTPS）</b>。把 8443 直接暴露到公网意味着：账号 Token 和文件内容将以<b>明文</b>在互联网上传输，任何抓包者都能看到；同时端口会暴露给全网扫描器，面临暴力破解和漏洞探测风险。
+  <br><br>
+  <b>强烈建议</b>先评估第 0 步的替代方案（内网穿透 / VPN / 反向代理 + HTTPS）。若你的需求只是"出门在外临时取个文件"，使用 Tailscale / WireGuard 这类零配置组网方案通常比端口转发更安全、更省事。只有当你确实需要<b>任意设备免客户端直接通过公网访问</b>（例如把分享链接发给朋友），才继续按本指南配置端口转发。
+</div>
+
+<nav class="toc">
+  <h2>目录</h2>
+  <ol>
+    <li><a href="#step0">第 0 步：先想清楚——你真的需要公网端口转发吗？</a></li>
+    <li><a href="#step1">第 1 步：确认要转发的端口</a></li>
+    <li><a href="#step2">第 2 步：确认 Windows 防火墙已放行 8443</a></li>
+    <li><a href="#step3">第 3 步：查服务器局域网 IP 并固定它</a></li>
+    <li><a href="#step4">第 4 步：确认宽带是公网 IPv4（CGNAT 检测）</a></li>
+    <li><a href="#step5">第 5 步：登录路由器后台</a></li>
+    <li><a href="#step6">第 6 步：配置端口转发规则（分品牌示例）</a></li>
+    <li><a href="#step7">第 7 步：从公网验证配置是否成功</a></li>
+    <li><a href="#step8">第 8 步：配置 DDNS（公网 IP 会变时）</a></li>
+    <li><a href="#step9">第 9 步：在客户端里连接</a></li>
+    <li><a href="#trouble">故障排查表</a></li>
+    <li><a href="#security">安全加固清单（强烈建议）</a></li>
+    <li><a href="#appendix">附录：命令速查</a></li>
+  </ol>
+</nav>
+
+<!-- ============ 第 0 步 ============ -->
+<section id="step0">
+  <h2><span class="step-no">0</span>先想清楚——你真的需要公网端口转发吗？</h2>
+  <p>端口转发只解决一个问题：<b>让路由器外的设备（公网）直接访问内网的服务器</b>。先对号入座：</p>
+  <table>
+    <tr><th style="width:200px">你的需求</th><th>推荐方案</th><th>说明</th></tr>
+    <tr>
+      <td>只在家庭局域网内同步</td>
+      <td><span class="pill green">无需任何配置</span></td>
+      <td>局域网内用 <code>http://192.168.x.x:8443</code> 直接访问，端口转发完全不需要。</td>
+    </tr>
+    <tr>
+      <td>出门在外，自己的手机/笔记本取文件</td>
+      <td><span class="pill amber">推荐：内网穿透 / VPN</span></td>
+      <td>Tailscale、WireGuard、ZeroTier、frp 均可。加密通道，不用暴露公网端口，比端口转发安全得多。</td>
+    </tr>
+    <tr>
+      <td>把分享链接 <code>/share/xxx</code> 发给朋友（对方免登录）</td>
+      <td><span class="pill red">需要端口转发</span></td>
+      <td>对方浏览器直接访问公网地址，无法装 VPN 客户端，只能走端口转发。此时请务必叠加第 8 节的安全加固。</td>
+    </tr>
+  </table>
+  <div class="callout warn">
+    <span class="t">安全底线</span>
+    若选择端口转发，至少要做到：<b>不要使用默认/弱 Token</b>、分享链接<b>设置密码</b>、有条件就在前面加一层 HTTPS 反向代理（Caddy/Nginx）。纯 HTTP 裸奔公网 = 把家庭网盘密码贴在大街上。
+  </div>
+</section>
+
+<!-- ============ 第 1 步 ============ -->
+<section id="step1">
+  <h2><span class="step-no">1</span>确认要转发的端口</h2>
+  <p>CloudPan 共使用两个端口（来源：<code>shared-spec.json → config</code>）：</p>
+  <table>
+    <tr><th>端口</th><th>协议</th><th>用途</th><th>需要公网转发吗</th></tr>
+    <tr><td><b>8443</b></td><td>TCP</td><td>HTTP API + WebSocket 同步 + 分享链接</td><td><span class="pill red">要</span> 全部公网功能都走这一个端口</td></tr>
+    <tr><td>8450</td><td>UDP</td><td>局域网设备发现（<code>CLOUDPAN_DISCOVER</code> 广播）</td><td><span class="pill green">不要</span> UDP 广播不会穿越路由器，且公网无需发现</td></tr>
+  </table>
+  <div class="callout info">
+    <span class="t">结论</span>
+    只需在路由器上转发 <b>一条 TCP 规则：外部 8443 → 服务器内网 IP:8443</b>。不需要转发 8450。WebSocket 同步与 HTTP API 共用 8443，不用额外开端口。
+  </div>
+  <div class="callout warn">
+    <span class="t">关于 /pair 和 /admin</span>
+    配对页 <code>/pair</code> 与管理面板 <code>/admin</code> 在本项目设计中<b>仅允许 localhost 访问</b>。端口转发到公网后，外网访问这两个地址<b>仍会被拒绝</b>——这是安全设计，不是配置问题。管理请始终在服务器本机进行。
+  </div>
+</section>
+
+<!-- ============ 第 2 步 ============ -->
+<section id="step2">
+  <h2><span class="step-no">2</span>确认 Windows 防火墙已放行 8443</h2>
+  <p>端口转发只负责把公网流量送进路由器，<b>进入路由器后还要过 Windows 防火墙这一关</b>。通常 <code>install-service.bat</code> 已自动添加规则，这里验证一遍：</p>
+  <p>在服务器上打开 <b>命令提示符（管理员）</b>，运行：</p>
+  <pre><code><span class="cmt"># 查看是否已有 CloudPan 的入站放行规则</span>
+netsh advfirewall firewall show rule name=CloudPan</code></pre>
+  <p>如果输出为空，手动添加一条：</p>
+  <pre><code><span class="cmt"># 放行 TCP 8443 入站（仅专用网络）</span>
+netsh advfirewall firewall add rule name=CloudPan protocol=TCP dir=in localport=8443 action=allow profile=private</code></pre>
+  <p>再快速验证服务端确实在监听：</p>
+  <pre><code><span class="cmt"># 本机访问健康检查，应返回 JSON</span>
+curl http://localhost:8443/api/health</code></pre>
+  <p>若返回类似 <code>{"status":"ok"...}</code> 的 JSON，说明服务正常、防火墙已放行，可以继续。</p>
+</section>
+
+<!-- ============ 第 3 步 ============ -->
+<section id="step3">
+  <h2><span class="step-no">3</span>查服务器局域网 IP 并固定它</h2>
+  <p>端口转发规则必须指向服务器的<b>内网 IP</b>。在服务器上打开命令提示符，运行 <code>ipconfig</code>，找到当前所用网卡的 IPv4 地址：</p>
+  <pre><code>ipconfig
+<span class="cmt"># 例：无线局域网适配器 WLAN:
+#     IPv4 地址 . . . . . . . . . . . . : 192.168.1.100</code></pre>
+  <p>记下这个地址（例如 <code>192.168.1.100</code>）。</p>
+  <div class="callout danger">
+    <span class="t">关键：必须固定内网 IP，否则规则会失效</span>
+    家用路由器默认用 DHCP 自动分配 IP，<b>重启后服务器的内网 IP 可能改变</b>，届时转发规则会指向错误设备。固定方法（二选一）：
+    <ul class="tight">
+      <li><b>推荐</b>：在路由器后台把服务器的 MAC 地址加入<b>「DHCP 静态分配 / IP 与 MAC 绑定 / 地址保留」</b>，固定为当前 IP。</li>
+      <li>或在服务器「网络设置 → 更改适配器选项 → 属性 → IPv4」里改为<b>静态 IP</b>（需避开路由器 DHCP 分配池）。</li>
+    </ul>
+    查看服务器网卡 MAC 地址：<code>ipconfig /all</code> 里的「物理地址」。
+  </div>
+</section>
+
+<!-- ============ 第 4 步 ============ -->
+<section id="step4">
+  <h2><span class="step-no">4</span>确认宽带是公网 IPv4（CGNAT 检测）</h2>
+  <p>端口转发要求路由器有<b>公网 IPv4 地址</b>。国内部分运营商（尤其是没有单独拉公网 IP 的家庭宽带）会使用 NAT（CGNAT / 大内网），此时你的"公网 IP"其实仍是运营商内部的私有地址，路由器根本收不到外部连接，转发无从谈起。</p>
+  <h3>怎么检测自己是不是大内网？</h3>
+  <ol class="steps">
+    <li>用 <b>手机流量</b>（关 WiFi）访问 <a href="https://myip.ipip.net" target="_blank" rel="noopener">myip.ipip.net</a> 或 <a href="https://www.ip.cn" target="_blank" rel="noopener">ip.cn</a>，记下<b>出口公网 IP</b>。</li>
+    <li>登录路由器后台，找到「WAN 口状态 / 上网信息」，查看 WAN IP。</li>
+    <li>比较两者：
+      <ul class="tight">
+        <li><b>一致</b> → <span class="pill green">公网 IP，继续</span></li>
+        <li><b>不一致</b>，且路由器 WAN IP 是 <code>100.64.0.0/10</code>、<code>10.x.x.x</code>、<code>172.16-31.x.x</code>、<code>192.168.x.x</code> 等私有段 → <span class="pill red">CGNAT 大内网</span></li>
+      </ul>
+    </li>
+  </ol>
+  <div class="callout warn">
+    <span class="t">如果是大内网，怎么办？</span>
+    <ul class="tight">
+      <li><b>联系运营商</b>申请公网 IPv4（电信一般可致电 10000 申请，联通 10010，移动视地区而定），免费或低门槛。</li>
+      <li>或<b>改用 IPv6</b>：多数宽带默认有公网 IPv6，可给服务器配 IPv6 + 路由器放行，然后走 <code>http://[公网IPv6]:8443</code>（IPv6 没有"转发"概念，是防火墙放行，此处不展开）。</li>
+      <li>或<b>放弃端口转发，用第 0 步的内网穿透方案</b>（frp / Tailscale 等），它们不依赖公网 IP。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ 第 5 步 ============ -->
+<section id="step5">
+  <h2><span class="step-no">5</span>登录路由器后台</h2>
+  <p>常见登录入口（地址在路由器<b>背面标签</b>上最准确）：</p>
+  <table>
+    <tr><th>路由器品牌</th><th>常见管理地址</th><th>备注</th></tr>
+    <tr><td>TP-LINK / 水星 / 迅捷</td><td><code>192.168.1.1</code> 或 <code>tplogin.cn</code></td><td>新版浏览器输入 <code>tplogin.cn</code></td></tr>
+    <tr><td>小米 / Redmi</td><td><code>192.168.31.1</code> 或 <code>miwifi.com</code></td><td>也可用 App</td></tr>
+    <tr><td>华为</td><td><code>192.168.3.1</code> 或 <code>192.168.100.1</code></td><td>光猫桥接后由华为路由拨号</td></tr>
+    <tr><td>华硕</td><td><code>192.168.1.1</code> 或 <code>router.asus.com</code></td><td>默认用户名 <code>admin</code></td></tr>
+    <tr><td>Tenda 腾达</td><td><code>192.168.0.1</code> 或 <code>tendawifi.com</code></td><td></td></tr>
+    <tr><td>OpenWrt 固件</td><td><code>192.168.1.1</code></td><td>开源固件</td></tr>
+  </table>
+  <p>在<b>连接同一路由器</b>的电脑浏览器中输入管理地址，输入管理员密码登录。</p>
+  <div class="callout info">
+    <span class="t">拿不准就用命令找</span>
+    在 Windows 上运行 <code>ipconfig</code>，看「默认网关」一栏——那通常就是路由器管理地址。若打不开，检查电脑是否连在路由器而非光猫上。
+  </div>
+</section>
+
+<!-- ============ 第 6 步 ============ -->
+<section id="step6">
+  <h2><span class="step-no">6</span>配置端口转发规则</h2>
+  <p>核心概念：端口转发 = 「外部端口（公网访问时用的端口）」 + 「内部 IP + 内部端口（转发到谁）」。不同品牌菜单名称不同，但填的字段是一样的：</p>
+
+  <div class="form-sheet">
+    <table>
+      <tr><td>功能名称</td><td>转发规则名 / 服务名：<code>CloudPan</code>（随意）</td></tr>
+      <tr><td>外部端口（公网端口）</td><td><b>8443</b>（若运营商封此端口可改外部端口，见下）</td></tr>
+      <tr><td>内部 IP</td><td><b>第 3 步记下的服务器内网 IP</b>，如 <code>192.168.1.100</code></td></tr>
+      <tr><td>内部端口</td><td><b>8443</b>（必须与 CloudPan 监听端口一致）</td></tr>
+      <tr><td>协议</td><td><b>TCP</b>（只转发 TCP，不需要 UDP 8450）</td></tr>
+    </table>
+  </div>
+
+  <h3>各品牌菜单位置</h3>
+  <table>
+    <tr><th>品牌</th><th>入口路径（大致）</th></tr>
+    <tr><td>TP-LINK</td><td>「转发规则 / 虚拟服务器」→ 添加，或「应用管理 → 虚拟服务器」</td></tr>
+    <tr><td>小米</td><td>「高级设置 → 端口转发」→ 添加规则</td></tr>
+    <tr><td>华为</td><td>「更多功能 → 网络设置 → 端口映射」</td></tr>
+    <tr><td>华硕</td><td>「WAN → 虚拟服务器/端口转发」（Virtual Server / Port Forwarding）</td></tr>
+    <tr><td>Tenda 腾达</td><td>「高级设置 → 虚拟服务器」</td></tr>
+    <tr><td>OpenWrt</td><td>「Network → Firewall → Port Forwards」→ 添加，<code>protocol=tcp</code>, <code>dest port=8443</code>, <code>internal ip=192.168.1.100:8443</code></td></tr>
+  </table>
+  <p>填写完成后<b>保存 / 应用</b>，规则即生效。</p>
+
+  <div class="callout warn">
+    <span class="t">运营商封锁常见端口</span>
+    国内很多运营商封锁 80 / 8080 / 443 等常用端口。8443 通常不受影响；若外部访问 8443 超时且已排查其他原因，可尝试把「外部端口」改成 <code>18443</code>、<code>8843</code> 等非常规端口（内部端口保持 8443 不动），公网地址变成 <code>http://公网IP:18443</code>。
+  </div>
+
+  <h3>进阶：光猫桥接</h3>
+  <p>若光猫是<b>路由模式</b>（自己拨号 + 分配 IP），且路由器也开了 NAT（双重 NAT），转发可能不生效。建议把光猫改<b>桥接模式</b>、让路由器拨号（需向运营商要宽带账号密码），只在一层设备上做端口转发。此项涉及光猫超级管理员权限，如遇困难可联系运营商装维。</p>
+</section>
+
+<!-- ============ 第 7 步 ============ -->
+<section id="step7">
+  <h2><span class="step-no">7</span>从公网验证配置是否成功</h2>
+  <p><b>不要用 WiFi 下的电脑测</b>——WiFi 内访问公网 IP 会走 NAT 回环，不能真实反映公网可达性。请用<b>手机流量（关掉 WiFi）</b>测试：</p>
+  <ol class="steps">
+    <li>确认公网 IP：见第 4 步查到的出口 IP（或已配好的域名）。</li>
+    <li>手机浏览器打开 <code>http://公网IP:8443/api/health</code>。</li>
+    <li>
+      结果判断：
+      <ul class="tight">
+        <li>看到 <code>{"status":"ok"...}</code> 等 JSON → <span class="pill green">成功！转发已生效</span></li>
+        <li>一直转圈 / 超时 → <span class="pill red">失败</span>，对照下方<a href="#trouble">故障排查表</a></li>
+      </ul>
+    </li>
+  </ol>
+  <p>也可以用电脑上在线端口检测工具（浏览器搜索"端口扫描/端口检测 在线"，输入公网 IP 和 8443），它会从外部向你的 IP 发探测包，结果更直观。</p>
+  <div class="callout ok">
+    <span class="t">转发成功后</span>
+    出门在外访问分享链接 <code>http://公网IP:8443/share/分享ID</code> 即可。客户端和 WebSocket 同步同样走 8443，无需额外配置。
+  </div>
+</section>
+
+<!-- ============ 第 8 步 ============ -->
+<section id="step8">
+  <h2><span class="step-no">8</span>配置 DDNS（公网 IP 会变时）</h2>
+  <p>家庭宽带公网 IP 通常是<b>动态</b>的（重启光猫/隔段时间就变），IP 一变，之前收藏的地址就失效。DDNS（动态域名）把「固定域名 → 你的当前公网 IP」自动绑定，之后只需记域名。</p>
+  <h3>步骤</h3>
+  <ol class="steps">
+    <li>注册一个 DDNS 域名：国内常用<b>花生壳（oray.com）</b>、<b>Dynu（免费）</b>、<b>No-IP（免费）</b>；或使用<b>阿里云/腾讯云域名 + DDNS 脚本</b>。</li>
+    <li>在<b>路由器后台 → 高级设置 → 动态 DNS (DDNS)</b> 填入账号和域名，启用。路由器会自动更新 IP。</li>
+    <li>若路由器不支持该服务商，可在服务器上用官方客户端或脚本定时上报公网 IP。</li>
+  </ol>
+  <p>配置完成后，公网访问地址变成 <code>http://你的域名:8443</code>，IP 再变也不用改。</p>
+</section>
+
+<!-- ============ 第 9 步 ============ -->
+<section id="step9">
+  <h2><span class="step-no">9</span>在客户端里连接</h2>
+  <p>客户端（WinForms / Android 原型）连接公网服务端时，只需把「服务端地址」填成公网地址即可，Token 不变：</p>
+  <pre><code><span class="cmt"># 公网 IP 直连</span>
+CloudPan.Client.exe http://你的公网IP:8443  C:\CloudPan  &lt;token&gt;
+
+<span class="cmt"># 有 DDNS 域名</span>
+CloudPan.Client.exe http://你的域名:8443  C:\CloudPan  &lt;token&gt;</code></pre>
+  <div class="callout info">
+    <span class="t">注意</span>
+    在局域网内时建议继续用 <code>http://192.168.x.x:8443</code>（不走公网、更快更稳）；出门在外再切到公网地址。UDP 发现（8450）只在局域网有效，公网连接请手动填写地址。
+  </div>
+</section>
+
+<!-- ============ 故障排查 ============ -->
+<section id="trouble">
+  <h2>故障排查表</h2>
+  <table>
+    <tr><th style="width:220px">现象</th><th>可能原因 → 处理</th></tr>
+    <tr><td>外网访问超时，局域网正常</td><td>① 是 CGNAT 大内网（看第 4 步）→ 联系运营商或换方案；② 端口被运营商封锁 → 换非常规外部端口；③ 双重 NAT（光猫+路由都拨号）→ 光猫改桥接</td></tr>
+    <tr><td>转发后仍打不开</td><td>① Windows 防火墙未放行 8443 → 重跑第 2 步；② 服务器没在运行；③ 规则里内网 IP 填错 → 核对第 3 步</td></tr>
+    <tr><td>用 WiFi 能访问，用流量不行</td><td>正常现象——WiFi 走 NAT 回环，不代表公网可达。必须用流量/在线检测验证</td></tr>
+    <tr><td>外网能打开 /share 分享页，但打不开 /pair 和 /admin</td><td>这是设计行为，这两个页面仅允许 localhost。管理请在服务器本机操作</td></tr>
+    <tr><td>同步断断续续 / 传输很慢</td><td>公网上下行受宽带限制（上传通常只有 10–30Mbps），大文件建议在内网同步；WebSocket 断线会自动退避重连（最长 60s）</td></tr>
+    <tr><td>重启路由器后失效</td><td>① 服务器内网 IP 变了 → 固定 IP（第 3 步）；② 公网 IP 变了 → 配 DDNS（第 8 步）</td></tr>
+    <tr><td>输入 8443 被跳转到别的页面</td><td>本地运营商/浏览器劫持少见；先确认你访问的是公网 IP 而非局域网 IP</td></tr>
+  </table>
+</section>
+
+<!-- ============ 安全加固 ============ -->
+<section id="security">
+  <h2>安全加固清单（强烈建议逐项执行）</h2>
+  <div class="callout danger">
+    <span class="t">再次强调</span>
+    当前版本是纯 HTTP，公网明文传输。以下每一项都能显著降低风险，但<b>最稳妥的做法仍是第 0 步的内网穿透/VPN 方案</b>。
+  </div>
+  <ol class="steps">
+    <li><b>更换强 Token</b>：不要使用默认 Token。Token 位于服务器同步目录 <code>%USERPROFILE%\CloudPan\.cloudpan\token.txt</code>，重新生成后分发到各客户端。</li>
+    <li><b>分享链接设密码</b>：创建分享时启用密码保护，防止链接被搜刮/转发。</li>
+    <li><b>不要转发到默认常用端口</b>：外部端口用非常规端口（如 18443）可避开大量无差别扫描。</li>
+    <li><b>保持限流开启</b>：项目默认已启用每设备每分钟 60 次 API 调用限流（文件上传/下载不计入），无需额外配置，但请勿在生产环境关闭。</li>
+    <li><b>及时更新</b>：关注 v1.1+ 的自动更新与 HTTPS 支持，升级后优先启用 TLS。</li>
+    <li><b>前置 HTTPS 反向代理（进阶）</b>：在服务器上部署 Caddy/Nginx，把 443 转发到内网 8443 并自动签发证书，让公网走 HTTPS。此时需把路由器转发改为「外部 443 → 服务器:443（代理端口）」，本项目客户端填入 <code>https://域名:443</code>。</li>
+    <li><b>定期检查分享链接</b>：在管理面板/API 中撤销不再使用的分享。</li>
+  </ol>
+</section>
+
+<!-- ============ 附录 ============ -->
+<section id="appendix">
+  <h2>附录：命令速查</h2>
+  <pre><code><span class="cmt"># 查内网 IP / 默认网关（=路由器地址）</span>
+ipconfig
+ipconfig /all              <span class="cmt"># 含 MAC 地址（用于 DHCP 静态绑定）</span>
+
+<span class="cmt"># 验证服务端在监听 8443</span>
+netstat -ano | findstr :8443
+
+<span class="cmt"># 防火墙：查看 / 添加 CloudPan 入站规则</span>
+netsh advfirewall firewall show rule name=CloudPan
+netsh advfirewall firewall add rule name=CloudPan protocol=TCP dir=in localport=8443 action=allow profile=private
+
+<span class="cmt"># 本机健康检查</span>
+curl http://localhost:8443/api/health</code></pre>
+
+  <h3>端口参数速查（与 shared-spec.json 一致）</h3>
+  <table>
+    <tr><th>配置项</th><th>值</th><th>说明</th></tr>
+    <tr><td><code>config.httpPort</code></td><td>8443</td><td>HTTP 服务端口（本指南转发对象）</td></tr>
+    <tr><td><code>config.udpDiscoveryPort</code></td><td>8450</td><td>局域网发现，无需公网转发</td></tr>
+    <tr><td><code>api.baseUrl</code></td><td><code>http://{host}:8443</code></td><td>API 基地址</td></tr>
+    <tr><td><code>api.websocket.endpoint</code></td><td><code>ws://{host}:8443/ws</code></td><td>WebSocket 同步，共用 8443</td></tr>
+  </table>
+</section>
+
+<footer>
+  CloudPan 路由器端口转发指南 · 生成于 2026-08-02 · 端口信息以 shared-spec.json 为准
+</footer>
+
+</div>
+</body>
+</html>

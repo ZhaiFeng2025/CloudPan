@@ -345,12 +345,9 @@ public class SettingsForm : Form
             btn.FlatAppearance.MouseOverBackColor = CloudPanColors.ButtonHoverBg;
             btn.FlatAppearance.MouseDownBackColor = CloudPanColors.ButtonPressBg;
 
-            int captured = kbValue;
-            btn.Click += (_, _) =>
-            {
-                _uploadLimitBox.Text = captured.ToString();
-                _downloadLimitBox.Text = captured.ToString();
-            };
+            // 值经 Tag 传递到具名处理器（CP301：避免捕获循环变量的匿名 lambda）
+            btn.Tag = kbValue;
+            btn.Click += PresetBtn_Click;
 
             presetRow.Controls.Add(btn);
         }
@@ -358,6 +355,32 @@ public class SettingsForm : Form
         bwPanel.Controls.Add(presetRow);
         bwTab.Controls.Add(bwPanel);
         _tabs.TabPages.Add(bwTab);
+    }
+
+    // ──────────────────────────────────────────────
+    // 具名事件处理器（CP301：避免匿名 lambda 订阅无法退订）
+    // ──────────────────────────────────────────────
+
+    /// <summary>预设限速按钮：把按钮 Tag 中的值（KB/s）应用到上下行输入框。</summary>
+    private void PresetBtn_Click(object? sender, EventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is int value)
+        {
+            _uploadLimitBox.Text = value.ToString();
+            _downloadLimitBox.Text = value.ToString();
+        }
+    }
+
+    private void SaveBtn_Click(object? sender, EventArgs e)
+    {
+        DialogResult = DialogResult.OK;
+        Close();
+    }
+
+    private void CancelBtn_Click(object? sender, EventArgs e)
+    {
+        DialogResult = DialogResult.Cancel;
+        Close();
     }
 
     // ──────────────────────────────────────────────
@@ -426,7 +449,7 @@ public class SettingsForm : Form
         _saveBtn.FlatAppearance.BorderSize = 0;
         _saveBtn.FlatAppearance.MouseOverBackColor = CloudPanColors.PrimaryBlueHover;
         _saveBtn.FlatAppearance.MouseDownBackColor = CloudPanColors.PrimaryBluePress;
-        _saveBtn.Click += (_, _) => { DialogResult = DialogResult.OK; Close(); };
+        _saveBtn.Click += SaveBtn_Click;
 
         // 取消按钮（与 SetupForm 样式一致）
         Button cancelBtn = new Button
@@ -444,7 +467,7 @@ public class SettingsForm : Form
         cancelBtn.FlatAppearance.BorderColor = CloudPanColors.BorderLight;
         cancelBtn.FlatAppearance.MouseOverBackColor = CloudPanColors.ButtonHoverBg;
         cancelBtn.FlatAppearance.MouseDownBackColor = CloudPanColors.ButtonPressBg;
-        cancelBtn.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
+        cancelBtn.Click += CancelBtn_Click;
 
         btnPanel.Controls.Add(_saveBtn);
         btnPanel.Controls.Add(cancelBtn);

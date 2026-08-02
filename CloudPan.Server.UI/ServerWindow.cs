@@ -3,6 +3,7 @@ using System.Drawing.Drawing2D;
 using CloudPan.Server.Data;
 using CloudPan.Shared;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace CloudPan.Server.UI;
 
@@ -24,6 +25,8 @@ public class ServerWindow : Form
     private readonly IDbContextFactory<CloudPanDbContext> _dbFactory;
     private readonly System.Windows.Forms.Timer _refreshTimer;
     private readonly DateTime _startTime = DateTime.UtcNow;
+    private readonly System.Windows.Forms.TabControl _tabs;
+    private readonly SettingsPage _settingsPage;
 
     /// <summary>
     /// 窗口句柄创建前缓存的消息（AddLog 在窗口首次 Show 前被调用时暂存于此）。
@@ -31,9 +34,9 @@ public class ServerWindow : Form
     /// </summary>
     private readonly List<string> _pendingLogs = new();
 
-    public ServerWindow(IDbContextFactory<CloudPanDbContext> dbFactory)
+    public ServerWindow(IServiceProvider services, int effectivePort, string currentSyncRoot)
     {
-        _dbFactory = dbFactory;
+        _dbFactory = services.GetRequiredService<IDbContextFactory<CloudPanDbContext>>();
         Text = "CloudPan 服务端 — 管理";
         Size = new Size(720, 520);
         MinimumSize = new Size(600, 400);
@@ -139,7 +142,7 @@ public class ServerWindow : Form
             BackColor = Color.Transparent
         };
         _emptyStatePanel.Controls.AddRange(new Control[] { _emptyIcon, _emptyTitle, _emptyHint });
-        _emptyStatePanel.Resize += (_, _) => CenterEmptyState();
+        _emptyStatePanel.Resize += EmptyStatePanel_Resize;
 
         // 设备面板（切换设备列表 / 空状态）
         Panel devicePanel = new Panel { Dock = DockStyle.Fill };
@@ -191,7 +194,7 @@ public class ServerWindow : Form
             Margin = new Padding(0, 3, 4, 3)
         };
         _clearLogBtn.FlatAppearance.BorderColor = CloudPanColors.BorderLight;
-        _clearLogBtn.Click += (_, _) => { _logList.Items.Clear(); AddLog("日志已清空"); };
+        _clearLogBtn.Click += ClearLogBtn_Click;
 
         logToolbar.Controls.Add(logTitle, 0, 0);
         logToolbar.Controls.Add(_clearLogBtn, 1, 0);
@@ -205,49 +208,85 @@ public class ServerWindow : Form
         split.Panel1.Controls.Add(devicePanel);
         split.Panel2.Controls.Add(logPanel);
 
-        Controls.Add(split);
-        Controls.Add(statPanel);
+        // ===== 页签容器（概览 / 设置） =====
+        _tabs = new System.Windows.Forms.TabControl { Dock = DockStyle.Fill };
+
+        TabPage overviewTab = new TabPage("概览");
+        Panel overviewHost = new Panel { Dock = DockStyle.Fill };
+        // 保持与原来相同的 z-order：statPanel(Dock=Top) 在 split(Fill) 之后 Add → 占顶部
+        overviewHost.Controls.Add(split);
+        overviewHost.Controls.Add(statPanel);
+        overviewTab.Controls.Add(overviewHost);
+        _tabs.TabPages.Add(overviewTab);
+
+        _settingsPage = new SettingsPage(services, effectivePort, currentSyncRoot, AddLog) { Dock = DockStyle.Fill };
+        TabPage settingsTab = new TabPage("设置");
+        settingsTab.Controls.Add(_settingsPage);
+        _tabs.TabPages.Add(settingsTab);
+
+        Controls.Add(_tabs);
 
         // 定时刷新
         _refreshTimer = new System.Windows.Forms.Timer { Interval = 5000 };
-        _refreshTimer.Tick += async (_, _) => await RefreshDataAsync();
+        _refreshTimer.Tick += RefreshTimer_Tick;
         _refreshTimer.Start();
 
         // ===== 窗口生命周期事件 =====
 
         // 关闭按钮 → 隐藏到托盘（而非销毁窗口）
-        FormClosing += (_, e) =>
-        {
-            // Application.Exit() / 进程退出 → 允许关闭
-            if (e.CloseReason == CloseReason.ApplicationExitCall
-                || e.CloseReason == CloseReason.TaskManagerClosing
-                || e.CloseReason == CloseReason.WindowsShutDown)
-            {
-                _refreshTimer.Stop();
-                return;
-            }
-            // 用户点击 X 按钮 → 隐藏到托盘
-            e.Cancel = true;
-            Hide();
-            AddLog("窗口已隐藏至系统托盘，左键托盘图标可重新打开");
-        };
+        FormClosing += Window_FormClosing;
 
         // 最小化时 → 隐藏到托盘（用户体验：服务端窗口不应占据任务栏）
-        Resize += (_, _) =>
-        {
-            if (WindowState == FormWindowState.Minimized)
-            {
-                Hide();
-                AddLog("窗口已最小化至系统托盘");
-            }
-        };
+        Resize += Window_Resize;
 
         // 首次显示时：刷新数据 + 刷入缓存日志
-        Shown += async (_, _) =>
+        Shown += Window_Shown;
+    }
+
+    // ===== 具名事件处理器（CP301：避免匿名 lambda 订阅无法退订） =====
+
+    private void EmptyStatePanel_Resize(object? sender, EventArgs e) => CenterEmptyState();
+
+    private void ClearLogBtn_Click(object? sender, EventArgs e)
+    {
+        _logList.Items.Clear();
+        AddLog("日志已清空");
+    }
+
+    private async void RefreshTimer_Tick(object? sender, EventArgs e) => await RefreshDataAsync();
+
+    /// <summary>关闭按钮 → 隐藏到托盘（而非销毁窗口）。系统/任务管理器关闭时放行。</summary>
+    private void Window_FormClosing(object? sender, FormClosingEventArgs e)
+    {
+        // Application.Exit() / 进程退出 → 允许关闭
+        if (e.CloseReason == CloseReason.ApplicationExitCall
+            || e.CloseReason == CloseReason.TaskManagerClosing
+            || e.CloseReason == CloseReason.WindowsShutDown)
         {
-            FlushPendingLogs();
-            await RefreshDataAsync();
-        };
+            _refreshTimer.Stop();
+            return;
+        }
+        // 用户点击 X 按钮 → 隐藏到托盘
+        e.Cancel = true;
+        Hide();
+        AddLog("窗口已隐藏至系统托盘，左键托盘图标可重新打开");
+    }
+
+    /// <summary>最小化时 → 隐藏到托盘（服务端窗口不应占据任务栏）。</summary>
+    private void Window_Resize(object? sender, EventArgs e)
+    {
+        if (WindowState == FormWindowState.Minimized)
+        {
+            Hide();
+            AddLog("窗口已最小化至系统托盘");
+        }
+    }
+
+    /// <summary>首次显示时：刷新数据 + 刷入缓存日志。</summary>
+    private async void Window_Shown(object? sender, EventArgs e)
+    {
+        FlushPendingLogs();
+        await RefreshDataAsync();
     }
 
     /// <summary>
@@ -315,14 +354,18 @@ public class ServerWindow : Form
             Margin = new Padding(4),
             Padding = new Padding(8, 6, 8, 6)
         };
-        card.HandleCreated += (_, _) => SetRoundedRegion(card, CloudPanEffects.CornerRadiusMd);
-        card.Resize += (_, _) =>
+        void OnCardHandleCreated(object? s, EventArgs e)
+            => SetRoundedRegion((Panel)s!, CloudPanEffects.CornerRadiusMd);
+        void OnCardResize(object? s, EventArgs e)
         {
-            if (card.IsHandleCreated)
+            var p = (Panel)s!;
+            if (p.IsHandleCreated)
             {
-                SetRoundedRegion(card, CloudPanEffects.CornerRadiusMd);
+                SetRoundedRegion(p, CloudPanEffects.CornerRadiusMd);
             }
-        };
+        }
+        card.HandleCreated += OnCardHandleCreated;
+        card.Resize += OnCardResize;
 
         Label titleLbl = new Label
         {
@@ -347,8 +390,9 @@ public class ServerWindow : Form
             val.Location = new Point((card.Width - val.Width) / 2, 26);
         }
 
-        card.SizeChanged += (_, _) => CenterStatLabels();
-        card.HandleCreated += (_, _) => CenterStatLabels();
+        void OnCenterStatLabels(object? s, EventArgs e) => CenterStatLabels();
+        card.SizeChanged += OnCenterStatLabels;
+        card.HandleCreated += OnCenterStatLabels;
 
         card.Controls.Add(titleLbl);
         card.Controls.Add(val);
@@ -439,6 +483,19 @@ public class ServerWindow : Form
         }
 
         _logList.TopIndex = _logList.Items.Count - 1;
+    }
+
+    /// <summary>切换到"设置"页签（托盘"设置"菜单入口）。</summary>
+    public void OpenSettingsTab()
+    {
+        foreach (TabPage page in _tabs.TabPages)
+        {
+            if (page.Text == "设置")
+            {
+                _tabs.SelectedTab = page;
+                break;
+            }
+        }
     }
 
     protected override void Dispose(bool disposing)

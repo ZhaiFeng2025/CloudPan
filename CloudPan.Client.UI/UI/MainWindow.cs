@@ -175,7 +175,7 @@ public class MainWindow : Form
             Margin = new Padding(0, 5, 4, 0),
             Visible = false,
         };
-        _errorCountLabel.Click += (_, _) => ShowErrorPopup();
+        _errorCountLabel.Click += ErrorCountLabel_Click;
         ToolTip errorTooltip = new ToolTip { ShowAlways = true };
         errorTooltip.SetToolTip(_errorCountLabel, "点击查看同步错误");
 
@@ -188,7 +188,7 @@ public class MainWindow : Form
             UseVisualStyleBackColor = true,
         };
         _openFolderButton.FlatAppearance.BorderColor = CloudPanColors.ButtonBorderGray;
-        _openFolderButton.Click += (_, _) => OpenSyncFolder();
+        _openFolderButton.Click += OpenFolderButton_Click;
 
         _pauseButton = new Button
         {
@@ -203,7 +203,7 @@ public class MainWindow : Form
         ToolTip tooltip = new ToolTip { ShowAlways = true };
         tooltip.SetToolTip(_pauseButton, "暂停/恢复文件同步");
         _pauseButton.FlatAppearance.BorderColor = CloudPanColors.ButtonBorderGray;
-        _pauseButton.Click += (_, _) => TogglePause();
+        _pauseButton.Click += PauseButton_Click;
 
         _conflictButton = new Button
         {
@@ -217,7 +217,7 @@ public class MainWindow : Form
             Visible = false,
         };
         _conflictButton.FlatAppearance.BorderColor = CloudPanColors.WarningOrange;
-        _conflictButton.Click += (_, _) => ShowConflictList();
+        _conflictButton.Click += ConflictButton_Click;
         ToolTip conflictTooltip = new ToolTip { ShowAlways = true };
         conflictTooltip.SetToolTip(_conflictButton, "查看未解决的冲突");
 
@@ -233,7 +233,7 @@ public class MainWindow : Form
             Visible = false,
         };
         _retryButton.FlatAppearance.BorderColor = CloudPanColors.ErrorRed;
-        _retryButton.Click += (_, _) => RetrySync();
+        _retryButton.Click += RetryButton_Click;
 
         // LTR 顺序：错误计数 | 打开文件夹 | 暂停 | 冲突(条件) | 重试(条件)
         buttonPanel.Controls.Add(_errorCountLabel);
@@ -294,7 +294,7 @@ public class MainWindow : Form
         };
         _logFilterComboBox.Items.AddRange(new object[] { "全部", "仅文件操作", "仅错误" });
         _logFilterComboBox.SelectedIndex = 0;
-        _logFilterComboBox.SelectedIndexChanged += (_, _) => ApplyLogFilter();
+        _logFilterComboBox.SelectedIndexChanged += LogFilter_SelectedIndexChanged;
 
         activityPanel.Controls.Add(activityLabel);
         activityPanel.Controls.Add(_logFilterComboBox);
@@ -758,6 +758,20 @@ public class MainWindow : Form
         _errorCountLabel.Visible = true;
     }
 
+    // ===== 具名事件处理器（CP301：避免匿名 lambda 订阅无法退订） =====
+
+    private void ErrorCountLabel_Click(object? sender, EventArgs e) => ShowErrorPopup();
+
+    private void OpenFolderButton_Click(object? sender, EventArgs e) => OpenSyncFolder();
+
+    private void PauseButton_Click(object? sender, EventArgs e) => TogglePause();
+
+    private void ConflictButton_Click(object? sender, EventArgs e) => ShowConflictList();
+
+    private void RetryButton_Click(object? sender, EventArgs e) => RetrySync();
+
+    private void LogFilter_SelectedIndexChanged(object? sender, EventArgs e) => ApplyLogFilter();
+
     /// <summary>点击错误计数标签时弹出错误列表对话框。</summary>
     private void ShowErrorPopup()
     {
@@ -791,9 +805,9 @@ public class MainWindow : Form
             listBox.Items.Add($"[{err.Timestamp:HH:mm:ss}] {fileName} — {err.Message}");
         }
 
-        // 右键菜单：单条重试/忽略
+        // 右键菜单：单条重试/忽略（本地函数捕获局部状态，同时满足 CP301 具名订阅）
         ContextMenuStrip errorCms = new ContextMenuStrip();
-        errorCms.Items.Add("重试该项", null, async (_, _) =>
+        async void OnRetryItemClick(object? s, EventArgs e)
         {
             int idx = listBox.SelectedIndex;
             if (idx >= 0 && idx < _errors.Count)
@@ -807,8 +821,8 @@ public class MainWindow : Form
                     dialog.Close();
                 }
             }
-        });
-        errorCms.Items.Add("忽略该项", null, (_, _) =>
+        }
+        void OnIgnoreItemClick(object? s, EventArgs e)
         {
             int idx = listBox.SelectedIndex;
             if (idx >= 0 && idx < _errors.Count)
@@ -821,8 +835,10 @@ public class MainWindow : Form
                     dialog.Close();
                 }
             }
-        });
-        listBox.MouseDown += (s, e) =>
+        }
+        errorCms.Items.Add("重试该项", null, OnRetryItemClick);
+        errorCms.Items.Add("忽略该项", null, OnIgnoreItemClick);
+        void OnListBoxMouseDown(object? s, MouseEventArgs e)
         {
             if (e.Button == MouseButtons.Right)
             {
@@ -833,7 +849,8 @@ public class MainWindow : Form
                     errorCms.Show(listBox, e.Location);
                 }
             }
-        };
+        }
+        listBox.MouseDown += OnListBoxMouseDown;
 
         // 底部按钮栏
         FlowLayoutPanel btnPanel = new FlowLayoutPanel
@@ -846,7 +863,8 @@ public class MainWindow : Form
 
         Button closeBtn = new Button { Text = "关闭", Width = 80, Height = 28, FlatStyle = FlatStyle.Flat };
         closeBtn.FlatAppearance.BorderColor = CloudPanColors.ButtonBorderGray;
-        closeBtn.Click += (_, _) => dialog.Close();
+        void OnCloseBtnClick(object? s, EventArgs e) => dialog.Close();
+        closeBtn.Click += OnCloseBtnClick;
 
         Button retryAllBtn = new Button
         {
@@ -859,11 +877,12 @@ public class MainWindow : Form
             BackColor = CloudPanColors.ErrorBgLight,
         };
         retryAllBtn.FlatAppearance.BorderColor = CloudPanColors.ErrorRed;
-        retryAllBtn.Click += async (_, _) =>
+        async void OnRetryAllClick(object? s, EventArgs e)
         {
             await RetryAllErrorsAsync();
             dialog.Close();
-        };
+        }
+        retryAllBtn.Click += OnRetryAllClick;
 
         Button dismissAllBtn = new Button
         {
@@ -874,12 +893,13 @@ public class MainWindow : Form
             Margin = new Padding(0, 0, 4, 0),
         };
         dismissAllBtn.FlatAppearance.BorderColor = CloudPanColors.ButtonBorderGray;
-        dismissAllBtn.Click += (_, _) =>
+        void OnDismissAllClick(object? s, EventArgs e)
         {
             _errors.Clear();
             UpdateErrorBadge();
             dialog.Close();
-        };
+        }
+        dismissAllBtn.Click += OnDismissAllClick;
 
         btnPanel.Controls.Add(closeBtn);
         btnPanel.Controls.Add(retryAllBtn);
@@ -1280,12 +1300,13 @@ public class MainWindow : Form
             Padding = new Padding(8, 0, 0, 0),
             BackColor = CloudPanColors.InfoBgLight, // AliceBlue 浅蓝
         };
-        localPanel.Paint += (s, e) =>
+        void OnLocalPanelPaint(object? s, PaintEventArgs e)
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             using Pen pen = new Pen(CloudPanColors.AccentBlue, 3);
             e.Graphics.DrawLine(pen, 1, 2, 1, localPanel.Height - 4);
-        };
+        }
+        localPanel.Paint += OnLocalPanelPaint;
         localPanel.Controls.Add(new Label
         {
             Text = $"本地版本   修改时间: {localTime}    大小: {localSizeStr}",
@@ -1304,12 +1325,13 @@ public class MainWindow : Form
             Padding = new Padding(8, 0, 0, 0),
             BackColor = CloudPanColors.SuccessBgLight, // Honeydew 浅绿
         };
-        remotePanel.Paint += (s, e) =>
+        void OnRemotePanelPaint(object? s, PaintEventArgs e)
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             using Pen pen = new Pen(CloudPanColors.SuccessGreen, 3);
             e.Graphics.DrawLine(pen, 1, 2, 1, remotePanel.Height - 4);
-        };
+        }
+        remotePanel.Paint += OnRemotePanelPaint;
         remotePanel.Controls.Add(new Label
         {
             Text = $"远程版本   修改时间: {remoteTime}    大小: {remoteSizeStr}",
@@ -1344,11 +1366,12 @@ public class MainWindow : Form
             FlatStyle = FlatStyle.Flat,
         };
         btnLocal.FlatAppearance.BorderColor = CloudPanColors.AccentBlue;
-        btnLocal.Click += (_, _) =>
+        void OnKeepLocalClick(object? s, EventArgs e)
         {
             dialog.Close();
             ResolveConflict(conflict, ConflictResolution.KeepLocal);
-        };
+        }
+        btnLocal.Click += OnKeepLocalClick;
 
         Button btnRemote = new Button
         {
@@ -1358,11 +1381,12 @@ public class MainWindow : Form
             FlatStyle = FlatStyle.Flat,
         };
         btnRemote.FlatAppearance.BorderColor = CloudPanColors.SuccessGreen;
-        btnRemote.Click += (_, _) =>
+        void OnKeepRemoteClick(object? s, EventArgs e)
         {
             dialog.Close();
             ResolveConflict(conflict, ConflictResolution.KeepRemote);
-        };
+        }
+        btnRemote.Click += OnKeepRemoteClick;
 
         Button btnBoth = new Button
         {
@@ -1372,11 +1396,12 @@ public class MainWindow : Form
             FlatStyle = FlatStyle.Flat,
         };
         btnBoth.FlatAppearance.BorderColor = CloudPanColors.WarningOrange;
-        btnBoth.Click += (_, _) =>
+        void OnKeepBothClick(object? s, EventArgs e)
         {
             dialog.Close();
             ResolveConflict(conflict, ConflictResolution.KeepBoth);
-        };
+        }
+        btnBoth.Click += OnKeepBothClick;
 
         buttonPanel.Controls.Add(btnLocal);
         buttonPanel.Controls.Add(btnRemote);
@@ -1452,7 +1477,7 @@ public class MainWindow : Form
             FlatStyle = FlatStyle.Flat,
         };
         resolveBtn.FlatAppearance.BorderColor = CloudPanColors.ButtonBorderGray;
-        resolveBtn.Click += (_, _) =>
+        void OnResolveConflictClick(object? s, EventArgs e)
         {
             if (listBox.SelectedIndex >= 0 && listBox.SelectedIndex < _conflicts.Count)
             {
@@ -1472,7 +1497,8 @@ public class MainWindow : Form
                     listDialog.Close();
                 }
             }
-        };
+        }
+        resolveBtn.Click += OnResolveConflictClick;
 
         Button closeBtn = new Button
         {
@@ -1482,7 +1508,8 @@ public class MainWindow : Form
             FlatStyle = FlatStyle.Flat,
         };
         closeBtn.FlatAppearance.BorderColor = CloudPanColors.ButtonBorderGray;
-        closeBtn.Click += (_, _) => listDialog.Close();
+        void OnListCloseClick(object? s, EventArgs e) => listDialog.Close();
+        closeBtn.Click += OnListCloseClick;
 
         listDialog.Controls.Add(closeBtn);
         listDialog.Controls.Add(resolveBtn);

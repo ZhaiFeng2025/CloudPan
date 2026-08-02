@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using CloudPan.Server.Services;
 using CloudPan.Shared;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
@@ -17,6 +18,7 @@ public class ServerTrayApp : ApplicationContext
     private readonly ServerWindow _window;
     private readonly WebApplication _app;
     private readonly string _serverUrl;
+    private readonly string _syncRoot;
     private readonly ContextMenuStrip _trayMenu;
     private readonly ToolStripMenuItem _autoStartItem;
     private bool _shuttingDown;
@@ -24,10 +26,17 @@ public class ServerTrayApp : ApplicationContext
     /// <summary>服务端 Token（供托盘菜单复制）。</summary>
     public static string? Token { get; set; }
 
-    public ServerTrayApp(WebApplication app, ServerWindow window)
+    public ServerTrayApp(WebApplication app, ServerWindow window, int effectivePort)
     {
         _app = app;
         _window = window;
+
+        // 启动期设置解析（与服务端 Program.cs 同链：CLI → server-settings.json → 默认）
+        (string syncRoot, int port) = StartupSettingsResolver.Resolve(
+            app.Configuration.GetValue<string>("SyncRoot"),
+            app.Configuration.GetValue<int?>("Port"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "CloudPan"));
+        _syncRoot = syncRoot;
 
         // 获取本机 URL
         string host = Dns.GetHostName();
@@ -40,13 +49,13 @@ public class ServerTrayApp : ApplicationContext
         catch { ip = host; }
         bool useHttps = _app.Configuration.GetValue<bool>("Kestrel:Endpoints:Https:Enabled");
         string scheme = useHttps ? "https" : "http";
-        _serverUrl = $"{scheme}://{ip}:{SpecPorts.HttpPort}";
+        _serverUrl = $"{scheme}://{ip}:{port}";
 
         // ===== 预构建右键菜单（复用，避免每次动态创建导致 GDI 泄漏） =====
         _trayMenu = new ContextMenuStrip();
 
         _trayMenu.Items.Add("复制服务端地址", null, (_, _) => CopyToClipboard(_serverUrl));
-        _trayMenu.Items.Add("复制 Token", null, (_, _) => CopyToClipboard(Token ?? "未生成"));
+        _trayMenu.Items.Add("复制 Token", null, (_, _) => CopyToClipboard(GetToken() ?? "未生成"));
         _trayMenu.Items.Add("显示 Token", null, (_, _) => ShowToken());
         _trayMenu.Items.Add(new ToolStripSeparator());
 
@@ -54,14 +63,10 @@ public class ServerTrayApp : ApplicationContext
         {
             Checked = IsAutoStartEnabled()
         };
-        _autoStartItem.Click += (_, _) =>
-        {
-            bool newState = !IsAutoStartEnabled();
-            SetAutoStart(newState);
-            _autoStartItem.Checked = newState;
-        };
+        _autoStartItem.Click += AutoStartItem_Click;
         _trayMenu.Items.Add(_autoStartItem);
 
+        _trayMenu.Items.Add("设置", null, (_, _) => { ShowWindow(); _window.OpenSettingsTab(); });
         _trayMenu.Items.Add("显示管理窗口", null, (_, _) => ShowWindow());
         _trayMenu.Items.Add("打开同步文件夹", null, (_, _) => OpenFolder());
         _trayMenu.Items.Add("打开日志目录", null, (_, _) => OpenLogDir());
@@ -81,13 +86,7 @@ public class ServerTrayApp : ApplicationContext
             ContextMenuStrip = _trayMenu
         };
 
-        _trayIcon.MouseClick += (_, e) =>
-        {
-            if (e.Button == MouseButtons.Left)
-            {
-                ShowWindow();
-            }
-        };
+        _trayIcon.MouseClick += TrayIcon_MouseClick;
 
         // 启动气泡提示（Win11 上可能不显示，非致命）
         _trayIcon.ShowBalloonTip(5000, "CloudPan 服务已启动",
@@ -109,14 +108,40 @@ public class ServerTrayApp : ApplicationContext
         }
     }
 
+    /// <summary>开机自启菜单项点击：切换并持久化自启状态。</summary>
+    private void AutoStartItem_Click(object? sender, EventArgs e)
+    {
+        bool newState = !IsAutoStartEnabled();
+        SetAutoStart(newState);
+        _autoStartItem.Checked = newState;
+    }
+
+    /// <summary>托盘左键点击：显示管理窗口。</summary>
+    private void TrayIcon_MouseClick(object? sender, MouseEventArgs e)
+    {
+        if (e.Button == MouseButtons.Left)
+        {
+            ShowWindow();
+        }
+    }
+
+    /// <summary>
+    /// 获取当前 Token。优先静态缓存（首次启动赋值），服务重启后回退读 token.txt——修复重启后托盘显示"未生成"的既存问题。
+    /// </summary>
+    private string? GetToken()
+    {
+        return Token ?? SecretStore.ReadToken(_syncRoot);
+    }
+
     private void ShowToken()
     {
-        if (Token == null)
+        string? token = GetToken();
+        if (token == null)
         {
             MessageBox.Show("Token 尚未生成。请检查服务端是否正常启动。", "CloudPan");
             return;
         }
-        MessageBox.Show($"家庭共享 Token:\n\n{Token}\n\n请将此 Token 输入客户端配置中。\n提示：右键菜单可一键复制。",
+        MessageBox.Show($"家庭共享 Token:\n\n{token}\n\n请将此 Token 输入客户端配置中。\n提示：右键菜单可一键复制。",
             "CloudPan — Token", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
@@ -138,18 +163,13 @@ public class ServerTrayApp : ApplicationContext
 
     private void OpenFolder()
     {
-        string syncRoot = _app.Configuration.GetValue<string>("SyncRoot")
-            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "CloudPan");
-        try { Process.Start("explorer.exe", syncRoot); }
+        try { Process.Start("explorer.exe", _syncRoot); }
         catch (Exception ex) { _window.AddLog($"打开文件夹失败: {ex.Message}"); }
     }
 
     private void OpenLogDir()
     {
-        string logDir = Path.Combine(
-            _app.Configuration.GetValue<string>("SyncRoot")
-            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "CloudPan"),
-            ".cloudpan", "logs");
+        string logDir = Path.Combine(_syncRoot, ".cloudpan", "logs");
         try
         {
             if (Directory.Exists(logDir))

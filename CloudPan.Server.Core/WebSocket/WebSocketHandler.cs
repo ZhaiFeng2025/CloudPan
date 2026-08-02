@@ -103,7 +103,7 @@ public class WebSocketHandler : IWebSocketHandler, IDisposable
 
         // 4. 验证 Token
         string tokenHash = ComputeSha256(token);
-        string? storedHash = await _cache.GetOrCreateAsync("token_hash_cache", async entry =>
+        string? storedHash = await _cache.GetOrCreateAsync(CacheKeys.TokenHash, async entry =>
         {
             entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
             await using var db = await _dbFactory.CreateDbContextAsync();
@@ -297,6 +297,31 @@ public class WebSocketHandler : IWebSocketHandler, IDisposable
                 {
                     _logger.LogWarning(ex, "广播消息发送失败: {DeviceId}", deviceId);
                 }
+            }
+        }
+    }
+
+    // ============================================================
+    // 连接管理（Token 轮换用）
+    // ============================================================
+
+    /// <inheritdoc />
+    public async Task DisconnectAllAsync(string reason)
+    {
+        // 快照遍历避免迭代时修改字典
+        foreach (var (deviceId, conn) in _connections.ToArray())
+        {
+            if (_connections.TryRemove(deviceId, out _))
+            {
+                try
+                {
+                    await CloseSafeAsync(conn.Socket, WebSocketCloseStatus.PolicyViolation, reason);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Token 轮换断开连接失败: {DeviceId}", deviceId);
+                }
+                await UpdateDeviceOnlineAsync(deviceId, online: false);
             }
         }
     }

@@ -63,8 +63,8 @@ public class SelectiveSyncPanel : UserControl
         _deselectAllBtn.FlatAppearance.BorderColor = CloudPanColors.BorderLight;
         _deselectAllBtn.FlatAppearance.MouseOverBackColor = CloudPanColors.ButtonHoverBg;
         _deselectAllBtn.FlatAppearance.MouseDownBackColor = CloudPanColors.ButtonPressBg;
-        _selectAllBtn.Click += (_, _) => SetAll(true);
-        _deselectAllBtn.Click += (_, _) => SetAll(false);
+        _selectAllBtn.Click += SelectAllBtn_Click;
+        _deselectAllBtn.Click += DeselectAllBtn_Click;
 
         FlowLayoutPanel btnRow = new FlowLayoutPanel { Dock = DockStyle.Bottom, FlowDirection = FlowDirection.LeftToRight, Height = 36 };
         btnRow.Controls.Add(_selectAllBtn);
@@ -143,6 +143,10 @@ public class SelectiveSyncPanel : UserControl
     {
         SetAllNodes(_tree.Nodes, check);
     }
+
+    private void SelectAllBtn_Click(object? sender, EventArgs e) => SetAll(true);
+
+    private void DeselectAllBtn_Click(object? sender, EventArgs e) => SetAll(false);
 
     private static void SetAllNodes(TreeNodeCollection nodes, bool check)
     {

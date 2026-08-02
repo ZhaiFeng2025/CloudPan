@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Drawing.Drawing2D;
 using System.Net.NetworkInformation;
 using System.Security.Principal;
+using CloudPan.Server.Services;
 using CloudPan.Shared;
 
 namespace CloudPan.Server.UI;
@@ -23,7 +24,11 @@ public class ServerInstaller : Form
     private readonly Panel _tokenArea = null!; // 用于 InstallAsync 中控制可见性
     private readonly Panel _syncDirPanel = null!;
     private readonly TextBox _syncDirBox = null!;
+    private Button _copyBtn = null!; // 复制按钮（提升为字段以便具名事件处理器访问）
     private int _currentStep = -1; // -1:未开始, 0-4:步骤中, 5:全部完成
+    private int _flashCount; // 闪烁动画计数
+    private Color _flashColor; // 闪烁动画绿色
+    private Color _flashOriginalColor; // 闪烁动画起始边框色
 
     public ServerInstaller()
     {
@@ -37,7 +42,7 @@ public class ServerInstaller : Form
                 "如需安装服务，请右键以管理员身份运行此程序。",
                 "权限提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
             // 不杀进程，返回 Abort 让调用方以独立模式继续
-            Load += (_, _) => { DialogResult = DialogResult.Abort; Close(); };
+            Load += OnNonAdminLoad;
             return;
         }
 
@@ -142,16 +147,7 @@ public class ServerInstaller : Form
             Cursor = Cursors.Hand
         };
         browseBtn.FlatAppearance.BorderSize = 0;
-        browseBtn.Click += (_, _) =>
-        {
-            using FolderBrowserDialog dlg = new FolderBrowserDialog();
-            dlg.Description = "选择同步文件存储目录";
-            dlg.SelectedPath = _syncDirBox.Text;
-            if (dlg.ShowDialog() == DialogResult.OK)
-            {
-                _syncDirBox.Text = dlg.SelectedPath;
-            }
-        };
+        browseBtn.Click += BrowseBtn_Click;
 
         _syncDirPanel.Controls.Add(browseBtn);
         _syncDirPanel.Controls.Add(_syncDirBox);
@@ -218,7 +214,7 @@ public class ServerInstaller : Form
             ForeColor = CloudPanColors.TextPrimary
         };
 
-        Button copyBtn = new Button
+        _copyBtn = new Button
         {
             Text = "复制",
             Anchor = AnchorStyles.Top | AnchorStyles.Right,
@@ -229,45 +225,15 @@ public class ServerInstaller : Form
             Cursor = Cursors.Hand,
             Size = new Size(70, 26)
         };
-        copyBtn.FlatAppearance.BorderSize = 0;
-        copyBtn.Click += (_, _) =>
-        {
-            string rawToken = _tokenBox.Text.Replace("-", "");
-            try { Clipboard.SetText(rawToken); }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"复制 Token 失败: {ex.Message}"); }
-            copyBtn.Text = "已复制!";
-            copyBtn.BackColor = CloudPanColors.SuccessGreen;
-            Task.Run(async () =>
-            {
-                try { await Task.Delay(1500); } catch { }
-                try
-                {
-                    if (!copyBtn.IsDisposed)
-                    {
-                        copyBtn.Invoke(() =>
-                        {
-                            if (!copyBtn.IsDisposed)
-                            {
-                                copyBtn.Text = "复制";
-                                copyBtn.BackColor = CloudPanColors.PrimaryBlue;
-                            }
-                        });
-                    }
-                }
-                catch (ObjectDisposedException) { }
-            });
-        };
+        _copyBtn.FlatAppearance.BorderSize = 0;
+        _copyBtn.Click += CopyBtn_Click;
 
         // 定位复制按钮和输入框宽度
-        _tokenPanel.Layout += (_, _) =>
-        {
-            copyBtn.Location = new Point(_tokenPanel.Width - 80, 26);
-            _tokenBox.Width = _tokenPanel.Width - 100;
-        };
+        _tokenPanel.Layout += TokenPanel_Layout;
 
         _tokenPanel.Controls.Add(tokenLabel);
         _tokenPanel.Controls.Add(_tokenBox);
-        _tokenPanel.Controls.Add(copyBtn);
+        _tokenPanel.Controls.Add(_copyBtn);
         _tokenBorder.Controls.Add(_tokenPanel);
         _tokenArea.Controls.Add(_tokenBorder);
 
@@ -295,7 +261,7 @@ public class ServerInstaller : Form
             Cursor = Cursors.Hand
         };
         _installBtn.FlatAppearance.BorderSize = 0;
-        _installBtn.Click += async (_, _) => await InstallAsync();
+        _installBtn.Click += InstallBtn_Click;
 
         _closeBtn = new Button
         {
@@ -311,13 +277,10 @@ public class ServerInstaller : Form
         _closeBtn.FlatAppearance.BorderColor = CloudPanColors.BorderMid;
         _closeBtn.FlatAppearance.MouseOverBackColor = CloudPanColors.ButtonHoverBg;
         _closeBtn.FlatAppearance.MouseDownBackColor = CloudPanColors.ButtonPressBg;
-        _closeBtn.Click += (_, _) => Close();
+        _closeBtn.Click += CloseBtn_Click;
 
         // 定位关闭按钮（右侧，24px 边距）
-        btnPanel.Layout += (_, _) =>
-        {
-            _closeBtn.Location = new Point(btnPanel.Width - 24 - 120, 6);
-        };
+        btnPanel.Layout += BtnPanel_Layout;
         _closeBtn.Location = new Point(0, 6); // 初始位置，Layout 事件会修正
 
         btnPanel.Controls.Add(_closeBtn);
@@ -328,6 +291,72 @@ public class ServerInstaller : Form
         Controls.Add(bodyPanel);
         Controls.Add(_stepPanel);
         Controls.Add(headerPanel);
+    }
+
+    // =================================================================
+    //  具名事件处理器（CP301：避免匿名 lambda 订阅无法退订）
+    // =================================================================
+    private void OnNonAdminLoad(object? sender, EventArgs e)
+    {
+        DialogResult = DialogResult.Abort;
+        Close();
+    }
+
+    private void BrowseBtn_Click(object? sender, EventArgs e)
+    {
+        using FolderBrowserDialog dlg = new FolderBrowserDialog();
+        dlg.Description = "选择同步文件存储目录";
+        dlg.SelectedPath = _syncDirBox.Text;
+        if (dlg.ShowDialog() == DialogResult.OK)
+        {
+            _syncDirBox.Text = dlg.SelectedPath;
+        }
+    }
+
+    private void CopyBtn_Click(object? sender, EventArgs e)
+    {
+        string rawToken = _tokenBox.Text.Replace("-", "");
+        try { Clipboard.SetText(rawToken); }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"复制 Token 失败: {ex.Message}"); }
+        _copyBtn.Text = "已复制!";
+        _copyBtn.BackColor = CloudPanColors.SuccessGreen;
+        Task.Run(async () =>
+        {
+            try { await Task.Delay(1500); } catch { }
+            try
+            {
+                if (!_copyBtn.IsDisposed)
+                {
+                    _copyBtn.Invoke(() =>
+                    {
+                        if (!_copyBtn.IsDisposed)
+                        {
+                            _copyBtn.Text = "复制";
+                            _copyBtn.BackColor = CloudPanColors.PrimaryBlue;
+                        }
+                    });
+                }
+            }
+            catch (ObjectDisposedException) { }
+        });
+    }
+
+    private void TokenPanel_Layout(object? sender, LayoutEventArgs e)
+    {
+        _copyBtn.Location = new Point(_tokenPanel.Width - 80, 26);
+        _tokenBox.Width = _tokenPanel.Width - 100;
+    }
+
+    private async void InstallBtn_Click(object? sender, EventArgs e) => await InstallAsync();
+
+    private void CloseBtn_Click(object? sender, EventArgs e) => Close();
+
+    private void BtnPanel_Layout(object? sender, LayoutEventArgs e)
+    {
+        if (sender is Panel panel)
+        {
+            _closeBtn.Location = new Point(panel.Width - 24 - 120, 6);
+        }
     }
 
     // =================================================================
@@ -462,22 +491,26 @@ public class ServerInstaller : Form
     /// </summary>
     private void FlashSuccessBorder()
     {
-        var originalColor = _tokenBorder.BackColor;
-        var flashColor = CloudPanColors.SuccessGreen;
+        _flashOriginalColor = _tokenBorder.BackColor;
+        _flashColor = CloudPanColors.SuccessGreen;
+        _flashCount = 0;
         System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer { Interval = CloudPanEffects.DurationNormal };
-        int count = 0;
-        timer.Tick += (_, _) =>
-        {
-            count++;
-            _tokenBorder.BackColor = count % 2 == 1 ? flashColor : originalColor;
-            if (count >= 5) // 3 次闪烁后停在绿色
-            {
-                timer.Stop();
-                timer.Dispose();
-                _tokenBorder.BackColor = flashColor;
-            }
-        };
+        timer.Tick += FlashTimer_Tick;
         timer.Start();
+    }
+
+    /// <summary>闪烁动画 Timer 回调：交替显示原色/绿色，3 次后停在绿色并释放 Timer。</summary>
+    private void FlashTimer_Tick(object? sender, EventArgs e)
+    {
+        _flashCount++;
+        _tokenBorder.BackColor = _flashCount % 2 == 1 ? _flashColor : _flashOriginalColor;
+        if (_flashCount >= 5) // 3 次闪烁后停在绿色
+        {
+            var timer = (System.Windows.Forms.Timer)sender!;
+            timer.Stop();
+            timer.Dispose();
+            _tokenBorder.BackColor = _flashColor;
+        }
     }
 
     // =================================================================
@@ -632,7 +665,7 @@ public class ServerInstaller : Form
                 if (File.Exists(tokenPath))
                 {
                     string token;
-                    try { token = File.ReadAllText(tokenPath).Trim(); }
+                    try { token = SecretStore.ReadToken(syncDir) ?? ""; }
                     catch (IOException)
                     {
                         // 服务正在写入 token 文件，等待下一轮重试
@@ -727,32 +760,38 @@ public class ServerInstaller : Form
             Font = new Font(CloudPanFonts.FontFamily, CloudPanFonts.SizeCaption),
             ForeColor = CloudPanColors.TextMuted
         };
-        addrLabel.Click += (_, _) =>
-        {
-            try { Clipboard.SetText($"http://{ip}:{SpecPorts.HttpPort}"); }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"复制地址失败: {ex.Message}"); }
-            addrLabel.Text = $"服务端地址: http://{ip}:{SpecPorts.HttpPort} ✓ 已复制";
-            Task.Run(async () =>
-            {
-                try { await Task.Delay(1500); } catch { }
-                try
-                {
-                    if (!addrLabel.IsDisposed)
-                    {
-                        addrLabel.Invoke(() =>
-                        {
-                            if (!addrLabel.IsDisposed)
-                            {
-                                addrLabel.Text = $"服务端地址: http://{ip}:{SpecPorts.HttpPort}";
-                            }
-                        });
-                    }
-                }
-                catch (ObjectDisposedException) { }
-            });
-        };
+        addrLabel.Tag = ip;
+        addrLabel.Click += AddrLabel_Click;
         panel.Controls.Add(addrLabel);
         panel.Controls.Add(hintLabel);
+    }
+
+    /// <summary>点击服务端地址标签：复制地址并短暂显示"已复制"。</summary>
+    private void AddrLabel_Click(object? sender, EventArgs e)
+    {
+        var addrLabel = (Label)sender!;
+        string ip = addrLabel.Tag as string ?? "";
+        try { Clipboard.SetText($"http://{ip}:{SpecPorts.HttpPort}"); }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"复制地址失败: {ex.Message}"); }
+        addrLabel.Text = $"服务端地址: http://{ip}:{SpecPorts.HttpPort} ✓ 已复制";
+        Task.Run(async () =>
+        {
+            try { await Task.Delay(1500); } catch { }
+            try
+            {
+                if (!addrLabel.IsDisposed)
+                {
+                    addrLabel.Invoke(() =>
+                    {
+                        if (!addrLabel.IsDisposed)
+                        {
+                            addrLabel.Text = $"服务端地址: http://{ip}:{SpecPorts.HttpPort}";
+                        }
+                    });
+                }
+            }
+            catch (ObjectDisposedException) { }
+        });
     }
 
     /// <summary>
@@ -799,15 +838,17 @@ public class ServerInstaller : Form
                 return false;
             }
 
-            // 异步读取 stderr 避免管道缓冲区满导致子进程死锁
+            // 异步读取 stderr 避免管道缓冲区满导致子进程死锁。
+            // 本地函数捕获局部 stderrOutput，同时满足 CP301（非匿名 lambda，可退订）。
             string? stderrOutput = null;
-            p.ErrorDataReceived += (_, e) =>
+            void OnErrorDataReceived(object sender, DataReceivedEventArgs e)
             {
                 if (e.Data != null)
                 {
                     stderrOutput = (stderrOutput ?? "") + e.Data + "\n";
                 }
-            };
+            }
+            p.ErrorDataReceived += OnErrorDataReceived;
             p.BeginErrorReadLine();
 
             if (!p.WaitForExit(30000))

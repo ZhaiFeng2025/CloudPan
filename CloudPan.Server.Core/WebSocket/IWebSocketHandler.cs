@@ -17,6 +17,9 @@ public interface IWebSocketHandler
     /// <summary>广播文件重命名事件（排除发送设备）。</summary>
     Task BroadcastFileRenamedAsync(string oldPath, string newPath, string? excludeDeviceId = null);
 
+    /// <summary>断开所有已连接设备（Token 轮换可选步骤）。逐个容错，不中断整体。</summary>
+    Task DisconnectAllAsync(string reason);
+
     /// <summary>当前活跃连接数。</summary>
     int ActiveConnectionCount { get; }
 }

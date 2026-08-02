@@ -1,6 +1,11 @@
 using System.Security.AccessControl;
 using System.Security.Principal;
 
+// CP200 抑制：SecretStore 本身是 Token 的唯一授权落盘点（.cloudpan/token.txt + ACL 限权），
+// 此处对 token 路径的 File.* 读写是设计意图（受控存取），而非敏感数据散落直写盘。
+// 业务代码必须经 SecretStore.ReadToken/WriteToken 存取 Token，不得绕过本服务。
+#pragma warning disable CP200
+
 namespace CloudPan.Server.Services;
 
 /// <summary>
@@ -63,7 +68,12 @@ public static class SecretStore
         File.Delete(tokenFile);
     }
 
-    /// <summary>设置文件 ACL，仅限当前用户可读可写。</summary>
+    /// <summary>设置文件 ACL，仅限当前用户可完全控制（读写/同步）。禁用继承，其他账户无任何权限。</summary>
+    /// <remarks>
+    /// 需 FullControl 而非 ReadData|WriteData：同步 I/O 打开文件还要求 ReadAttributes 与 Synchronize，
+    /// 缺失会导致同用户写后读取 Access denied（测试暴露，普通进程受限于自身令牌无法绕过）。
+    /// 仍限定当前用户 SID，安全语义不变。
+    /// </remarks>
     private static void SetTokenFileAcl(string filePath)
     {
         FileInfo fileInfo = new FileInfo(filePath);
@@ -74,7 +84,7 @@ public static class SecretStore
         {
             accessControl.AddAccessRule(new FileSystemAccessRule(
                 currentUser,
-                FileSystemRights.ReadData | FileSystemRights.WriteData,
+                FileSystemRights.FullControl,
                 AccessControlType.Allow));
         }
         fileInfo.SetAccessControl(accessControl);

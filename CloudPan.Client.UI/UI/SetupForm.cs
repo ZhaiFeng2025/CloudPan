@@ -86,7 +86,7 @@ public class SetupForm : Form
 
         // ====== 按钮初始化 ======
         _searchButton = CreateFlatButton("搜索局域网", 100);
-        _searchButton.Click += async (_, _) => await SearchLanAsync();
+        _searchButton.Click += SearchButton_Click;
 
         _browseButton = CreateFlatButton("浏览...", 76);
         _browseButton.Click += OnBrowseClick;
@@ -97,11 +97,7 @@ public class SetupForm : Form
 
         // ====== 搜索动画定时器（默认停止；必须在 _searchButton 之后创建） ======
         _searchAnimTimer = new System.Windows.Forms.Timer { Interval = 120 };
-        _searchAnimTimer.Tick += (_, _) =>
-        {
-            _searchAnimFrame = (_searchAnimFrame + 1) % SearchSpinner.Length;
-            _searchButton.Text = "搜索中 " + SearchSpinner[_searchAnimFrame];
-        };
+        _searchAnimTimer.Tick += SearchAnimTimer_Tick;
 
         // ====== 错误/提示标签 ======
         _urlErrorLabel = CreateFieldMessageLabel();
@@ -138,34 +134,15 @@ public class SetupForm : Form
         };
 
         // ====== 实时校验（失去焦点时立即验证） ======
-        _serverUrlBox.Leave += (_, _) => ValidateServerUrlField();
-        _syncRootBox.Leave += (_, _) => ValidateSyncRootField();
-        _tokenBox.Leave += (_, _) => ValidateTokenField();
+        _serverUrlBox.Leave += ServerUrlBox_Leave;
+        _syncRootBox.Leave += SyncRootBox_Leave;
+        _tokenBox.Leave += TokenBox_Leave;
 
         // 手工编辑地址时重置搜索状态（搜索过程中不重置，搜索成功后用户手动改写时重置）
-        _serverUrlBox.TextChanged += (_, _) =>
-        {
-            if (!_isSearching)
-            {
-                if (_searchFound)
-                {
-                    // 搜索成功后用户手动改写 → 清除搜索状态，让图标重新变为空心
-                    _searchFound = false;
-                }
-                _urlStatusIcon.Text = "○";
-                _urlStatusIcon.ForeColor = CloudPanColors.TextMuted;
-            }
-        };
+        _serverUrlBox.TextChanged += ServerUrlBox_TextChanged;
 
         // Token 箱自动清理首尾空白（无长度限制，防止粘贴带空格时显示异常）
-        _tokenBox.TextChanged += (_, _) =>
-        {
-            string trimmed = _tokenBox.Text.Trim();
-            if (trimmed != _tokenBox.Text)
-            {
-                _tokenBox.Text = trimmed;
-            }
-        };
+        _tokenBox.TextChanged += TokenBox_TextChanged;
 
         // ====== 主布局：Dock/Fill + Panel 嵌套 ======
         Panel outerPanel = new Panel { Dock = DockStyle.Fill, BackColor = CloudPanColors.BackgroundWhite };
@@ -437,7 +414,7 @@ public class SetupForm : Form
         cancelBtn.FlatAppearance.BorderColor = CloudPanColors.BorderLight;
         cancelBtn.FlatAppearance.MouseOverBackColor = CloudPanColors.ButtonHoverBg;
         cancelBtn.FlatAppearance.MouseDownBackColor = CloudPanColors.ButtonPressBg;
-        cancelBtn.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
+        cancelBtn.Click += CancelBtn_Click;
 
         btnRow.Controls.Add(_okButton);
         btnRow.Controls.Add(cancelBtn);
@@ -538,6 +515,51 @@ public class SetupForm : Form
     // ════════════════════════════════════════════════════════════════
     //  Token 显示/隐藏
     // ════════════════════════════════════════════════════════════════
+
+    // ===== 具名事件处理器（CP301：避免匿名 lambda 订阅无法退订） =====
+
+    private async void SearchButton_Click(object? sender, EventArgs e) => await SearchLanAsync();
+
+    private void SearchAnimTimer_Tick(object? sender, EventArgs e)
+    {
+        _searchAnimFrame = (_searchAnimFrame + 1) % SearchSpinner.Length;
+        _searchButton.Text = "搜索中 " + SearchSpinner[_searchAnimFrame];
+    }
+
+    private void ServerUrlBox_Leave(object? sender, EventArgs e) => ValidateServerUrlField();
+
+    private void SyncRootBox_Leave(object? sender, EventArgs e) => ValidateSyncRootField();
+
+    private void TokenBox_Leave(object? sender, EventArgs e) => ValidateTokenField();
+
+    private void ServerUrlBox_TextChanged(object? sender, EventArgs e)
+    {
+        if (!_isSearching)
+        {
+            if (_searchFound)
+            {
+                // 搜索成功后用户手动改写 → 清除搜索状态，让图标重新变为空心
+                _searchFound = false;
+            }
+            _urlStatusIcon.Text = "○";
+            _urlStatusIcon.ForeColor = CloudPanColors.TextMuted;
+        }
+    }
+
+    private void TokenBox_TextChanged(object? sender, EventArgs e)
+    {
+        string trimmed = _tokenBox.Text.Trim();
+        if (trimmed != _tokenBox.Text)
+        {
+            _tokenBox.Text = trimmed;
+        }
+    }
+
+    private void CancelBtn_Click(object? sender, EventArgs e)
+    {
+        DialogResult = DialogResult.Cancel;
+        Close();
+    }
 
     private void ToggleTokenMask(object? sender, EventArgs e)
     {

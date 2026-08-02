@@ -13,10 +13,12 @@ namespace CloudPan.Server.Hosting;
 public sealed class UdpDiscoveryHostedService : BackgroundService
 {
     private readonly ILogger<UdpDiscoveryHostedService> _logger;
+    private readonly int _httpPort;
 
-    public UdpDiscoveryHostedService(ILogger<UdpDiscoveryHostedService> logger)
+    public UdpDiscoveryHostedService(ILogger<UdpDiscoveryHostedService> logger, int httpPort)
     {
         _logger = logger;
+        _httpPort = httpPort;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -25,7 +27,7 @@ public sealed class UdpDiscoveryHostedService : BackgroundService
         {
             using UdpClient udp = new UdpClient(new IPEndPoint(IPAddress.Any, SpecPorts.UdpDiscoveryPort));
             byte[] serverInfo = Encoding.UTF8.GetBytes(
-                "{\"server\":\"http://" + Environment.MachineName + ":" + SpecPorts.HttpPort + "\",\"name\":\"" +
+                "{\"server\":\"http://" + Environment.MachineName + ":" + _httpPort + "\",\"name\":\"" +
                 Environment.MachineName + "\",\"version\":\"0.2.0\"}");
             _logger.LogInformation("UDP 局域网发现服务已启动 (端口 {Port})", SpecPorts.UdpDiscoveryPort);
 

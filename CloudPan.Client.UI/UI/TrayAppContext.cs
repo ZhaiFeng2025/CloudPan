@@ -18,6 +18,8 @@ public class TrayAppContext : ApplicationContext
     private readonly Services.SyncEngine _engine;
     private readonly Services.WebSocketClient _wsClient;
     private readonly System.Collections.Concurrent.ConcurrentQueue<string> _conflictPaths = new();
+    private readonly System.Threading.SynchronizationContext? _syncCtx; // UI 同步上下文（构造函数捕获，供具名事件处理器）
+    private readonly System.Collections.Concurrent.ConcurrentQueue<string> _recentActivity = new(); // 最近同步活动（托盘文本）
     private volatile bool _isPaused;
 
     public TrayAppContext(Services.SyncEngine engine, Services.WebSocketClient wsClient)
@@ -38,20 +40,10 @@ public class TrayAppContext : ApplicationContext
         TrayIcon = _trayIcon;
         _normalIcon = CloudPanIcon.Create();
 
-        _trayIcon.MouseUp += (_, e) =>
-        {
-            if (e.Button == MouseButtons.Left)
-            {
-                ShowWindow();
-            }
-            else if (e.Button == MouseButtons.Right)
-            {
-                ShowTrayMenu();
-            }
-        };
+        _trayIcon.MouseUp += TrayIcon_MouseUp;
 
-        // 捕获 UI 线程同步上下文
-        var syncCtx = System.Threading.SynchronizationContext.Current;
+        // 捕获 UI 线程同步上下文（提升为字段，供具名事件处理器使用）
+        _syncCtx = System.Threading.SynchronizationContext.Current;
 
         // 启动同步引擎
         _syncTask = Task.Run(() => engine.StartAsync(_cts.Token));
@@ -61,7 +53,7 @@ public class TrayAppContext : ApplicationContext
             {
                 var ex = t.Exception?.InnerException ?? t.Exception;
                 string msg = ex?.Message ?? "未知错误";
-                syncCtx?.Post(_ =>
+                _syncCtx?.Post(_ =>
                 {
                     _trayIcon.ShowBalloonTip(10000, "CloudPan — 同步异常",
                         $"同步引擎已停止: {msg}\n请检查网络或重新启动客户端。", ToolTipIcon.Error);
@@ -79,7 +71,7 @@ public class TrayAppContext : ApplicationContext
             {
                 var ex = t.Exception?.InnerException ?? t.Exception;
                 string msg = ex?.Message ?? "未知错误";
-                syncCtx?.Post(_ =>
+                _syncCtx?.Post(_ =>
                 {
                     _trayIcon.ShowBalloonTip(10000, "CloudPan — 连接异常",
                         $"服务端连接已断开: {msg}\n客户端将自动重连。", ToolTipIcon.Warning);
@@ -88,103 +80,162 @@ public class TrayAppContext : ApplicationContext
         }, TaskContinuationOptions.OnlyOnFaulted);
 
         // 冲突检测 → 托盘气泡 + 警告图标
-        engine.ConflictDetected += (conflictInfo) =>
-        {
-            string path = conflictInfo.RelativePath;
-            syncCtx?.Post(_ =>
-            {
-                _conflictPaths.Enqueue(path);
-                if (_conflictPaths.Count > 50) { _conflictPaths.TryDequeue(out string? _); }
-
-                _trayIcon.Icon = SystemIcons.Warning;
-                _trayIcon.Text = "CloudPan — 文件冲突";
-                _trayIcon.ShowBalloonTip(5000, "CloudPan — 文件冲突",
-                    $"检测到文件冲突: {path}\n点击查看详情", ToolTipIcon.Warning);
-
-                _mainWindow.ShowConflictWarning(path);
-            }, null);
-        };
-
+        engine.ConflictDetected += OnConflictDetected;
         // 冲突解决
-        engine.ConflictResolved += (path) =>
-        {
-            syncCtx?.Post(_ =>
-            {
-                List<string> remaining = new List<string>();
-                while (_conflictPaths.TryDequeue(out string? p))
-                {
-                    if (p != path) remaining.Add(p);
-                }
-                foreach (string p in remaining) _conflictPaths.Enqueue(p);
+        engine.ConflictResolved += OnConflictResolved;
+        // 断连 / 重连通知
+        wsClient.OnDisconnected += OnWsDisconnected;
+        wsClient.OnConnected += OnWsConnected;
+        // 认证失败
+        wsClient.OnPermanentFailure += OnWsPermanentFailure;
+        // 状态更新
+        engine.StatusChanged += OnStatusChanged;
+    }
 
-                if (_conflictPaths.Count == 0 && !Program.IsOffline)
-                {
-                    _trayIcon.Icon = _normalIcon;
-                    _trayIcon.Text = "CloudPan — 已连接";
-                }
-            }, null);
-        };
+    // ===== 具名事件处理器（CP301：避免匿名 lambda 订阅无法退订） =====
 
-        // 断连通知
-        wsClient.OnDisconnected += () =>
+    /// <summary>托盘鼠标事件：左键显示窗口，右键显示菜单。</summary>
+    private void TrayIcon_MouseUp(object? sender, MouseEventArgs e)
+    {
+        if (e.Button == MouseButtons.Left)
         {
-            syncCtx?.Post(_ =>
+            ShowWindow();
+        }
+        else if (e.Button == MouseButtons.Right)
+        {
+            ShowTrayMenu();
+        }
+    }
+
+    /// <summary>冲突检测 → 托盘气泡 + 警告图标。</summary>
+    private void OnConflictDetected(Services.ConflictInfo conflictInfo)
+    {
+        string path = conflictInfo.RelativePath;
+        _syncCtx?.Post(_ =>
+        {
+            _conflictPaths.Enqueue(path);
+            if (_conflictPaths.Count > 50) { _conflictPaths.TryDequeue(out string? _); }
+
+            _trayIcon.Icon = SystemIcons.Warning;
+            _trayIcon.Text = "CloudPan — 文件冲突";
+            _trayIcon.ShowBalloonTip(5000, "CloudPan — 文件冲突",
+                $"检测到文件冲突: {path}\n点击查看详情", ToolTipIcon.Warning);
+
+            _mainWindow.ShowConflictWarning(path);
+        }, null);
+    }
+
+    /// <summary>冲突解决：从队列移除并恢复图标。</summary>
+    private void OnConflictResolved(string path)
+    {
+        _syncCtx?.Post(_ =>
+        {
+            List<string> remaining = new List<string>();
+            while (_conflictPaths.TryDequeue(out string? p))
             {
-                _trayIcon.Icon = SystemIcons.Warning;
-                _trayIcon.Text = "CloudPan — 已离线（自动重连中）";
-                _trayIcon.ShowBalloonTip(5000, "CloudPan", "服务端连接已断开，正在自动重连...", ToolTipIcon.Warning);
-            }, null);
-        };
-        wsClient.OnConnected += () =>
-        {
-            syncCtx?.Post(_ =>
+                if (p != path) remaining.Add(p);
+            }
+            foreach (string p in remaining) _conflictPaths.Enqueue(p);
+
+            if (_conflictPaths.Count == 0 && !Program.IsOffline)
             {
                 _trayIcon.Icon = _normalIcon;
                 _trayIcon.Text = "CloudPan — 已连接";
-                _trayIcon.ShowBalloonTip(3000, "CloudPan", "已重新连接到服务端", ToolTipIcon.Info);
-            }, null);
-        };
-
-        // 认证失败
-        wsClient.OnPermanentFailure += () =>
-        {
-            syncCtx?.Post(_ =>
-            {
-                _trayIcon.Icon = SystemIcons.Error;
-                _trayIcon.Text = "CloudPan — Token 无效，请重新配置";
-                _trayIcon.ShowBalloonTip(5000, "CloudPan",
-                    "Token 认证失败已达上限。请检查 Token 是否正确或服务端是否已重新生成。",
-                    ToolTipIcon.Error);
-            }, null);
-        };
-
-        // 状态更新
-        System.Collections.Concurrent.ConcurrentQueue<string> recentActivity = new();
-        engine.StatusChanged += (status) =>
-        {
-            if (status.Contains("上传") || status.Contains("下载") || status.Contains("同步"))
-            {
-                recentActivity.Enqueue(status);
             }
-            if (recentActivity.Count > 20) { recentActivity.TryDequeue(out _); }
+        }, null);
+    }
 
-            syncCtx?.Post(_ =>
+    /// <summary>WebSocket 断开：离线状态。</summary>
+    private void OnWsDisconnected()
+    {
+        _syncCtx?.Post(_ =>
+        {
+            _trayIcon.Icon = SystemIcons.Warning;
+            _trayIcon.Text = "CloudPan — 已离线（自动重连中）";
+            _trayIcon.ShowBalloonTip(5000, "CloudPan", "服务端连接已断开，正在自动重连...", ToolTipIcon.Warning);
+        }, null);
+    }
+
+    /// <summary>WebSocket 重连成功：恢复在线状态。</summary>
+    private void OnWsConnected()
+    {
+        _syncCtx?.Post(_ =>
+        {
+            _trayIcon.Icon = _normalIcon;
+            _trayIcon.Text = "CloudPan — 已连接";
+            _trayIcon.ShowBalloonTip(3000, "CloudPan", "已重新连接到服务端", ToolTipIcon.Info);
+        }, null);
+    }
+
+    /// <summary>认证失败：提示 Token 无效。</summary>
+    private void OnWsPermanentFailure()
+    {
+        _syncCtx?.Post(_ =>
+        {
+            _trayIcon.Icon = SystemIcons.Error;
+            _trayIcon.Text = "CloudPan — Token 无效，请重新配置";
+            _trayIcon.ShowBalloonTip(5000, "CloudPan",
+                "Token 认证失败已达上限。请检查 Token 是否正确或服务端是否已重新生成。",
+                ToolTipIcon.Error);
+        }, null);
+    }
+
+    /// <summary>同步状态更新：更新托盘文本/图标并记录日志。</summary>
+    private void OnStatusChanged(string status)
+    {
+        if (status.Contains("上传") || status.Contains("下载") || status.Contains("同步"))
+        {
+            _recentActivity.Enqueue(status);
+        }
+        if (_recentActivity.Count > 20) { _recentActivity.TryDequeue(out _); }
+
+        _syncCtx?.Post(_ =>
+        {
+            string baseText = $"CloudPan — {status}";
+            if (_recentActivity.Count > 0 && !status.Contains("就绪"))
             {
-                string baseText = $"CloudPan — {status}";
-                if (recentActivity.Count > 0 && !status.Contains("就绪"))
-                {
-                    baseText += $"\n{string.Join("\n", recentActivity.TakeLast(2))}";
-                }
-                _trayIcon.Text = baseText;
-                _trayIcon.Icon = status switch
-                {
-                    string s when s.Contains("错误") || s.Contains("失败") => SystemIcons.Error,
-                    string s when s.Contains("冲突") || s.Contains("暂停") => SystemIcons.Warning,
-                    _ => _normalIcon
-                };
-            }, null);
-            syncCtx?.Post(_ => _mainWindow.AddLog(status), null);
-        };
+                baseText += $"\n{string.Join("\n", _recentActivity.TakeLast(2))}";
+            }
+            _trayIcon.Text = baseText;
+            _trayIcon.Icon = status switch
+            {
+                string s when s.Contains("错误") || s.Contains("失败") => SystemIcons.Error,
+                string s when s.Contains("冲突") || s.Contains("暂停") => SystemIcons.Warning,
+                _ => _normalIcon
+            };
+        }, null);
+        _syncCtx?.Post(_ => _mainWindow.AddLog(status), null);
+    }
+
+    /// <summary>暂停/继续同步菜单项。</summary>
+    private void PauseItem_Click(object? sender, EventArgs e)
+    {
+        _isPaused = !_isPaused;
+        _engine.SetPaused(_isPaused);
+        _trayIcon.ShowBalloonTip(3000, "CloudPan",
+            _isPaused ? "同步已暂停" : "同步已恢复",
+            _isPaused ? ToolTipIcon.Warning : ToolTipIcon.Info);
+    }
+
+    /// <summary>查看冲突菜单项。</summary>
+    private void ConflictItem_Click(object? sender, EventArgs e)
+    {
+        ShowWindow();
+        if (_conflictPaths.TryDequeue(out string? lastPath))
+        {
+            _mainWindow.ShowConflictWarning(lastPath);
+        }
+    }
+
+    /// <summary>开机自启菜单项：切换并持久化状态。</summary>
+    private void AutoStartItem_Click(object? sender, EventArgs e)
+    {
+        bool newState = !IsAutoStartEnabled();
+        SetAutoStart(newState);
+        if (sender is ToolStripMenuItem item)
+        {
+            item.Checked = newState;
+        }
     }
 
     // ===== 右键菜单（运行时动态构建） =====
@@ -200,14 +251,7 @@ public class TrayAppContext : ApplicationContext
 
         // 暂停/继续
         var pauseItem = new ToolStripMenuItem(_isPaused ? "继续同步" : "暂停同步");
-        pauseItem.Click += (_, _) =>
-        {
-            _isPaused = !_isPaused;
-            _engine.SetPaused(_isPaused);
-            _trayIcon.ShowBalloonTip(3000, "CloudPan",
-                _isPaused ? "同步已暂停" : "同步已恢复",
-                _isPaused ? ToolTipIcon.Warning : ToolTipIcon.Info);
-        };
+        pauseItem.Click += PauseItem_Click;
         menu.Items.Add(pauseItem);
 
         menu.Items.Add("立即同步", null, async (_, _) =>
@@ -235,14 +279,7 @@ public class TrayAppContext : ApplicationContext
         {
             Enabled = conflictCount > 0
         };
-        conflictItem.Click += (_, _) =>
-        {
-            ShowWindow();
-            if (_conflictPaths.TryDequeue(out string? lastPath))
-            {
-                _mainWindow.ShowConflictWarning(lastPath);
-            }
-        };
+        conflictItem.Click += ConflictItem_Click;
         menu.Items.Add(conflictItem);
         menu.Items.Add(new ToolStripSeparator());
 
@@ -252,12 +289,7 @@ public class TrayAppContext : ApplicationContext
             CheckOnClick = true,
             Checked = IsAutoStartEnabled()
         };
-        autoStartItem.Click += (_, _) =>
-        {
-            bool newState = !IsAutoStartEnabled();
-            SetAutoStart(newState);
-            autoStartItem.Checked = newState;
-        };
+        autoStartItem.Click += AutoStartItem_Click;
         menu.Items.Add(autoStartItem);
         menu.Items.Add(new ToolStripSeparator());
 

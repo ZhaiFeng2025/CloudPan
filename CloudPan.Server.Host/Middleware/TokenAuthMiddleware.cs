@@ -1,6 +1,7 @@
 using System.Net;
 using System.Security.Cryptography;
 using CloudPan.Server.Data;
+using CloudPan.Server.Services;
 using CloudPan.Shared;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -70,7 +71,7 @@ public class TokenAuthMiddleware
         // 验证 token 哈希（内存缓存避免每次请求查 DB）
         string tokenHash = ComputeSha256(token);
         var cache = context.RequestServices.GetRequiredService<IMemoryCache>();
-        string? storedHash = await cache.GetOrCreateAsync("token_hash_cache", async entry =>
+        string? storedHash = await cache.GetOrCreateAsync(CacheKeys.TokenHash, async entry =>
         {
             entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
             var dbFactory = context.RequestServices.GetRequiredService<IDbContextFactory<CloudPanDbContext>>();
