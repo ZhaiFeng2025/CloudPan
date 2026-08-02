@@ -37,4 +37,13 @@ public interface IApiClient
 
     /// <summary>查询分块上传进度。</summary>
     Task<ChunkStatusResponse?> GetChunkStatusAsync(string path, CancellationToken ct = default);
+
+    /// <summary>获取回收站列表（按删除时间倒序）。</summary>
+    Task<List<TrashItem>> GetTrashAsync(CancellationToken ct = default);
+
+    /// <summary>恢复回收站条目到原位（撤销删除）。</summary>
+    Task RestoreTrashAsync(string metaFileName, CancellationToken ct = default);
+
+    /// <summary>清空回收站。</summary>
+    Task EmptyTrashAsync(CancellationToken ct = default);
 }

@@ -1,0 +1,131 @@
+using CloudPan.Shared;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+
+namespace CloudPan.Client.Services;
+
+/// <summary>
+/// SyncEngine 部分实现：回收站操作（T-014）——文件浏览删除默认进回收站（服务端软删墓碑+移入回收站），
+/// 提供列表/恢复/清空与删除后 5 秒内撤销。
+/// </summary>
+public partial class SyncEngine
+{
+    /// <summary>获取回收站条目列表（按删除时间倒序）。</summary>
+    public async Task<List<TrashItem>> GetTrashAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            return await _api.GetTrashAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "获取回收站列表失败");
+            return new List<TrashItem>();
+        }
+    }
+
+    /// <summary>恢复回收站条目到原位（撤销删除）。恢复后服务端重建索引并提升版本，客户端增量同步据此重新下载。</summary>
+    public async Task<bool> RestoreTrashAsync(TrashItem item, CancellationToken ct = default)
+    {
+        try
+        {
+            // 回收站元数据文件名 = 条目 TrashFileName + ".json"（对齐 TrashService.MoveToTrashAsync 写盘命名）
+            await _api.RestoreTrashAsync(item.TrashFileName + ".json", ct);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "恢复回收站失败: {Path}", item.OriginalPath);
+            return false;
+        }
+    }
+
+    /// <summary>清空回收站。</summary>
+    public async Task<bool> EmptyTrashAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            await _api.EmptyTrashAsync(ct);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "清空回收站失败");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 删除文件浏览视图中的文件/目录（T-014，默认进回收站）：
+    /// 有服务端记录 → 调 /api/files/delete（软删墓碑传播 + 移入回收站，T-005 已下沉），并清快照；
+    /// 本地副本即时删除。返回可撤销的回收站条目（供 5 秒内撤销）；本地仅存文件（无服务端记录）直接删本地，返回 null。
+    /// </summary>
+    public async Task<TrashItem?> DeleteForTrashAsync(string path, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var snapshot = await db.RemoteSnapshots.FindAsync(path);
+
+        // 1. 有服务端记录 → 先调服务端删除（进回收站 + 墓碑传播），失败则本地保留（删除未生效）
+        if (snapshot != null)
+        {
+            try
+            {
+                await _api.DeleteAsync(path, snapshot.Version, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "服务端删除失败，本地副本保留: {Path}", path);
+                return null;
+            }
+
+            // 清快照（目录删除时子路径快照一并清除，避免后续扫描重复删除）。
+            // 内存过滤：EF Core 无法将 StartsWith(StringComparison) 翻译到 SQLite（与 GetFileBrowserAsync 全量加载快照的模式一致）。
+            string prefix = path.EndsWith('/') ? path : path + "/";
+            var snapshots = await db.RemoteSnapshots.ToListAsync(ct);
+            var toRemove = snapshots
+                .Where(s => string.Equals(s.Path, path, StringComparison.OrdinalIgnoreCase)
+                         || s.Path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (toRemove.Count > 0)
+            {
+                db.RemoteSnapshots.RemoveRange(toRemove);
+                await db.SaveChangesAsync();
+            }
+        }
+
+        // 2. 本地副本即时删除（浏览视图立即消失；其他设备由墓碑传播删本地副本）
+        string localPath = ToLocalPath(path);
+        try
+        {
+            if (Directory.Exists(localPath))
+            {
+                Directory.Delete(localPath, recursive: true);
+            }
+            else if (File.Exists(localPath))
+            {
+                SafeDelete(localPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "删除本地副本失败: {Path}", path);
+        }
+
+        if (snapshot == null)
+        {
+            return null; // 本地仅存文件：无服务端记录，无从回收站撤销
+        }
+
+        // 3. 查回收站条目供撤销（撤销 = 恢复）
+        try
+        {
+            var items = await _api.GetTrashAsync(ct);
+            return items.FirstOrDefault(t => string.Equals(t.OriginalPath, path, StringComparison.OrdinalIgnoreCase));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "查询回收站条目失败（不影响删除）: {Path}", path);
+            return null;
+        }
+    }
+}

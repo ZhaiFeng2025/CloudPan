@@ -216,6 +216,34 @@ public class ApiClient : IApiClient, IDisposable
     }
 
     // ============================================================
+    // 回收站（/api/trash，T-014：客户端删除进回收站 + 恢复/撤销）
+    // ============================================================
+
+    /// <summary>获取回收站列表（按删除时间倒序）。</summary>
+    public async Task<List<TrashItem>> GetTrashAsync(CancellationToken ct = default)
+    {
+        var response = await _http.GetAsync("/api/trash", ct);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<TrashListResponse>(JsonOptions, ct);
+        return result?.Data?.ToList() ?? new List<TrashItem>();
+    }
+
+    /// <summary>恢复回收站条目到原位（撤销删除）。</summary>
+    public async Task RestoreTrashAsync(string metaFileName, CancellationToken ct = default)
+    {
+        var response = await _http.PostAsJsonAsync("/api/trash/restore",
+            new { metaFileName }, JsonOptions, ct);
+        response.EnsureSuccessStatusCode();
+    }
+
+    /// <summary>清空回收站。</summary>
+    public async Task EmptyTrashAsync(CancellationToken ct = default)
+    {
+        var response = await _http.DeleteAsync("/api/trash/empty", ct);
+        response.EnsureSuccessStatusCode();
+    }
+
+    // ============================================================
     // 分块上传（阈值与块大小来自 shared-spec.json → SpecConfig，改 spec 一处生效）
     // ============================================================
 

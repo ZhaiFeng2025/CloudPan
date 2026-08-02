@@ -459,6 +459,14 @@
       "ChunkStatusData": {
         "description": "分块上传进度查询 data",
         "fields": ["filePath: string?", "path: string?", "receivedChunks: int[]", "totalChunks: int", "isComplete: bool", "deviceId: string?", "createdAt: string?"]
+      },
+      "TrashItem": {
+        "description": "回收站条目（列表展示用）",
+        "fields": ["originalPath: string", "trashFileName: string", "fileSize: long", "isDirectory: bool", "deletedAt: string", "ageDays: int"]
+      },
+      "TrashListResponse": {
+        "description": "GET /api/trash 响应包装",
+        "fields": ["data: TrashItem[]"]
       }
     }
   },

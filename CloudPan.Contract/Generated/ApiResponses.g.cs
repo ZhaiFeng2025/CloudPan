@@ -107,3 +107,29 @@ public record ChunkStatusData(
     string? CreatedAt
 );
 
+/// <summary>
+/// 回收站条目（列表展示用）
+/// </summary>
+public record TrashItem(
+    [property: JsonPropertyName("originalPath")]
+    string OriginalPath,
+    [property: JsonPropertyName("trashFileName")]
+    string TrashFileName,
+    [property: JsonPropertyName("fileSize")]
+    long FileSize,
+    [property: JsonPropertyName("isDirectory")]
+    bool IsDirectory,
+    [property: JsonPropertyName("deletedAt")]
+    string DeletedAt,
+    [property: JsonPropertyName("ageDays")]
+    int AgeDays
+);
+
+/// <summary>
+/// GET /api/trash 响应包装
+/// </summary>
+public record TrashListResponse(
+    [property: JsonPropertyName("data")]
+    TrashItem[] Data
+);
+

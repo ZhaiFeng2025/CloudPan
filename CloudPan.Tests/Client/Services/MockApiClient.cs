@@ -21,6 +21,9 @@ public class MockApiClient : IApiClient
     /// <summary>删除调用记录。</summary>
     public Dictionary<string, int> DeleteCalls { get; } = new();
 
+    /// <summary>回收站条目（模拟服务端 /api/trash 列表）。</summary>
+    public List<TrashItem> TrashItems { get; } = new();
+
     public bool HealthOk { get; set; } = true;
 
     public Task<bool> HealthCheckAsync(CancellationToken ct = default) => Task.FromResult(HealthOk);
@@ -97,7 +100,20 @@ public class MockApiClient : IApiClient
         // 模拟 HTTP 404 行为（在测试中通过异常控制）
         DeleteCalls.TryGetValue(path, out int count);
         DeleteCalls[path] = count + 1;
-        Files.Remove(path);
+        // 服务端删除 → 移入回收站（对齐 FileOperationService.DeleteAsync 行为，供回收站/撤销测试使用）
+        // 目录在 Files 中以路径+"/" 为键（MkdirAsync），客户端传参为无尾斜杠路径
+        if (Files.TryGetValue(path, out var info))
+        {
+            Files.Remove(path);
+            TrashItems.Add(new TrashItem(path, "mock_" + Guid.NewGuid().ToString("N")[..8],
+                info.Size, false, DateTime.UtcNow.ToString("O"), 0));
+        }
+        else if (Files.TryGetValue(path + "/", out var dirInfo))
+        {
+            Files.Remove(path + "/");
+            TrashItems.Add(new TrashItem(path, "mock_" + Guid.NewGuid().ToString("N")[..8],
+                dirInfo.Size, true, DateTime.UtcNow.ToString("O"), 0));
+        }
         await Task.CompletedTask;
     }
 
@@ -133,6 +149,31 @@ public class MockApiClient : IApiClient
         return Task.FromResult<ChunkStatusResponse?>(null);
     }
 
+    /// <summary>获取回收站列表（模拟服务端）。</summary>
+    public Task<List<TrashItem>> GetTrashAsync(CancellationToken ct = default)
+    {
+        return Task.FromResult(TrashItems.ToList());
+    }
+
+    /// <summary>恢复回收站条目（模拟服务端：移回原位并重建索引）。</summary>
+    public Task RestoreTrashAsync(string metaFileName, CancellationToken ct = default)
+    {
+        var item = TrashItems.FirstOrDefault(t => (t.TrashFileName + ".json") == metaFileName);
+        if (item != null)
+        {
+            TrashItems.Remove(item);
+            Files[item.OriginalPath] = ("mock-hash", item.FileSize, Files.Count + 1);
+        }
+        return Task.CompletedTask;
+    }
+
+    /// <summary>清空回收站（模拟服务端）。</summary>
+    public Task EmptyTrashAsync(CancellationToken ct = default)
+    {
+        TrashItems.Clear();
+        return Task.CompletedTask;
+    }
+
     /// <summary>重置所有 mock 状态。</summary>
     public void Reset()
     {
@@ -140,6 +181,7 @@ public class MockApiClient : IApiClient
         UploadCalls.Clear();
         DownloadCalls.Clear();
         DeleteCalls.Clear();
+        TrashItems.Clear();
         HealthOk = true;
     }
 }

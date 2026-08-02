@@ -637,6 +637,134 @@ public class SyncEngineTests : IDisposable
         Assert.DoesNotContain(items, i => i.Path == "/gone.txt");
         Assert.Contains(items, i => i.Path == "/alive.txt");
     }
+
+    // ============================================================
+    // 回收站/删除进回收站（T-014）
+    // ============================================================
+
+    [Fact]
+    public async Task DeleteForTrash_服务端有快照_删除进回收站并返回撤销条目()
+    {
+        // 准备：本地文件 + 服务端快照 + mock 服务端文件
+        string localPath = Path.Combine(_syncRoot, "photo.jpg");
+        await File.WriteAllTextAsync(localPath, "jpeg-data");
+        _api.Files["/photo.jpg"] = ("mock-hash", 9, 5);
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.Add(new RemoteSnapshot
+            {
+                Path = "/photo.jpg", Type = (int)FileType.File,
+                Hash = "mock-hash", Size = 9, Version = 5, State = (int)FileState.Synced
+            });
+            await setupDb.SaveChangesAsync();
+        }
+
+        var trashItem = await _engine.DeleteForTrashAsync("/photo.jpg");
+
+        // 本地副本已删
+        Assert.False(File.Exists(localPath));
+        // 服务端已删（移入回收站）
+        Assert.False(_api.Files.ContainsKey("/photo.jpg"));
+        Assert.Single(_api.TrashItems);
+        // 快照已清
+        await using (var dbCheck = await _dbFactory.CreateDbContextAsync())
+        {
+            Assert.Null(await dbCheck.RemoteSnapshots.FindAsync("/photo.jpg"));
+        }
+        // 返回可撤销条目
+        Assert.NotNull(trashItem);
+        Assert.Equal("/photo.jpg", trashItem.OriginalPath);
+    }
+
+    [Fact]
+    public async Task DeleteForTrash_本地仅存文件_直接删本地无撤销条目()
+    {
+        string localPath = Path.Combine(_syncRoot, "local-only.txt");
+        await File.WriteAllTextAsync(localPath, "x");
+
+        var trashItem = await _engine.DeleteForTrashAsync("/local-only.txt");
+
+        Assert.False(File.Exists(localPath));
+        Assert.Null(trashItem);          // 无服务端记录，无从回收站撤销
+        Assert.Empty(_api.TrashItems);   // 未进回收站
+    }
+
+    [Fact]
+    public async Task DeleteForTrash_目录_清子路径快照()
+    {
+        // 本地目录 + 子文件 + 快照（目录与子文件）
+        string dirPath = Path.Combine(_syncRoot, "photos");
+        Directory.CreateDirectory(dirPath);
+        await File.WriteAllTextAsync(Path.Combine(dirPath, "summer.jpg"), "jpeg");
+        _api.Files["/photos/"] = (null!, 0, 4);
+        _api.Files["/photos/summer.jpg"] = ("mock-hash", 4, 4);
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.AddRange(
+                new RemoteSnapshot { Path = "/photos", Type = (int)FileType.Directory, State = (int)FileState.Synced, Version = 4 },
+                new RemoteSnapshot { Path = "/photos/summer.jpg", Type = (int)FileType.File, State = (int)FileState.Synced, Version = 4 });
+            await setupDb.SaveChangesAsync();
+        }
+
+        var trashItem = await _engine.DeleteForTrashAsync("/photos");
+
+        Assert.False(Directory.Exists(dirPath));
+        Assert.NotNull(trashItem);
+        Assert.True(trashItem.IsDirectory);
+        await using (var dbCheck = await _dbFactory.CreateDbContextAsync())
+        {
+            Assert.Null(await dbCheck.RemoteSnapshots.FindAsync("/photos"));
+            Assert.Null(await dbCheck.RemoteSnapshots.FindAsync("/photos/summer.jpg")); // 子快照已清
+        }
+    }
+
+    [Fact]
+    public async Task RestoreTrash_恢复后回到服务端()
+    {
+        // 先删除一个文件（进回收站）
+        string localPath = Path.Combine(_syncRoot, "doc.txt");
+        await File.WriteAllTextAsync(localPath, "doc-content");
+        _api.Files["/doc.txt"] = ("mock-hash", 10, 3);
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.Add(new RemoteSnapshot
+            {
+                Path = "/doc.txt", Type = (int)FileType.File,
+                Hash = "mock-hash", Size = 10, Version = 3, State = (int)FileState.Synced
+            });
+            await setupDb.SaveChangesAsync();
+        }
+        var trashItem = await _engine.DeleteForTrashAsync("/doc.txt");
+        Assert.NotNull(trashItem);
+
+        bool ok = await _engine.RestoreTrashAsync(trashItem!);
+
+        Assert.True(ok);
+        Assert.True(_api.Files.ContainsKey("/doc.txt")); // 服务端已恢复
+        Assert.Empty(_api.TrashItems);                    // 回收站条目已移除
+    }
+
+    [Fact]
+    public async Task GetTrash_返回回收站列表()
+    {
+        _api.TrashItems.Add(new TrashItem("/old.txt", "mock_abc123", 5, false, DateTime.UtcNow.ToString("O"), 0));
+
+        var items = await _engine.GetTrashAsync();
+
+        Assert.Single(items);
+        Assert.Equal("/old.txt", items[0].OriginalPath);
+    }
+
+    [Fact]
+    public async Task EmptyTrash_清空回收站()
+    {
+        _api.TrashItems.Add(new TrashItem("/old.txt", "mock_abc123", 5, false, DateTime.UtcNow.ToString("O"), 0));
+
+        bool ok = await _engine.EmptyTrashAsync();
+
+        Assert.True(ok);
+        Assert.Empty(_api.TrashItems);
+    }
 }
 
 /// <summary>测试用 ClientDbContext 工厂。</summary>
