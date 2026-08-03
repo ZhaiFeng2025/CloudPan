@@ -4517,7 +4517,7 @@
       "title": "Storage 路径校验内建（GetAbsolutePath 强制校验 + UploadService 校验下沉 + FilesController 移除 Infrastructure 依赖）",
       "dimension": "architecture",
       "priority": "P2",
-      "status": "in-progress",
+      "status": "acceptance",
       "batch": 8,
       "findingId": "F-132",
       "dependsOn": [],
