@@ -9,6 +9,9 @@ public sealed record UploadSuccessOutcome(string Path, int Version, string Hash,
 /// <summary>上传版本冲突（已保存冲突副本，语义与分块上传 ChunkConflictOutcome 一致）。</summary>
 public sealed record UploadConflictOutcome(string Path, int CurrentVersion, int BaseVersion, string ConflictPath) : UploadOutcome;
 
+/// <summary>路径/参数校验失败（DomainError 携带错误码，Controller 映射为 HTTP 错误响应，对齐分块上传 ChunkErrorOutcome）。</summary>
+public sealed record UploadErrorOutcome(DomainError Error) : UploadOutcome;
+
 /// <summary>
 /// 普通上传编排服务。封装『先存档旧版本→再原子覆盖目标→后更新索引』的不变量，
 /// 保证版本历史存档的是上传前真实内容（F-01 顺序缺陷的修复载体）。

@@ -4517,7 +4517,7 @@
       "title": "Storage 路径校验内建（GetAbsolutePath 强制校验 + UploadService 校验下沉 + FilesController 移除 Infrastructure 依赖）",
       "dimension": "architecture",
       "priority": "P2",
-      "status": "todo",
+      "status": "in-progress",
       "batch": 8,
       "findingId": "F-132",
       "dependsOn": [],
@@ -4549,8 +4549,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "取舍：选『内建 GetAbsolutePath』而非『调用方约定』——统一防线应收敛单点，本次审查已检出上传链路仅靠 Controller 兜底。",
-      "updatedAt": null
+      "note": "取舍：选『内建 GetAbsolutePath』而非『调用方约定』——统一防线应收敛单点，本次审查已检出上传链路仅靠 Controller 兜底。\n执行（task-executor 2026-08-04）：改动文件 = CloudPan.Infrastructure/Storage/FileStorageService.cs（GetAbsolutePath 内建强制校验——经私有 ValidatePathCore 校验，越界/非法路径抛 ArgumentException，写入口 AtomicWriteAsync/Move/CreateDirectory/OpenRead/Delete 等均经 GetAbsolutePath 先校验再落盘，防线收敛 Storage 单点；ValidatePath 与 GetAbsolutePath 共用校验核心，根路径 / 放行；DeleteVersionArchive 增 .versions 越界防护——拒绝含分隔符/.. 的路径逃逸）、CloudPan.Server.Core/Upload/IUploadService.cs（新增 UploadErrorOutcome，对齐分块上传 ChunkErrorOutcome）、CloudPan.Server.Core/Upload/UploadService.cs（开头路径归一 + ValidatePath 校验下沉，不再依赖 Controller 兜底，越界返回 UploadErrorOutcome 400）、CloudPan.Server.Host/Controllers/FilesController.cs（移除 IFileStorageService 注入与手工路径归一/校验，仅参数绑定与错误码映射，switch 增 UploadErrorOutcome 分支）。VersionCommitHelper.DeleteOrphanArchive 已由 T-088 收敛为 _storage.DeleteVersionArchive（无 Path.Combine 直拼），本次加固 DeleteVersionArchive 防逃逸。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release --filter Architecture 14/14 通过；dotnet test CloudPan.Tests -c Release 343/343 通过；AC1/AC2 grep 通过。",
+      "updatedAt": "2026-08-04"
     },
     {
       "id": "T-091",

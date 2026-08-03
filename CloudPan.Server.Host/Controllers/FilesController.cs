@@ -1,5 +1,4 @@
 using CloudPan.Contract;
-using CloudPan.Infrastructure.Storage;
 using CloudPan.Server.Core;
 using CloudPan.Server.Host;
 using Microsoft.AspNetCore.Mvc;
@@ -15,7 +14,6 @@ namespace CloudPan.Server.Host.Controllers;
 [EndpointAuth(AuthMode.Token)]
 public partial class FilesController : ControllerBase
 {
-    private readonly IFileStorageService _storage;
     private readonly IFileIndexService _index;
     private readonly IUploadService _upload;
     private readonly IFileOperationService _fileOps;
@@ -23,14 +21,12 @@ public partial class FilesController : ControllerBase
     private readonly IWebSocketHandler _wsHandler;
 
     public FilesController(
-        IFileStorageService storage,
         IFileIndexService index,
         IUploadService upload,
         IFileOperationService fileOps,
         IChunkedUploadService chunkedUpload,
         IWebSocketHandler wsHandler)
     {
-        _storage = storage;
         _index = index;
         _upload = upload;
         _fileOps = fileOps;
@@ -76,16 +72,7 @@ public partial class FilesController : ControllerBase
             return this.Error(HttpErrorCode.BAD_REQUEST, "path 参数缺失", "请提供文件路径");
         }
 
-        if (!path.StartsWith('/'))
-        {
-            path = "/" + path;
-        }
-
-        string? pathErr = _storage.ValidatePath(path);
-        if (pathErr != null)
-        {
-            return this.Error(HttpErrorCode.BAD_REQUEST, pathErr, "路径格式不正确");
-        }
+        // 路径归一与校验已下沉 UploadService（F-132），Controller 只做参数绑定与错误码映射
 
         string uploadDeviceId = HttpContext.Items["DeviceId"] as string ?? "unknown";
 
@@ -112,6 +99,8 @@ public partial class FilesController : ControllerBase
                     $"版本冲突：客户端基于 v{c.BaseVersion}，服务端当前 v{c.CurrentVersion}",
                     "文件已被其他设备修改，请刷新后重试",
                     detail: $"currentVersion={c.CurrentVersion}, baseVersion={c.BaseVersion}, conflictPath={c.ConflictPath}");
+            case UploadErrorOutcome e:
+                return this.Error(e.Error.Code, e.Error.Message, e.Error.UserMessage, e.Error.Detail);
             default:
                 return this.Error(HttpErrorCode.INTERNAL_ERROR, "未知上传结果", "上传过程中出现未知错误");
         }

@@ -24,19 +24,34 @@ public class FileStorageService : IFileStorageService
 
     /// <summary>
     /// 将相对路径（如 /docs/report.docx）转为同步根下的绝对路径。
+    /// F-132 起内建强制校验（防线收敛 Storage 单点，CLAUDE.md 8.5）：越界/非法路径抛异常，
+    /// 任何调用方漏调 ValidatePath 也不会越界写/读。根路径（/）返回同步根本身，视为合法。
     /// </summary>
     public string GetAbsolutePath(string relativePath)
     {
+        string? error = ValidatePathCore(relativePath);
+        if (error != null)
+        {
+            throw new ArgumentException($"拒绝越界相对路径（{error}）: {relativePath}", nameof(relativePath));
+        }
+
         // 去掉开头的 /
-        string cleanPath = relativePath.TrimStart('/');
-        return Path.Combine(_syncRoot, cleanPath);
+        return Path.Combine(_syncRoot, relativePath.TrimStart('/'));
     }
 
     /// <summary>
     /// 验证路径在同步根内，防止目录遍历攻击。
-    /// 返回 null 表示合法，否则返回错误信息。
+    /// 返回 null 表示合法，否则返回错误信息。与 GetAbsolutePath 共用 <see cref="ValidatePathCore"/>，
+    /// 校验逻辑单一实现（F-132 防线收敛）。
     /// </summary>
     public string? ValidatePath(string relativePath)
+        => ValidatePathCore(relativePath);
+
+    /// <summary>
+    /// 路径校验核心（Storage 单点）：空/空字符/越界（经 Path.GetFullPath 消解 .. 后必须仍在同步根内）。
+    /// 根路径本身（GetAbsolutePath("/") → 同步根）视为合法；不可解析路径一律拒绝。
+    /// </summary>
+    private string? ValidatePathCore(string relativePath)
     {
         if (string.IsNullOrWhiteSpace(relativePath))
         {
@@ -48,22 +63,30 @@ public class FileStorageService : IFileStorageService
             return "路径包含空字符";
         }
 
-        // 规范化路径并检查是否越界
-        string absolutePath = Path.GetFullPath(GetAbsolutePath(relativePath));
-        string rootPrefix = _syncRoot;
-        if (!rootPrefix.EndsWith(Path.DirectorySeparatorChar))
+        try
         {
-            rootPrefix += Path.DirectorySeparatorChar;
+            // 规范化路径并检查是否越界
+            string absolutePath = Path.GetFullPath(Path.Combine(_syncRoot, relativePath.TrimStart('/')));
+            string rootPrefix = _syncRoot;
+            if (!rootPrefix.EndsWith(Path.DirectorySeparatorChar))
+            {
+                rootPrefix += Path.DirectorySeparatorChar;
+            }
+
+            // 根路径本身（= 同步根，前缀含分隔符无法匹配）单独放行
+            bool isRoot = string.Equals(absolutePath, _syncRoot, StringComparison.OrdinalIgnoreCase);
+            if (!isRoot && !absolutePath.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return "路径越界";
+            }
+
+            return null; // 合法
         }
-
-        System.Diagnostics.Debug.WriteLine($"[ValidatePath] absolute={absolutePath}, root={rootPrefix}");
-
-        if (!absolutePath.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase))
+        catch (Exception ex)
         {
-            return "路径越界";
+            // 任意不可解析路径（非法字符等）一律拒绝——防御不可信输入，不抛给调用方（对齐客户端 LocalPathValidator）
+            return $"路径无效: {ex.Message}";
         }
-
-        return null; // 合法
     }
 
     /// <summary>
@@ -270,7 +293,17 @@ public class FileStorageService : IFileStorageService
             return;
         }
 
+        // F-132 防线收敛：Path.Combine 直拼前先校验落点仍在 .versions 内，拒绝含分隔符/.. 的路径
+        // （storagePath 来自 DB 的 StoragePath，防御污染记录逃逸 .versions 目录，CLAUDE.md 8.5）
         string archiveFile = Path.Combine(_versionsDir, archiveStoragePath);
+        string versionsPrefix = _versionsDir.EndsWith(Path.DirectorySeparatorChar)
+            ? _versionsDir
+            : _versionsDir + Path.DirectorySeparatorChar;
+        if (!Path.GetFullPath(archiveFile).StartsWith(versionsPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
         if (File.Exists(archiveFile))
         {
             File.Delete(archiveFile);

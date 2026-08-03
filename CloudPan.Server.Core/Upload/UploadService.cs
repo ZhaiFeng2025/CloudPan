@@ -44,6 +44,18 @@ public class UploadService : IUploadService
         string path, Stream content, long contentLength, int baseVersion,
         string? lastModified, string deviceId, CancellationToken ct = default)
     {
+        // 路径安全统一防线（F-132）：路径归一 + 校验下沉 Core，不再依赖 Controller 兜底。
+        // 任何入口调用（未来后台写入/测试）都先过 ValidatePath，越界在落盘前被拒（对齐分块/文件操作服务）。
+        if (!path.StartsWith('/'))
+        {
+            path = "/" + path;
+        }
+        string? pathErr = _storage.ValidatePath(path);
+        if (pathErr != null)
+        {
+            return new UploadErrorOutcome(new DomainError(HttpErrorCode.BAD_REQUEST, pathErr, "路径格式不正确"));
+        }
+
         await using var db = await _dbFactory.CreateDbContextAsync();
         var existing = await db.FileEntries.FindAsync(new object?[] { path }, ct);
 
