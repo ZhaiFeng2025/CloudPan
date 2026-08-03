@@ -24,6 +24,7 @@ import com.cloudpan.android.BuildConfig
 import com.cloudpan.android.data.DeviceItem
 import com.cloudpan.android.data.FileRepository
 import com.cloudpan.android.data.SettingsStore
+import com.cloudpan.android.data.toUserMessage
 import com.cloudpan.android.worker.PhotoBackupWorker
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -229,8 +230,7 @@ fun SettingsScreen(
                                 onConnected()
                                 snackbarHostState.showSnackbar("已成功连接到服务器")
                             } else {
-                                statusMessage =
-                                    "连接失败: ${healthResult.exceptionOrNull()?.message ?: "未知错误"}"
+                                statusMessage = "连接失败：${healthResult.exceptionOrNull().toUserMessage()}"
                             }
                             isLoading = false
                         }

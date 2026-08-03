@@ -28,12 +28,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.cloudpan.android.UploadUiState
 import com.cloudpan.android.data.AppDatabase
 import com.cloudpan.android.data.FileConflictException
 import com.cloudpan.android.data.FileEntryDto
 import com.cloudpan.android.data.FileRepository
 import com.cloudpan.android.data.OfflineCacheEntity
 import com.cloudpan.android.data.TrashItem
+import com.cloudpan.android.data.toUserMessage
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -110,7 +112,10 @@ fun FileListScreen(
     repository: FileRepository,
     onBackToSettings: () -> Unit,
     onPickFileForUpload: (() -> Unit)? = null,
-    refreshTrigger: Int = 0
+    refreshTrigger: Int = 0,
+    // T-091：手动上传流程状态（上传中/成功/失败），上传中 FAB 显示进度指示，结束后 Snackbar 反馈
+    uploadState: UploadUiState? = null,
+    onUploadStateHandled: () -> Unit = {}
 ) {
     // ---- 状态 ----
     var files by remember { mutableStateOf<List<FileEntryDto>>(emptyList()) }
@@ -188,7 +193,7 @@ fun FileListScreen(
                     else "共 ${items.size} 个结果"
                     isSearching = true
                 }.onFailure { e ->
-                    snackbarHostState.showSnackbar("搜索失败：${e.message}")
+                    snackbarHostState.showSnackbar("搜索失败：${e.toUserMessage()}")
                 }
             } else {
                 isSearching = false
@@ -206,7 +211,7 @@ fun FileListScreen(
                     hasMore = response.hasMore
                     updateStatus()
                 }.onFailure { e ->
-                    snackbarHostState.showSnackbar("加载失败：${e.message}")
+                    snackbarHostState.showSnackbar("加载失败：${e.toUserMessage()}")
                 }
             }
             isRefreshing = false
@@ -238,7 +243,7 @@ fun FileListScreen(
                 hasMore = response.hasMore
                 updateStatus()
             }.onFailure { e ->
-                snackbarHostState.showSnackbar("加载更多失败：${e.message}")
+                snackbarHostState.showSnackbar("加载更多失败：${e.toUserMessage()}")
             }
             isLoadingMore = false
         }
@@ -265,6 +270,19 @@ fun FileListScreen(
 
     // 外部刷新触发
     LaunchedEffect(refreshTrigger) { if (refreshTrigger > 0) loadFiles() }
+
+    // T-091：手动上传结果 Snackbar 反馈（成功/失败白话提示），展示后回调清除状态
+    LaunchedEffect(uploadState) {
+        val state = uploadState ?: return@LaunchedEffect
+        when (state) {
+            is UploadUiState.Uploading -> Unit
+            is UploadUiState.Success ->
+                snackbarHostState.showSnackbar("已上传「${state.fileName}」")
+            is UploadUiState.Failed ->
+                snackbarHostState.showSnackbar("上传失败：「${state.fileName}」${state.message}")
+        }
+        onUploadStateHandled()
+    }
 
     // ---- 对话框 ----
 
@@ -305,7 +323,7 @@ fun FileListScreen(
                             // T-089：文件已被其他设备修改，弹窗让用户决定强制删除或跳过，不静默
                             deleteConflictTarget = f
                         } else {
-                            snackbarHostState.showSnackbar("删除失败：${r.exceptionOrNull()?.message}")
+                            snackbarHostState.showSnackbar("删除失败：${r.exceptionOrNull().toUserMessage()}")
                         }
                     }
                 }) { Text("删除", color = MaterialTheme.colorScheme.error) }
@@ -329,7 +347,7 @@ fun FileListScreen(
                         val r = repository.deleteFile(f.path, 0)
                         loadFiles()
                         snackbarHostState.showSnackbar(
-                            if (r.isSuccess) "已删除" else "删除失败：${r.exceptionOrNull()?.message}"
+                            if (r.isSuccess) "已删除" else "删除失败：${r.exceptionOrNull().toUserMessage()}"
                         )
                     }
                 }) { Text("仍删除", color = MaterialTheme.colorScheme.error) }
@@ -514,7 +532,7 @@ fun FileListScreen(
                         isDownloading = false
                         selectedFile = null
                         snackbarHostState.showSnackbar(
-                            if (r.isSuccess) "已下载" else "下载失败：${r.exceptionOrNull()?.message}"
+                            if (r.isSuccess) "已下载" else "下载失败：${r.exceptionOrNull().toUserMessage()}"
                         )
                     }
                 }) { Text("下载到设备") }
@@ -645,13 +663,13 @@ fun FileListScreen(
                     snackbarHostState.showSnackbar("已下载到设备，离线可用")
                 } else {
                     offlineDownloadFailed = true
-                    offlineDownloadError = r.exceptionOrNull()?.message ?: "下载失败"
+                    offlineDownloadError = r.exceptionOrNull().toUserMessage()
                 }
             } catch (_: kotlinx.coroutines.CancellationException) {
                 // 用户取消，不做处理
             } catch (e: Exception) {
                 offlineDownloadFailed = true
-                offlineDownloadError = e.message ?: "下载失败"
+                offlineDownloadError = e.toUserMessage()
             } finally {
                 offlineDownloadJob = null
             }
@@ -837,8 +855,20 @@ fun FileListScreen(
         },
         floatingActionButton = {
             if (onPickFileForUpload != null && !isSelectionMode) {
-                FloatingActionButton(onClick = onPickFileForUpload) {
-                    Icon(Icons.Default.Add, "上传文件")
+                // T-091：上传中 FAB 显示进度指示，且禁止重复点击触发二次上传
+                val isUploading = uploadState is UploadUiState.Uploading
+                FloatingActionButton(
+                    onClick = { if (!isUploading) onPickFileForUpload() }
+                ) {
+                    if (isUploading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    } else {
+                        Icon(Icons.Default.Add, "上传文件")
+                    }
                 }
             }
         },

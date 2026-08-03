@@ -4557,7 +4557,7 @@
       "title": "Android 错误白话归因 + 手动上传崩溃防护与进度反馈",
       "dimension": "ux",
       "priority": "P2",
-      "status": "todo",
+      "status": "in-progress",
       "batch": 8,
       "findingId": "F-133",
       "dependsOn": [],
@@ -4589,7 +4589,7 @@
       "attempts": 0,
       "statusReason": null,
       "note": null,
-      "updatedAt": null
+      "updatedAt": "2026-08-04"
     },
     {
       "id": "T-092",

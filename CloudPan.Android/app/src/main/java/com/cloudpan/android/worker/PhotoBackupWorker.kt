@@ -23,6 +23,7 @@ import com.cloudpan.android.data.BackupStatus
 import com.cloudpan.android.data.CloudPanApi
 import com.cloudpan.android.data.FileConflictException
 import com.cloudpan.android.data.SettingsStore
+import com.cloudpan.android.data.toUserMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -207,7 +208,7 @@ class PhotoBackupWorker(
                     } catch (e: Exception) {
                         Log.e(TAG, "备份失败: $fileName", e)
                         // 发送单张失败通知
-                        notification = buildFailureNotification("备份失败", "照片「$fileName」上传失败：${e.message}")
+                        notification = buildFailureNotification("备份失败", "照片「$fileName」上传失败：${e.toUserMessage()}")
                         notificationManager.notify(notificationId, notification)
                         // 连续段语义（未达重试上限）：遇失败即停，游标停在失败照片之前，该照片及后续下次运行重试
                         hadFailure = true
@@ -241,7 +242,7 @@ class PhotoBackupWorker(
         } catch (e: Exception) {
             Log.e(TAG, "照片备份异常", e)
             try {
-                val errorNotification = buildFailureNotification("备份异常", e.message ?: "发生未知错误")
+                val errorNotification = buildFailureNotification("备份异常", e.toUserMessage())
                 notificationManager.notify(notificationId, errorNotification)
             } catch (_: Exception) {
                 // 通知发送失败不阻止重试
