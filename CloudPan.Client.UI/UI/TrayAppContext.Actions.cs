@@ -65,9 +65,8 @@ public partial class TrayAppContext
         {
             // T-043：复用 DI 注入的持久化配置实例（与 MainWindow 托盘关闭提示同源），不再单独读盘
             ClientConfig cfg = _config;
-            SettingsForm form = new SettingsForm(
-                Program.ServerUrl, Program.SyncRoot, Program.Token,
-                cfg.UploadLimitBps, cfg.DownloadLimitBps, cfg.SelectedPaths);
+            SettingsForm form = new SettingsForm(Program.ServerUrl, Program.SyncRoot, Program.Token,
+                cfg.UploadLimitBps, cfg.DownloadLimitBps, cfg.SelectedPaths, () => _engine.GetDirectoryTreePathsAsync());
             if (form.ShowDialog() == DialogResult.OK)
             {
                 cfg.ServerUrl = form.ServerUrl;

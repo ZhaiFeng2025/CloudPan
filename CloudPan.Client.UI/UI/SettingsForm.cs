@@ -28,6 +28,9 @@ public partial class SettingsForm : Form
 
     private bool _tokenMasked = true;
 
+    // T-074：目录树加载器（从 SyncEngine.GetDirectoryTreePathsAsync 注入），供同步页异步填充勾选树
+    private readonly Func<Task<List<string>>>? _directoryTreeLoader;
+
     public string ServerUrl => _serverBox.Text.Trim();
     public string SyncRoot => _folderBox.Text.Trim();
     public string Token => _tokenBox.Text.Trim();
@@ -35,13 +38,14 @@ public partial class SettingsForm : Form
     public long DownloadLimitBps => long.TryParse(_downloadLimitBox.Text.Trim(), out long v) ? v * 1024 : 0;
     public List<string> SelectedPaths => _syncPanel.SelectedPaths;
 
-    public SettingsForm(string serverUrl, string syncRoot, string token, long uploadSpeedBps, long downloadSpeedBps, List<string> selectedPaths)
+    public SettingsForm(string serverUrl, string syncRoot, string token, long uploadSpeedBps, long downloadSpeedBps, List<string> selectedPaths, Func<Task<List<string>>>? directoryTreeLoader = null)
     {
         Text = "CloudPan 设置";
         Size = new Size(580, 560);
         StartPosition = FormStartPosition.CenterParent;
         Font = SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont;
 
+        _directoryTreeLoader = directoryTreeLoader;
         _tabs = new TabControl { Dock = DockStyle.Fill };
 
         BuildAccountTab(serverUrl, syncRoot, token);
@@ -138,6 +142,13 @@ public partial class SettingsForm : Form
 
     private void SaveBtn_Click(object? sender, EventArgs e)
     {
+        // T-074：目录树未加载时阻止保存，避免空树全选覆盖既有排除配置
+        if (!_syncPanel.IsTreeLoaded)
+        {
+            MessageBox.Show(_syncPanel.TreeLoadMessage + "\n\n排除设置将保持不变，请确认服务端可访问后再保存。",
+                "CloudPan", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
         DialogResult = DialogResult.OK;
         Close();
     }

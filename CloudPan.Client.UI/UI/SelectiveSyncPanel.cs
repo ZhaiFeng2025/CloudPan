@@ -11,7 +11,19 @@ public class SelectiveSyncPanel : UserControl
     private readonly Button _selectAllBtn;
     private readonly Button _deselectAllBtn;
     private readonly Label _hintLabel;
+    private readonly Panel _emptyState;
+    private readonly Label _emptyLabel;
     private List<string> _selectedPaths = new() { "/" };
+
+    // T-074：目录树加载状态——树未加载/失败/服务端无目录时保存不得用空树全选覆盖既有排除配置
+    private bool _treeLoaded;
+    private string? _loadError;
+
+    /// <summary>目录树是否已成功填充（false = 未加载/失败/服务端无目录，保存不得用勾选态覆盖既有排除配置）。</summary>
+    public bool IsTreeLoaded => _treeLoaded;
+
+    /// <summary>树未加载的原因提示（供设置页提示与保存阻止文案）。</summary>
+    public string? TreeLoadMessage => _loadError;
 
     /// <summary>
     /// 当前排除路径列表（排除集语义，T-047，以 / 开头，目录以 / 结尾）。
@@ -21,11 +33,18 @@ public class SelectiveSyncPanel : UserControl
     {
         get
         {
-            List<string> excluded = new List<string>();
-            TreeNode? root = _tree.Nodes.Count > 0 ? _tree.Nodes[0] : null;
-            if (root == null || IsFullyChecked(root))
+            // 树未填充（未加载/失败/服务端无目录）：返回既有配置（setter 注入），
+            // 不静默回退 { "/" } 全选覆盖用户排除集（T-074）
+            if (_tree.Nodes.Count == 0)
             {
-                // 空树（未加载）或全选：返回 "/" 全选默认值（引擎识别为全选）
+                return new List<string>(_selectedPaths);
+            }
+
+            List<string> excluded = new List<string>();
+            TreeNode root = _tree.Nodes[0];
+            if (IsFullyChecked(root))
+            {
+                // 全选：返回 "/" 全选默认值（引擎识别为全选）
                 excluded.Add("/");
             }
             else if (!root.Checked)
@@ -92,8 +111,8 @@ public class SelectiveSyncPanel : UserControl
         _tree.AfterCheck += OnNodeChecked;
 
         // 空状态面板——树为空时显示提示，避免用户看到空白面板不知所措
-        Panel emptyState = new Panel { Dock = DockStyle.Fill, BackColor = CloudPanColors.BackgroundWhite };
-        Label emptyLabel = new Label
+        _emptyState = new Panel { Dock = DockStyle.Fill, BackColor = CloudPanColors.BackgroundWhite };
+        _emptyLabel = new Label
         {
             Text = "尚未从服务端加载目录列表。\n连接服务端后此功能将自动生效。\n\n当前设置：同步根目录下所有文件。",
             TextAlign = ContentAlignment.MiddleCenter,
@@ -102,16 +121,39 @@ public class SelectiveSyncPanel : UserControl
             Padding = new Padding(20),
             Font = new Font(SystemFonts.MessageBoxFont?.FontFamily ?? FontFamily.GenericSansSerif, 9.5F),
         };
-        emptyState.Controls.Add(emptyLabel);
+        _emptyState.Controls.Add(_emptyLabel);
 
         Controls.Add(_tree);
-        Controls.Add(emptyState);
+        Controls.Add(_emptyState);
         Controls.Add(btnRow);
         Controls.Add(_hintLabel);
         btnRow.BringToFront();
     }
 
-    /// <summary>从远程文件树加载目录结构。</summary>
+    /// <summary>标记目录树加载中（设置页异步加载开始时调用）。</summary>
+    public void SetLoading()
+    {
+        _treeLoaded = false;
+        _loadError = "正在加载服务端目录列表...";
+        UpdateEmptyState();
+    }
+
+    /// <summary>标记目录树加载失败/为空（未填充任何目录），UI 据此禁用保存并提示，避免保存静默覆盖既有排除配置。</summary>
+    public void SetLoadFailed(string message)
+    {
+        _treeLoaded = false;
+        _loadError = message;
+        UpdateEmptyState();
+    }
+
+    private void UpdateEmptyState()
+    {
+        _tree.Visible = false;
+        _emptyState.Visible = true;
+        _emptyLabel.Text = _loadError ?? "尚未从服务端加载目录列表。\n连接服务端后此功能将自动生效。\n\n当前设置：同步根目录下所有文件。";
+    }
+
+    /// <summary>从远程文件树加载目录结构。加载成功后面板切换到目录树显示。</summary>
     public void LoadFromPaths(IEnumerable<string> remotePaths)
     {
         _tree.Nodes.Clear();
@@ -154,6 +196,10 @@ public class SelectiveSyncPanel : UserControl
         }
 
         root.ExpandAll();
+        _tree.Visible = true;
+        _emptyState.Visible = false;
+        _treeLoaded = true;
+        _loadError = null;
         ApplySelections();
     }
 

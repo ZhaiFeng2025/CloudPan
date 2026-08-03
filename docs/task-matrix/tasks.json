@@ -3730,7 +3730,7 @@
       "title": "修复限速流配额边界返回 0 被当 EOF 截断（ThrottledStream 重试读 + 单测）",
       "dimension": "function",
       "priority": "P1",
-      "status": "acceptance",
+      "status": "done",
       "batch": 7,
       "findingId": "F-115",
       "dependsOn": [],
@@ -3761,7 +3761,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "改动：ApiClient.ThrottledStream.cs 修复 Read/ReadAsync 配额耗尽（allowed<=0 或首次 elapsed 极小时）误 return 0 被 CopyToAsync 当 EOF 截断——改为 sleep/Task.Delay(10) 后重试读（循环直到底层流返回 0 或配额允许新字节），return 0 仅保留底层流 EOF 语义；类由 ApiClient 私有嵌套提取为独立 internal sealed class（同命名空间引用不变，避免继续膨胀 ApiClient partial 聚合行数 562 上限的 T-070 门禁）。新增 CloudPan.Tests/Client/Services/ThrottledStreamTests.cs 2 个单测（反射构造 internal 类型）：512KB/s 读 1MB 完整到达且内容一致；10KB/s 同一 tick 内连续 ReadAsync 配额耗尽不返回 0 不截断（10KB/s×16KB≈1.6s，1MB 若真按 10KB/s 需 100s 不适用于单测，故完整读出用例用 512KB/s 且 1MB>512KB 单秒配额保证复现配额耗尽路径）。验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 310/310 通过（含限速流 2 用例、架构测试全绿）；回归验证——临时还原旧『配额等待 return 0』逻辑后两个限速流测试均失败（截断为 0 字节），证明测试可捕获原缺陷。",
+      "note": "改动：ApiClient.ThrottledStream.cs 修复 Read/ReadAsync 配额耗尽（allowed<=0 或首次 elapsed 极小时）误 return 0 被 CopyToAsync 当 EOF 截断——改为 sleep/Task.Delay(10) 后重试读（循环直到底层流返回 0 或配额允许新字节），return 0 仅保留底层流 EOF 语义；类由 ApiClient 私有嵌套提取为独立 internal sealed class（同命名空间引用不变，避免继续膨胀 ApiClient partial 聚合行数 562 上限的 T-070 门禁）。新增 CloudPan.Tests/Client/Services/ThrottledStreamTests.cs 2 个单测（反射构造 internal 类型）：512KB/s 读 1MB 完整到达且内容一致；10KB/s 同一 tick 内连续 ReadAsync 配额耗尽不返回 0 不截断（10KB/s×16KB≈1.6s，1MB 若真按 10KB/s 需 100s 不适用于单测，故完整读出用例用 512KB/s 且 1MB>512KB 单秒配额保证复现配额耗尽路径）。验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 310/310 通过（含限速流 2 用例、架构测试全绿）；回归验证——临时还原旧『配额等待 return 0』逻辑后两个限速流测试均失败（截断为 0 字节），证明测试可捕获原缺陷。\n【验收 2026-08-03（task-verifier）】AC1 通过：dotnet test --filter ThrottledStream 2/2 通过——ThrottledStream_读取1MB文件_完整到达且内容一致（512KB/s 读 1MB：dest.Length==1024*1024 且字节与源完全一致）、ThrottledStream_同一tick内连续Read_配额耗尽不返回0不截断（10KB/s 首 tick 配额耗尽连续 ReadAsync 16KB 完整到达、reads>1 跨配额边界）。AC2 通过：grep -n 'return 0' 仅剩第 52、91 行两处，均在底层 EOF 分支（_inner.Read/_inner.ReadAsync 返回<=0 时向 CopyToAsync 传播 EOF）；配额耗尽（allowed<=0）路径为 Thread.Sleep(10)/Task.Delay(10,ct) 后 continue 重试读，无『配额等待 return 0』；通读 Read/ReadAsync/CopyToAsync 循环语义确认正确。AC3 通过：dotnet test CloudPan.Tests -c Release 310/310 通过；dotnet build CloudPan.sln -c Release 0 警告 0 错误。无手动项，放行 done。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -3769,7 +3769,7 @@
       "title": "选择性同步排除集目录树接线加载（LoadFromPaths 调用点 + 空树不覆盖排除配置）",
       "dimension": "function",
       "priority": "P1",
-      "status": "todo",
+      "status": "in-progress",
       "batch": 7,
       "findingId": "F-116",
       "dependsOn": [],
@@ -3805,8 +3805,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "改动文件：SelectiveSyncPanel.cs（SelectedPaths getter 空树返回既有配置不静默回退全选 + IsTreeLoaded/TreeLoadMessage/SetLoading/SetLoadFailed + LoadFromPaths 成功后切换树显示并置 loaded）；SettingsForm.cs（构造注入 directoryTreeLoader + SaveBtn_Click 树未加载阻止保存）；SettingsForm.SyncTab.cs（BuildSyncTab 接线 LoadSyncTreeAsync 异步加载目录树）；TrayAppContext.Actions.cs（OpenSettings 传入 _engine.GetDirectoryTreePathsAsync()）；SyncBrowseService.cs（新增 GetDirectoryTreePathsAsync 从 RemoteSnapshots 聚合目录路径，/ 开头 / 结尾规范化去重）；SyncEngine.cs（T-070 委托区新增 GetDirectoryTreePathsAsync）；CloudPan.Tests/Client/UI/SelectiveSyncPanelTests.cs（新增 7 用例）；CloudPan.Tests.csproj（UseWindowsForms=true 供面板单测实例化 WinForms 控件）；CodeQualityTests.cs（SettingsForm 聚合上限 700→740 并注释 T-074 增量）。验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 317/317 通过（含 SelectiveSync 7/7：空树+已有排除配置 getter 返回配置而非 {/}、填充目录树后 SelectedPaths 与勾选态一致、目录树聚合规范化）。AC1 确认 LoadFromPaths 定义处 + SettingsForm.SyncTab.cs:40 真实调用点。手动验收项：① 打开 设置→选择性同步 应显示服务端目录树（默认全选）② 取消勾选目录保存后排除集热更新、隐私目录不再同步 ③ 服务端不可达/无目录时保存被阻止并提示，既有排除配置不被覆盖。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-075",

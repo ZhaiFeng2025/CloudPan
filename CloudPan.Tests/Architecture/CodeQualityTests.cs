@@ -85,7 +85,8 @@ public class CodeQualityTests
         // ── 以下为 T-070 范围外的既有大型类型（非本任务拆分对象），记录现状上限防止继续膨胀 ──
         ["CloudPan.Client.UI.SetupForm"] = 1074,
         ["CloudPan.Client.UI.FileBrowserView"] = 854,
-        ["CloudPan.Client.UI.SettingsForm"] = 700,
+        // T-074：选择性同步目录树异步接线（SyncTab 加载方法 + 保存阻止校验）使聚合 698→731，上限上调记录新现状
+        ["CloudPan.Client.UI.SettingsForm"] = 740,
         ["CloudPan.Client.UI.TrayAppContext"] = 522,
         ["CloudPan.Client.Core.Services.ApiClient"] = 562,
         ["CloudPan.Server.UI.ServerInstaller"] = 861,

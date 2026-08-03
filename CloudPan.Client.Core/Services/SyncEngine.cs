@@ -355,6 +355,10 @@ public partial class SyncEngine : IDisposable
     public Task<string?> DownloadRemoteToTempAsync(string relativePath, CancellationToken ct = default)
         => _browse.DownloadRemoteToTempAsync(relativePath, ct);
 
+    /// <inheritdoc cref="SyncBrowseService.GetDirectoryTreePathsAsync"/>
+    public Task<List<string>> GetDirectoryTreePathsAsync(CancellationToken ct = default)
+        => _browse.GetDirectoryTreePathsAsync(ct);
+
     /// <inheritdoc cref="SyncManageService.GetTrashAsync"/>
     public Task<List<TrashItem>> GetTrashAsync(CancellationToken ct = default)
         => _manage.GetTrashAsync(ct);

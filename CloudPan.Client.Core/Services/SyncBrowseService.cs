@@ -330,6 +330,30 @@ internal sealed class SyncBrowseService
     }
 
     /// <summary>
+    /// 返回服务端目录树的全部目录路径（以 / 开头、以 / 结尾），供选择性同步面板填充勾选目录树。
+    /// 数据源为 RemoteSnapshots（/api/tree 拉取结果的本地缓存），含空目录与 CloudOnly 目录。
+    /// 返回空集合表示快照尚未加载（客户端未完成过同步拉取）或服务端确无目录。
+    /// </summary>
+    public async Task<List<string>> GetDirectoryTreePathsAsync(CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var dirs = await db.RemoteSnapshots
+            .Where(s => s.Type == (int)FileType.Directory)
+            .Select(s => s.Path)
+            .ToListAsync(ct);
+
+        // 规范化：目录路径统一 / 开头 + / 结尾（服务端条目路径以 / 开头、不含尾斜杠；排除集语义目录以 / 结尾）
+        return dirs
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Select(p => p.Replace('\\', '/'))
+            .Select(p => p.StartsWith('/') ? p : "/" + p)
+            .Select(p => p.EndsWith('/') ? p : p + "/")
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    /// <summary>
     /// 下载服务端当前版本到临时目录，返回临时文件路径（用于冲突解决时的「打开两版本对比」）。
     /// 下载失败或服务端无此文件返回 null。
     /// </summary>
