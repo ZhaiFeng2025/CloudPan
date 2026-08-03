@@ -1,6 +1,5 @@
 using CloudPan.Contract;
 using CloudPan.Infrastructure.Models;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace CloudPan.Client.Core.Services;
@@ -44,16 +43,13 @@ public partial class SyncEngine
     /// <summary>删除本地副本 + 清理快照与待处理队列（WS file_deleted 精确处理与树墓碑共用）。</summary>
     private async Task DeleteLocalCopyAsync(string path)
     {
-        await using var db = await _dbFactory.CreateDbContextAsync();
+        await using var store = await _storeFactory.CreateStoreAsync();
 
         // 取消该路径待处理的上传/下载（远端已删除，本地未决传输不再有意义）
-        var pending = await db.SyncQueue
-            .Where(q => q.FilePath == path
-                && (q.Operation == (int)SyncOperation.Upload || q.Operation == (int)SyncOperation.Download))
-            .ToListAsync();
+        var pending = await store.GetQueuesByPathAsync(path, new[] { (int)SyncOperation.Upload, (int)SyncOperation.Download });
         if (pending.Count > 0)
         {
-            db.SyncQueue.RemoveRange(pending);
+            store.RemoveQueueItems(pending);
         }
 
         string localPath = ToLocalPath(path);
@@ -62,13 +58,13 @@ public partial class SyncEngine
             SafeDelete(localPath);
         }
 
-        var snapshot = await db.RemoteSnapshots.FindAsync(path);
+        var snapshot = await store.GetSnapshotAsync(path);
         if (snapshot != null)
         {
-            db.RemoteSnapshots.Remove(snapshot);
+            store.RemoveSnapshot(snapshot);
         }
 
-        await db.SaveChangesAsync();
+        await store.CommitAsync();
     }
 
     private void OnWsFileRenamed(string oldPath, string newPath)
@@ -111,20 +107,19 @@ public partial class SyncEngine
             return;
         }
 
-        await using var db = await _dbFactory.CreateDbContextAsync();
+        await using var store = await _storeFactory.CreateStoreAsync();
         // 去重：同路径已有的重命名
-        var existing = await db.SyncQueue
-            .FirstOrDefaultAsync(q => q.FilePath == oldPath && q.Operation == (int)SyncOperation.Rename);
-        if (existing != null) { existing.TargetPath = newPath; await db.SaveChangesAsync(); return; }
+        var existing = await store.GetQueueByPathAndOperationAsync(oldPath, (int)SyncOperation.Rename);
+        if (existing != null) { existing.TargetPath = newPath; await store.CommitAsync(); return; }
 
-        db.SyncQueue.Add(new SyncQueue
+        store.AddQueueItem(new SyncQueue
         {
             FilePath = oldPath,
             Operation = (int)SyncOperation.Rename,
             Priority = (int)QueuePriority.High,
             TargetPath = newPath
         });
-        await db.SaveChangesAsync();
+        await store.CommitAsync();
         _logger.LogInformation("入队重命名: {Old} → {New}", oldPath, newPath);
     }
 
@@ -147,21 +142,17 @@ public partial class SyncEngine
             return;
         }
 
-        await using var db = await _dbFactory.CreateDbContextAsync();
+        await using var store = await _storeFactory.CreateStoreAsync();
 
         // 如果是删除操作，取消同一文件待处理的上传/下载
         if (operation == SyncOperation.Delete)
         {
-            var pending = await db.SyncQueue
-                .Where(q => q.FilePath == relativePath
-                    && (q.Operation == (int)SyncOperation.Upload || q.Operation == (int)SyncOperation.Download))
-                .ToListAsync();
-            db.SyncQueue.RemoveRange(pending);
+            var pending = await store.GetQueuesByPathAsync(relativePath, new[] { (int)SyncOperation.Upload, (int)SyncOperation.Download });
+            store.RemoveQueueItems(pending);
         }
 
         // 去重：相同操作已在队列中
-        var existing = await db.SyncQueue
-            .FirstOrDefaultAsync(q => q.FilePath == relativePath && q.Operation == (int)operation);
+        var existing = await store.GetQueueByPathAndOperationAsync(relativePath, (int)operation);
         if (existing != null)
         {
             return;
@@ -180,21 +171,21 @@ public partial class SyncEngine
             if (Directory.Exists(fullPath))
             {
                 // 快照已存在且为目录 → 已同步，跳过重复入队
-                var dirSnapshot = await db.RemoteSnapshots.FindAsync(relativePath);
+                var dirSnapshot = await store.GetSnapshotAsync(relativePath);
                 if (dirSnapshot != null && dirSnapshot.Type == (int)FileType.Directory)
                 {
                     _logger.LogDebug("目录已同步，跳过 mkdir 入队: {Path}", relativePath);
                     return;
                 }
 
-                db.SyncQueue.Add(new SyncQueue
+                store.AddQueueItem(new SyncQueue
                 {
                     FilePath = relativePath,
                     Operation = (int)operation,
                     Priority = (int)QueuePriority.High,
                     FileSize = 0
                 });
-                await db.SaveChangesAsync();
+                await store.CommitAsync();
                 _logger.LogInformation($"入队: {operation} {relativePath}");
                 return;
             }
@@ -204,7 +195,7 @@ public partial class SyncEngine
                 return;
             }
 
-            var snapshot = await db.RemoteSnapshots.FindAsync(relativePath);
+            var snapshot = await store.GetSnapshotAsync(relativePath);
             baseVersion = snapshot?.Version; // 记录 BaseVersion = snapshot.Version（本地上一次已同步版本）
             long localSize = new FileInfo(fullPath).Length;
             if (snapshot != null && localSize == snapshot.Size)
@@ -234,10 +225,10 @@ public partial class SyncEngine
         //（服务端版本 > baseVersion → 409），避免静默丢弃其他设备的改动；处理见 HandleDeleteConflictAsync。
         if (operation == SyncOperation.Delete)
         {
-            baseVersion = (await db.RemoteSnapshots.FindAsync(relativePath))?.Version;
+            baseVersion = (await store.GetSnapshotAsync(relativePath))?.Version;
         }
 
-        db.SyncQueue.Add(new SyncQueue
+        store.AddQueueItem(new SyncQueue
         {
             FilePath = relativePath,
             Operation = (int)operation,
@@ -245,7 +236,7 @@ public partial class SyncEngine
             FileSize = fileSize,
             BaseVersion = baseVersion // 冲突检测基准版本，ProcessUploadAsync/ProcessDeleteAsync 携带给服务端触发 409
         });
-        await db.SaveChangesAsync();
+        await store.CommitAsync();
         _logger.LogInformation($"入队: {operation} {relativePath}");
     }
 

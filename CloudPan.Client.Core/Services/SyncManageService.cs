@@ -1,6 +1,5 @@
 using CloudPan.Contract;
 using CloudPan.Infrastructure.Persistence.Client;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace CloudPan.Client.Core.Services;
@@ -12,18 +11,18 @@ namespace CloudPan.Client.Core.Services;
 internal sealed class SyncManageService
 {
     private readonly IApiClient _api;
-    private readonly IDbContextFactory<ClientDbContext> _dbFactory;
+    private readonly IClientStoreFactory _storeFactory;
     private readonly ILogger<SyncEngine> _logger;
     private readonly string _syncRoot;
 
     public SyncManageService(
         IApiClient api,
-        IDbContextFactory<ClientDbContext> dbFactory,
+        IClientStoreFactory storeFactory,
         ILogger<SyncEngine> logger,
         string syncRoot)
     {
         _api = api;
-        _dbFactory = dbFactory;
+        _storeFactory = storeFactory;
         _logger = logger;
         _syncRoot = syncRoot;
     }
@@ -89,8 +88,8 @@ internal sealed class SyncManageService
     /// </summary>
     public async Task<TrashItem?> DeleteForTrashAsync(string path, CancellationToken ct = default)
     {
-        await using var db = await _dbFactory.CreateDbContextAsync(ct);
-        var snapshot = await db.RemoteSnapshots.FindAsync(path);
+        await using var store = await _storeFactory.CreateStoreAsync(ct);
+        var snapshot = await store.GetSnapshotAsync(path);
 
         // 1. 有服务端记录 → 先调服务端删除（进回收站 + 墓碑传播），失败则本地保留（删除未生效）
         if (snapshot != null)
@@ -108,15 +107,15 @@ internal sealed class SyncManageService
             // 清快照（目录删除时子路径快照一并清除，避免后续扫描重复删除）。
             // 内存过滤：EF Core 无法将 StartsWith(StringComparison) 翻译到 SQLite（与 GetFileBrowserAsync 全量加载快照的模式一致）。
             string prefix = path.EndsWith('/') ? path : path + "/";
-            var snapshots = await db.RemoteSnapshots.ToListAsync(ct);
+            var snapshots = await store.GetAllSnapshotsAsync(ct);
             var toRemove = snapshots
                 .Where(s => string.Equals(s.Path, path, StringComparison.OrdinalIgnoreCase)
                          || s.Path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
                 .ToList();
             if (toRemove.Count > 0)
             {
-                db.RemoteSnapshots.RemoveRange(toRemove);
-                await db.SaveChangesAsync();
+                store.RemoveSnapshots(toRemove);
+                await store.CommitAsync();
             }
         }
 

@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- 客户端领域层：同步状态机/队列/传输客户端。持久化（ClientDbContext/迁移/实体）已下沉 Infrastructure/Persistence（T-068），领域层仅经 IDbContextFactory 使用。依赖方向：→ Infrastructure/Contract；不引用 WinForms（R-A2）。 -->
+  <!-- 客户端领域层：同步状态机/队列/传输客户端。持久化（ClientDbContext/迁移/实体）已下沉 Infrastructure/Persistence（T-068），领域层仅经 IClientStore 抽象访问（T-093），不直接引用 EF Core。依赖方向：→ Infrastructure/Contract；不引用 WinForms（R-A2）。 -->
   <PropertyGroup>
     <!-- net8.0-windows：SettingsStore 使用 DPAPI（ProtectedData） -->
     <TargetFramework>net8.0-windows</TargetFramework>
@@ -20,13 +20,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.22" />
-    <!-- SQLite 原生库：自包含单文件发布必需，解决 DllNotFoundException -->
-    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.10" />
-    <!-- 设计时支持：dotnet ef migrations（含设计时工厂，PrivateAssets 不流向消费者） -->
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.22">
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
     <!-- 日志（组合根 T-029：Serilog 初始化与 AddSerilog 下沉 Client.Core，UI 壳不再承载） -->

@@ -41,7 +41,7 @@ public class FileWatcherServiceTests : Infrastructure.TestBase, IDisposable
 
         _api = new MockApiClient();
         SyncConfig config = new SyncConfig { SyncRoot = _syncRoot, ServerUrl = "http://localhost:8443" };
-        _engine = new SyncEngine(_api, config, _dbFactory,
+        _engine = new SyncEngine(_api, config, new ClientStoreFactory(_dbFactory),
             NullLoggerFactory.Instance.CreateLogger<SyncEngine>());
         _watcher = new FileWatcherService(config, _engine,
             NullLoggerFactory.Instance.CreateLogger<FileWatcherService>());

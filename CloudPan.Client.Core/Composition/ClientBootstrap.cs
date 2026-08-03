@@ -330,8 +330,9 @@ public sealed class ClientBootstrap
         };
         services.AddSingleton(syncConfig);
 
-        // 数据库（DbContextFactory 确保并发安全）
+        // 数据库（DbContextFactory 确保并发安全）；T-093：领域层经 IClientStore 访问客户端库，不直接触碰 EF
         services.AddSingleton<IDbContextFactory<ClientDbContext>>(_ => new ClientDbFactory(DbPath));
+        services.AddSingleton<IClientStoreFactory>(sp => new ClientStoreFactory(sp.GetRequiredService<IDbContextFactory<ClientDbContext>>()));
 
         // HTTP 客户端（Phase 0：自签证书静默接受）
         services.AddSingleton<IApiClient>(new ApiClient(_serverUrl, _token, DeviceId,
@@ -347,9 +348,9 @@ public sealed class ClientBootstrap
         {
             var cfg = sp.GetRequiredService<SyncConfig>();
             var api = sp.GetRequiredService<IApiClient>();
-            var dbFactory = sp.GetRequiredService<IDbContextFactory<ClientDbContext>>();
+            var storeFactory = sp.GetRequiredService<IClientStoreFactory>();
             var ws = sp.GetRequiredService<WebSocketClient>();
-            return new SyncEngine(api, cfg, dbFactory,
+            return new SyncEngine(api, cfg, storeFactory,
                 sp.GetRequiredService<ILoggerFactory>().CreateLogger<SyncEngine>(), ws, null);
         });
         services.AddSingleton<FileWatcherService>(sp =>

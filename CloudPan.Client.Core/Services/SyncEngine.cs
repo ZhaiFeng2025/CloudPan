@@ -3,7 +3,6 @@ using System.Net;
 using CloudPan.Client.Core.Models;
 using CloudPan.Contract;
 using CloudPan.Infrastructure.Persistence.Client;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace CloudPan.Client.Core.Services;
@@ -50,7 +49,7 @@ public partial class SyncEngine : IDisposable
 {
     private readonly IApiClient _api;
     private readonly string _syncRoot;
-    private readonly IDbContextFactory<ClientDbContext> _dbFactory;
+    private readonly IClientStoreFactory _storeFactory;
     private readonly ILogger<SyncEngine> _logger;
     private readonly FileWatcherService? _fileWatcher;
     private readonly WebSocketClient? _wsClient;
@@ -115,18 +114,18 @@ public partial class SyncEngine : IDisposable
 
     // 构造函数中初始化 _ignorePatterns（见上方构造函数修改）
 
-    public SyncEngine(IApiClient api, SyncConfig config, IDbContextFactory<ClientDbContext> dbFactory, ILogger<SyncEngine> logger, WebSocketClient? wsClient = null, FileWatcherService? fileWatcher = null)
+    public SyncEngine(IApiClient api, SyncConfig config, IClientStoreFactory storeFactory, ILogger<SyncEngine> logger, WebSocketClient? wsClient = null, FileWatcherService? fileWatcher = null)
     {
         _api = api;
         _syncRoot = config.SyncRoot;
-        _dbFactory = dbFactory;
+        _storeFactory = storeFactory;
         _logger = logger;
         _fileWatcher = fileWatcher;
         _ignorePatterns = SyncIgnoreParser.LoadFromSyncRoot(_syncRoot);
         _selectedPaths = config.SelectedPaths ?? new List<string> { "/" };
         _wsClient = wsClient;
-        _browse = new SyncBrowseService(_api, _dbFactory, _logger, _syncRoot, _ignorePatterns);
-        _manage = new SyncManageService(_api, _dbFactory, _logger, _syncRoot);
+        _browse = new SyncBrowseService(_api, _storeFactory, _logger, _syncRoot, _ignorePatterns);
+        _manage = new SyncManageService(_api, _storeFactory, _logger, _syncRoot);
         _progress = new SyncProgressTracker();
         // 转发进度事件：外部订阅者仍订阅 SyncEngine.QueueProgressChanged，行为不变（具名方法，Dispose 退订）
         _progress.QueueProgressChanged += OnProgressChanged;
@@ -156,14 +155,14 @@ public partial class SyncEngine : IDisposable
         {
             try
             {
-                await using var db = await _dbFactory.CreateDbContextAsync();
-                var excluded = await db.SyncQueue
+                await using var store = await _storeFactory.CreateStoreAsync();
+                var excluded = (await store.GetAllQueuesAsync())
                     .Where(q => !IsPathSelected(q.FilePath))
-                    .ToListAsync();
+                    .ToList();
                 if (excluded.Count > 0)
                 {
-                    db.SyncQueue.RemoveRange(excluded);
-                    await db.SaveChangesAsync();
+                    store.RemoveQueueItems(excluded);
+                    await store.CommitAsync();
                     _logger.LogInformation("排除集热更新：移除 {Count} 个已排除路径的排队传输项", excluded.Count);
                 }
 

@@ -1,6 +1,5 @@
 using CloudPan.Contract;
 using CloudPan.Infrastructure.Models;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace CloudPan.Client.Core.Services;
@@ -20,8 +19,8 @@ public partial class SyncEngine
     {
         await _api.MkdirAsync(item.FilePath, ct);
 
-        await using var db = await _dbFactory.CreateDbContextAsync(ct);
-        var snapshot = await db.RemoteSnapshots.FindAsync(item.FilePath);
+        await using var store = await _storeFactory.CreateStoreAsync(ct);
+        var snapshot = await store.GetSnapshotAsync(item.FilePath);
         if (snapshot != null)
         {
             snapshot.Type = (int)FileType.Directory;
@@ -30,7 +29,7 @@ public partial class SyncEngine
         }
         else
         {
-            db.RemoteSnapshots.Add(new RemoteSnapshot
+            store.AddSnapshot(new RemoteSnapshot
             {
                 Path = item.FilePath,
                 Type = (int)FileType.Directory,
@@ -41,7 +40,7 @@ public partial class SyncEngine
                 IsDownloaded = true
             });
         }
-        await db.SaveChangesAsync();
+        await store.CommitAsync();
 
         _logger.LogInformation("目录 mkdir 同步完成: {Path}", item.FilePath);
         return true;

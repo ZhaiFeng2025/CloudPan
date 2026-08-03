@@ -1,6 +1,5 @@
 using CloudPan.Contract;
 using CloudPan.Infrastructure.Models;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace CloudPan.Client.Core.Services;
@@ -43,7 +42,7 @@ public partial class SyncEngine
 
         EnsureRootExists();
 
-        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        await using var store = await _storeFactory.CreateStoreAsync(ct);
 
         // 1. 枚举本地所有文件及目录（忽略 .cloudpan 和临时文件），单次遍历替代原先两次独立遍历。
         // T-046：目录也纳入枚举（含空目录），用于快照匹配与缺失目录的 mkdir 入队。
@@ -83,10 +82,7 @@ public partial class SyncEngine
         // 新前缀本地文件不入队 Upload（重命名已由 ProcessRenameAsync 收敛快照，避免整棵子树重复上传）。
         List<string> pendingRenameOldPaths = new();
         List<string> pendingRenameNewPaths = new();
-        foreach (var rename in await db.SyncQueue
-            .Where(q => q.Operation == (int)SyncOperation.Rename)
-            .Select(q => new { q.FilePath, q.TargetPath })
-            .ToListAsync(ct))
+        foreach (var rename in await store.GetQueuesByOperationAsync((int)SyncOperation.Rename, ct))
         {
             if (!string.IsNullOrEmpty(rename.TargetPath))
             {
@@ -100,11 +96,7 @@ public partial class SyncEngine
         List<RemoteSnapshot> batch;
         do
         {
-            batch = await db.RemoteSnapshots
-                .OrderBy(s => s.Path)
-                .Skip(snapshotCount)
-                .Take(batchSize)
-                .ToListAsync(ct);
+            batch = await store.GetSnapshotsPagedAsync(snapshotCount, batchSize, ct);
 
             foreach (var snapshot in batch)
             {
@@ -131,7 +123,7 @@ public partial class SyncEngine
                         snapshot.State = (int)CloudPan.Contract.FileState.Synced;
                         snapshot.IsDownloaded = true;
                         _logger.LogInformation("重新勾选已排除目录，本地副本恢复同步: {Path}", snapshot.Path);
-                        await db.SaveChangesAsync();
+                        await store.CommitAsync();
                     }
                     else
                     {
@@ -159,9 +151,7 @@ public partial class SyncEngine
                         && snapshot.IsDownloaded)
                     {
                         // 该路径存在未决下载项 → 下载窗口内跳过删除判定，待下载完成后再判定
-                        bool hasPendingDownload = await db.SyncQueue
-                            .AnyAsync(q => q.FilePath == snapshot.Path
-                                && q.Operation == (int)SyncOperation.Download, ct);
+                        bool hasPendingDownload = await store.HasPendingDownloadAsync(snapshot.Path, ct);
                         if (!hasPendingDownload)
                         {
                             _logger.LogInformation("全量扫描检测到本地删除: {Path}", snapshot.Path);

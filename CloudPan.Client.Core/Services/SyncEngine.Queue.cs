@@ -1,7 +1,6 @@
 using CloudPan.Contract;
 using CloudPan.Infrastructure.Models;
 using CloudPan.Infrastructure.Persistence.Client;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace CloudPan.Client.Core.Services;
@@ -15,21 +14,12 @@ public partial class SyncEngine
 
     private async Task ProcessQueueAsync(CancellationToken ct)
     {
-        await using var db = await _dbFactory.CreateDbContextAsync();
+        await using var store = await _storeFactory.CreateStoreAsync();
 
         // T-045：冲突项不占传输名额。待决策冲突路径从候选中剔除（冲突项保留在 DB，
         // 由 OnConflictResolved 解决时清除），避免冲突堆积 ≥5 个时恒占前 5 槽位、其余传输饥饿。
         var conflictPaths = _pendingConflicts.Keys.ToList();
-        IQueryable<SyncQueue> query = db.SyncQueue;
-        if (conflictPaths.Count > 0)
-        {
-            query = query.Where(q => !conflictPaths.Contains(q.FilePath));
-        }
-        var items = await query
-            .OrderByDescending(q => q.Priority)
-            .ThenBy(q => q.CreatedAt)
-            .Take(5)
-            .ToListAsync();
+        var items = await store.GetNextQueueBatchAsync(conflictPaths.Count > 0 ? conflictPaths : null, 5, ct);
 
         if (items.Count == 0)
         {
@@ -37,7 +27,7 @@ public partial class SyncEngine
         }
 
         // 计算总队列字节数和文件数（每次重新计算，避免外部新增项导致进度倒缩）
-        await _progress.RecalcTotals(db);
+        await _progress.RecalcTotals(store);
 
         _progress.Emit();
 
@@ -119,7 +109,7 @@ public partial class SyncEngine
                         TrackAuthFailure(false);
                     }
 
-                    db.SyncQueue.Remove(item);
+                    store.RemoveQueueItem(item);
                     _progress.IncrementCompleted();
                     if (item.RetryCount >= MaxRetryCount)
                     {
@@ -130,7 +120,7 @@ public partial class SyncEngine
                     }
                 }
 
-                await db.SaveChangesAsync();
+                await store.CommitAsync();
                 _progress.Emit();
             }
         }
@@ -141,7 +131,7 @@ public partial class SyncEngine
         }
 
         // 队列清空后清除当前文件名
-        int remainingAfter = await db.SyncQueue.CountAsync();
+        int remainingAfter = await store.GetQueueCountAsync();
         if (remainingAfter == 0)
         {
             _progress.SetCurrentFile(null);
@@ -158,8 +148,8 @@ public partial class SyncEngine
         while (!ct.IsCancellationRequested)
         {
             await ProcessQueueAsync(ct);
-            await using var db = await _dbFactory.CreateDbContextAsync(ct);
-            int remaining = await db.SyncQueue.CountAsync(ct);
+            await using var store = await _storeFactory.CreateStoreAsync(ct);
+            int remaining = await store.GetQueueCountAsync(ct);
             if (remaining == 0)
             {
                 break;

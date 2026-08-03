@@ -1,7 +1,6 @@
 using CloudPan.Contract;
 using CloudPan.Infrastructure.Models;
 using CloudPan.Infrastructure.Persistence.Client;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System.Text.RegularExpressions;
 
@@ -28,20 +27,20 @@ public sealed record FileSyncStatusItem(string RelativePath, bool IsDirectory, i
 internal sealed class SyncBrowseService
 {
     private readonly IApiClient _api;
-    private readonly IDbContextFactory<ClientDbContext> _dbFactory;
+    private readonly IClientStoreFactory _storeFactory;
     private readonly ILogger<SyncEngine> _logger;
     private readonly string _syncRoot;
     private readonly List<Regex> _ignorePatterns;
 
     public SyncBrowseService(
         IApiClient api,
-        IDbContextFactory<ClientDbContext> dbFactory,
+        IClientStoreFactory storeFactory,
         ILogger<SyncEngine> logger,
         string syncRoot,
         List<Regex> ignorePatterns)
     {
         _api = api;
-        _dbFactory = dbFactory;
+        _storeFactory = storeFactory;
         _logger = logger;
         _syncRoot = syncRoot;
         _ignorePatterns = ignorePatterns;
@@ -57,14 +56,10 @@ internal sealed class SyncBrowseService
     public async Task<IReadOnlyList<FileBrowseItem>> GetFileBrowserAsync(
         string directoryPath, string? searchText = null, CancellationToken ct = default)
     {
-        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        await using var store = await _storeFactory.CreateStoreAsync(ct);
 
         // 1. 待处理队列 → 瞬态状态（Uploading/Downloading/Deleting），优先级高于快照状态
-        var queueOps = await db.SyncQueue
-            .Where(q => q.Operation == (int)SyncOperation.Upload
-                     || q.Operation == (int)SyncOperation.Download
-                     || q.Operation == (int)SyncOperation.Delete)
-            .ToListAsync(ct);
+        var queueOps = await store.GetPendingTransferQueuesAsync(ct);
         var queueStateByPath = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (var q in queueOps)
         {
@@ -78,7 +73,7 @@ internal sealed class SyncBrowseService
         }
 
         // 2. 服务端快照（来自 /api/tree，本地 DB 缓存）
-        var snapshots = await db.RemoteSnapshots.ToListAsync(ct);
+        var snapshots = await store.GetAllSnapshotsAsync(ct);
         var snapshotByPath = new Dictionary<string, RemoteSnapshot>(StringComparer.OrdinalIgnoreCase);
         foreach (var snap in snapshots)
         {
@@ -239,14 +234,10 @@ internal sealed class SyncBrowseService
     /// </summary>
     public async Task<IReadOnlyList<FileSyncStatusItem>> GetFileSyncStatusesAsync(CancellationToken ct = default)
     {
-        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        await using var store = await _storeFactory.CreateStoreAsync(ct);
 
         // 1. 待处理队列 → 瞬态状态（Uploading/Downloading/Deleting），优先级高于快照状态
-        var queueOps = await db.SyncQueue
-            .Where(q => q.Operation == (int)SyncOperation.Upload
-                     || q.Operation == (int)SyncOperation.Download
-                     || q.Operation == (int)SyncOperation.Delete)
-            .ToListAsync(ct);
+        var queueOps = await store.GetPendingTransferQueuesAsync(ct);
         var queueStateByPath = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (var q in queueOps)
         {
@@ -260,7 +251,7 @@ internal sealed class SyncBrowseService
         }
 
         // 2. 服务端快照（Synced/CloudOnly/Deleting/Modified）
-        var snapshots = await db.RemoteSnapshots.ToListAsync(ct);
+        var snapshots = await store.GetAllSnapshotsAsync(ct);
 
         // 3. 本地文件/目录集合（相对路径，忽略 .cloudpan 与忽略规则）
         HashSet<string> localFiles = new(StringComparer.OrdinalIgnoreCase);
@@ -336,11 +327,8 @@ internal sealed class SyncBrowseService
     /// </summary>
     public async Task<List<string>> GetDirectoryTreePathsAsync(CancellationToken ct = default)
     {
-        await using var db = await _dbFactory.CreateDbContextAsync(ct);
-        var dirs = await db.RemoteSnapshots
-            .Where(s => s.Type == (int)FileType.Directory)
-            .Select(s => s.Path)
-            .ToListAsync(ct);
+        await using var store = await _storeFactory.CreateStoreAsync(ct);
+        var dirs = await store.GetDirectoryPathsAsync(ct);
 
         // 规范化：目录路径统一 / 开头 + / 结尾（服务端条目路径以 / 开头、不含尾斜杠；排除集语义目录以 / 结尾）
         return dirs

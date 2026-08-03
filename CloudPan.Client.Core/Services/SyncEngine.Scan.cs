@@ -1,7 +1,6 @@
 using CloudPan.Contract;
 using CloudPan.Infrastructure.Models;
 using CloudPan.Infrastructure.Persistence.Client;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace CloudPan.Client.Core.Services;
@@ -31,8 +30,8 @@ public partial class SyncEngine
         }
         catch (Exception ex) { _logger.LogWarning(ex, "获取磁盘信息失败"); }
 
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        var cursor = await db.SyncCursor.FindAsync(1);
+        await using var store = await _storeFactory.CreateStoreAsync();
+        var cursor = await store.GetCursorAsync();
         int sinceVersion = cursor?.LastMaxVersion ?? 0;
         int maxVersion = sinceVersion;
 
@@ -47,7 +46,7 @@ public partial class SyncEngine
                 break;
             }
 
-            await ApplyRemoteChangesAsync(db, response, ct);
+            await ApplyRemoteChangesAsync(store, response, ct);
             processedCount += response.Data.Length;
             NotifyStatus($"首次同步 — 下载远程文件 ({processedCount} 项)");
             nextCursor = response.HasMore ? response.NextCursor : null;
@@ -61,7 +60,7 @@ public partial class SyncEngine
         // 更新游标（使用拉取开始前的版本号，确保正确性）
         if (cursor == null)
         {
-            db.SyncCursor.Add(new SyncCursor { Id = 1, LastMaxVersion = maxVersion, LastSyncAt = DateTime.UtcNow.ToString("O") });
+            store.AddCursor(new SyncCursor { Id = 1, LastMaxVersion = maxVersion, LastSyncAt = DateTime.UtcNow.ToString("O") });
         }
         else
         {
@@ -69,14 +68,14 @@ public partial class SyncEngine
             cursor.LastSyncAt = DateTime.UtcNow.ToString("O");
         }
 
-        await db.SaveChangesAsync();
+        await store.CommitAsync();
         NotifyStatus("就绪");
     }
 
     private async Task IncrementalSyncAsync(CancellationToken ct)
     {
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        var cursor = await db.SyncCursor.FindAsync(1);
+        await using var store = await _storeFactory.CreateStoreAsync();
+        var cursor = await store.GetCursorAsync();
         int sinceVersion = cursor?.LastMaxVersion ?? 0;
         int maxVersion = sinceVersion;
 
@@ -89,7 +88,7 @@ public partial class SyncEngine
                 break;
             }
 
-            await ApplyRemoteChangesAsync(db, response, ct);
+            await ApplyRemoteChangesAsync(store, response, ct);
             nextCursor = response.HasMore ? response.NextCursor : null;
             if (response.MaxVersion > maxVersion)
             {
@@ -109,10 +108,10 @@ public partial class SyncEngine
         else
         {
             // 游标不存在则创建（FullSyncAsync 失败后的恢复路径）
-            db.SyncCursor.Add(new SyncCursor { Id = 1, LastMaxVersion = maxVersion, LastSyncAt = DateTime.UtcNow.ToString("O") });
+            store.AddCursor(new SyncCursor { Id = 1, LastMaxVersion = maxVersion, LastSyncAt = DateTime.UtcNow.ToString("O") });
         }
 
-        await db.SaveChangesAsync();
+        await store.CommitAsync();
     }
 
     // IncrementalSyncAsync ends here. The cursor creation fix applies to the IncrementalSyncAsync method only.
@@ -120,23 +119,20 @@ public partial class SyncEngine
     // FullSyncAsync already creates cursor if null, so the 'else' branch only triggers for IncrementalSyncAsync.
 
     /// <summary>将服务端的文件变更应用到本地——FullSync 和 IncrementalSync 共用。</summary>
-    private async Task ApplyRemoteChangesAsync(ClientDbContext db, FileTreeResponse response, CancellationToken ct)
+    private async Task ApplyRemoteChangesAsync(IClientStore store, FileTreeResponse response, CancellationToken ct)
     {
         foreach (var item in response.Data)
         {
             string localPath = ToLocalPath(item.Path);
-            var snapshot = await db.RemoteSnapshots.FindAsync(item.Path);
+            var snapshot = await store.GetSnapshotAsync(item.Path);
 
             if (item.State == (int)FileState.Deleting)
             {
                 // 取消该路径待处理的上传/下载（远端已删除，本地未决传输不再有意义；与 WS file_deleted 处理一致）
-                var pending = await db.SyncQueue
-                    .Where(q => q.FilePath == item.Path
-                        && (q.Operation == (int)SyncOperation.Upload || q.Operation == (int)SyncOperation.Download))
-                    .ToListAsync();
+                var pending = await store.GetQueuesByPathAsync(item.Path, new[] { (int)SyncOperation.Upload, (int)SyncOperation.Download });
                 if (pending.Count > 0)
                 {
-                    db.SyncQueue.RemoveRange(pending);
+                    store.RemoveQueueItems(pending);
                 }
 
                 if (File.Exists(localPath))
@@ -152,7 +148,7 @@ public partial class SyncEngine
 
                 if (snapshot != null)
                 {
-                    db.RemoteSnapshots.Remove(snapshot);
+                    store.RemoveSnapshot(snapshot);
                 }
 
                 _logger.LogInformation($"同步删除: {item.Path}");
@@ -167,7 +163,7 @@ public partial class SyncEngine
                 // 目录删除兜底据此不误判（否则空目录在首次同步未物化时被判定为本地删除 → 删除-重建振荡）。
                 if (snapshot == null)
                 {
-                    db.RemoteSnapshots.Add(MakeSnapshot(item, item.State, isDownloaded: false));
+                    store.AddSnapshot(MakeSnapshot(item, item.State, isDownloaded: false));
                 }
                 else
                 {
@@ -183,7 +179,7 @@ public partial class SyncEngine
             {
                 if (snapshot == null)
                 {
-                    db.RemoteSnapshots.Add(MakeSnapshot(item, (int)FileState.CloudOnly));
+                    store.AddSnapshot(MakeSnapshot(item, (int)FileState.CloudOnly));
                 }
                 else
                 {
@@ -211,12 +207,10 @@ public partial class SyncEngine
                 else
                 {
                     // 去重：检查队列中是否已有同路径下载项
-                    var existingDl = await db.SyncQueue
-                        .FirstOrDefaultAsync(q => q.FilePath == item.Path
-                            && q.Operation == (int)SyncOperation.Download);
+                    var existingDl = await store.GetQueueByPathAndOperationAsync(item.Path, (int)SyncOperation.Download);
                     if (existingDl == null)
                     {
-                        db.SyncQueue.Add(new SyncQueue
+                        store.AddQueueItem(new SyncQueue
                         {
                             FilePath = item.Path,
                             Operation = (int)SyncOperation.Download,
@@ -244,12 +238,10 @@ public partial class SyncEngine
                 else
                 {
                     // 去重：检查队列中是否已有同路径下载项
-                    var existingDl = await db.SyncQueue
-                        .FirstOrDefaultAsync(q => q.FilePath == item.Path
-                            && q.Operation == (int)SyncOperation.Download);
+                    var existingDl = await store.GetQueueByPathAndOperationAsync(item.Path, (int)SyncOperation.Download);
                     if (existingDl == null)
                     {
-                        db.SyncQueue.Add(new SyncQueue
+                        store.AddQueueItem(new SyncQueue
                         {
                             FilePath = item.Path,
                             Operation = (int)SyncOperation.Download,
@@ -258,13 +250,13 @@ public partial class SyncEngine
                             FileSize = item.CurrentSize
                         });
                     }
-            }
+                }
 
-            // 快照更新移到下载成功后——此处仅记录快照创建，不更新版本号。
-            // IsDownloaded=false：下载完成前不得视为「已落盘」，全量扫描据此不触发删除传播（T-037）。
-            if (snapshot == null)
+                // 快照更新移到下载成功后——此处仅记录快照创建，不更新版本号。
+                // IsDownloaded=false：下载完成前不得视为「已落盘」，全量扫描据此不触发删除传播（T-037）。
+                if (snapshot == null)
                 {
-                    db.RemoteSnapshots.Add(MakeSnapshot(item, item.State));
+                    store.AddSnapshot(MakeSnapshot(item, item.State));
                 }
                 // 版本/哈希/大小/IsDownloaded 更新在 ProcessDownloadAsync 成功后执行
             }

@@ -6,6 +6,7 @@ using CloudPan.Client.Core.Services;
 using CloudPan.Client.UI;
 using CloudPan.Contract;
 using CloudPan.Infrastructure.Models;
+using CloudPan.Infrastructure.Persistence.Client;
 using CloudPan.Tests.Client.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -183,7 +184,7 @@ public class SelectiveSyncPanelTests
             var engine = new SyncEngine(
                 new MockApiClient(),
                 new SyncConfig { SyncRoot = syncRoot, ServerUrl = "http://localhost:8443" },
-                dbFactory,
+                new ClientStoreFactory(dbFactory),
                 NullLoggerFactory.Instance.CreateLogger<SyncEngine>());
 
             var dirs = await engine.GetDirectoryTreePathsAsync();

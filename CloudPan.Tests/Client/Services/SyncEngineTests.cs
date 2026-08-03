@@ -19,6 +19,7 @@ public class SyncEngineTests : IDisposable
     private readonly string _syncRoot;
     private readonly MockApiClient _api;
     private readonly IDbContextFactory<ClientDbContext> _dbFactory;
+    private readonly IClientStoreFactory _storeFactory;
     private readonly SyncEngine _engine;
     private readonly ILogger<SyncEngine> _logger;
 
@@ -39,12 +40,14 @@ public class SyncEngineTests : IDisposable
             db.Database.EnsureCreated();
             db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
         }
+        // T-093：领域层经 IClientStore 抽象访问持久化（测试复用 Infrastructure 的 EF 实现工厂）
+        _storeFactory = new ClientStoreFactory(_dbFactory);
 
         _api = new MockApiClient();
         _logger = NullLoggerFactory.Instance.CreateLogger<SyncEngine>();
         SyncConfig config = new SyncConfig { SyncRoot = _syncRoot, ServerUrl = "http://localhost:8443" };
 
-        _engine = new SyncEngine(_api, config, _dbFactory, _logger);
+        _engine = new SyncEngine(_api, config, _storeFactory, _logger);
     }
 
     /// <summary>冲突测试事件处理器（Dispose 中退订，满足 CP300 事件订阅可退订规则）。</summary>
@@ -487,8 +490,8 @@ public class SyncEngineTests : IDisposable
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         Assert.NotNull(method);
 
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        Task? task = (Task?)method!.Invoke(_engine, [db, response, CancellationToken.None]);
+        await using var store = await _storeFactory.CreateStoreAsync();
+        Task? task = (Task?)method!.Invoke(_engine, [store, response, CancellationToken.None]);
         Assert.NotNull(task);
         await task;
 
@@ -511,18 +514,17 @@ public class SyncEngineTests : IDisposable
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         Assert.NotNull(method);
 
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        Task? task = (Task?)method!.Invoke(_engine, [db, response, CancellationToken.None]);
+        await using var store = await _storeFactory.CreateStoreAsync();
+        Task? task = (Task?)method!.Invoke(_engine, [store, response, CancellationToken.None]);
         Assert.NotNull(task);
         await task;
-        await db.SaveChangesAsync();
+        await store.CommitAsync();
 
-        var snapshot = await db.RemoteSnapshots.FindAsync("/new-remote.bin");
+        var snapshot = await store.GetSnapshotAsync("/new-remote.bin");
         Assert.NotNull(snapshot);
         Assert.False(snapshot!.IsDownloaded); // 下载完成前不得标记为已落盘
         // 已入队下载
-        Assert.NotNull(await db.SyncQueue.FirstOrDefaultAsync(q =>
-            q.FilePath == "/new-remote.bin" && q.Operation == (int)SyncOperation.Download));
+        Assert.NotNull(await store.GetQueueByPathAndOperationAsync("/new-remote.bin", (int)SyncOperation.Download));
     }
 
     [Fact]
@@ -1389,14 +1391,14 @@ public class SyncEngineTests : IDisposable
         var method = typeof(SyncEngine).GetMethod("ApplyRemoteChangesAsync",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         Assert.NotNull(method);
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        Task? task = (Task?)method!.Invoke(_engine, [db, response, CancellationToken.None]);
+        await using var store = await _storeFactory.CreateStoreAsync();
+        Task? task = (Task?)method!.Invoke(_engine, [store, response, CancellationToken.None]);
         Assert.NotNull(task);
         await task;
-        await db.SaveChangesAsync();
+        await store.CommitAsync();
 
         // 快照已建（目录无落盘概念，视为已同步）
-        var snapshot = await db.RemoteSnapshots.FindAsync("/photos");
+        var snapshot = await store.GetSnapshotAsync("/photos");
         Assert.NotNull(snapshot);
         Assert.Equal((int)FileType.Directory, snapshot!.Type);
 
@@ -1576,14 +1578,15 @@ public class SyncEngineTests : IDisposable
         var method = typeof(SyncEngine).GetMethod("ApplyRemoteChangesAsync",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         Assert.NotNull(method);
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        Task? task = (Task?)method!.Invoke(_engine, [db, response, CancellationToken.None]);
+        await using var store = await _storeFactory.CreateStoreAsync();
+        Task? task = (Task?)method!.Invoke(_engine, [store, response, CancellationToken.None]);
         Assert.NotNull(task);
         await task;
-        await db.SaveChangesAsync();
+        await store.CommitAsync();
 
         // 子项快照版本相等、内容哈希相同 → 不入队下载（无整棵子树重下载）
-        Assert.Equal(0, await db.SyncQueue.CountAsync(q => q.Operation == (int)SyncOperation.Download));
+        var allQueues = await store.GetAllQueuesAsync();
+        Assert.Equal(0, allQueues.Count(q => q.Operation == (int)SyncOperation.Download));
     }
 
     // T-066：全量扫描落在重命名未决窗口（本地已改名、Move 未处理）时，不把 rename 判为
@@ -1899,18 +1902,19 @@ public class SyncEngineTests : IDisposable
         var method = typeof(SyncEngine).GetMethod("ApplyRemoteChangesAsync",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         Assert.NotNull(method);
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        Task? task = (Task?)method!.Invoke(_engine, [db, response, CancellationToken.None]);
+        await using var store = await _storeFactory.CreateStoreAsync();
+        Task? task = (Task?)method!.Invoke(_engine, [store, response, CancellationToken.None]);
         Assert.NotNull(task);
         await task;
-        await db.SaveChangesAsync();
+        await store.CommitAsync();
 
-        var snapshot = await db.RemoteSnapshots.FindAsync("/photos/restore.txt");
+        var snapshot = await store.GetSnapshotAsync("/photos/restore.txt");
         Assert.NotNull(snapshot);
         Assert.Equal((int)FileState.Synced, snapshot!.State); // 重置 CloudOnly → Synced
         Assert.True(snapshot.IsDownloaded);
         // 版本相等 + 本地存在 → 不入队下载（内容一致无需重传）
-        Assert.Equal(0, await db.SyncQueue.CountAsync(q => q.FilePath == "/photos/restore.txt"));
+        var restoreQueues = await store.GetQueuesByPathAsync("/photos/restore.txt", null);
+        Assert.Empty(restoreQueues);
     }
 
     [Fact]
@@ -1939,18 +1943,17 @@ public class SyncEngineTests : IDisposable
         var method = typeof(SyncEngine).GetMethod("ApplyRemoteChangesAsync",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         Assert.NotNull(method);
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        Task? task = (Task?)method!.Invoke(_engine, [db, response, CancellationToken.None]);
+        await using var store = await _storeFactory.CreateStoreAsync();
+        Task? task = (Task?)method!.Invoke(_engine, [store, response, CancellationToken.None]);
         Assert.NotNull(task);
         await task;
-        await db.SaveChangesAsync();
+        await store.CommitAsync();
 
         // 已入队下载（版本相等也需下载，CloudOnly 从未落盘）
-        var item = await db.SyncQueue.FirstOrDefaultAsync(q =>
-            q.FilePath == "/photos/restore.txt" && q.Operation == (int)SyncOperation.Download);
+        var item = await store.GetQueueByPathAndOperationAsync("/photos/restore.txt", (int)SyncOperation.Download);
         Assert.NotNull(item);
         // 快照保持 CloudOnly，下载完成后 ProcessDownloadAsync 才置 Synced
-        var snapshot = await db.RemoteSnapshots.FindAsync("/photos/restore.txt");
+        var snapshot = await store.GetSnapshotAsync("/photos/restore.txt");
         Assert.Equal((int)FileState.CloudOnly, snapshot!.State);
     }
 }

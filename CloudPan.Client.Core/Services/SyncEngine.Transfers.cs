@@ -1,7 +1,6 @@
 using System.Globalization;
 using CloudPan.Contract;
 using CloudPan.Infrastructure.Models;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace CloudPan.Client.Core.Services;
@@ -50,8 +49,8 @@ public partial class SyncEngine
             string? remoteLastModified = null; // T-036：远程真实修改时间来自 /api/tree 快照
             try
             {
-                await using var snapDb = await _dbFactory.CreateDbContextAsync(ct);
-                var remoteSnapshot = await snapDb.RemoteSnapshots.FindAsync(new object[] { item.FilePath }, ct);
+                await using var snapStore = await _storeFactory.CreateStoreAsync(ct);
+                var remoteSnapshot = await snapStore.GetSnapshotAsync(item.FilePath, ct);
                 if (remoteSnapshot != null)
                 {
                     remoteHash = remoteSnapshot.Hash;
@@ -102,8 +101,8 @@ public partial class SyncEngine
         }
 
         // 上传成功后更新本地快照，避免下次增量同步认为需要重新下载
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        var snapshot = await db.RemoteSnapshots.FindAsync(item.FilePath);
+        await using var store = await _storeFactory.CreateStoreAsync();
+        var snapshot = await store.GetSnapshotAsync(item.FilePath);
         if (snapshot != null)
         {
             snapshot.Version = result?.Data.Version ?? snapshot.Version;
@@ -114,7 +113,7 @@ public partial class SyncEngine
         }
         else if (result != null)
         {
-            db.RemoteSnapshots.Add(new RemoteSnapshot
+            store.AddSnapshot(new RemoteSnapshot
             {
                 Path = item.FilePath,
                 Type = (int)CloudPan.Contract.FileType.File,
@@ -126,7 +125,7 @@ public partial class SyncEngine
                 IsDownloaded = true // T-037：上传成功即本地已落盘
             });
         }
-        await db.SaveChangesAsync();
+        await store.CommitAsync();
 
         return true;
     }
@@ -139,8 +138,8 @@ public partial class SyncEngine
         // M-02: 下载前检测本地是否已修改
         if (File.Exists(localPath))
         {
-            await using var checkDb = await _dbFactory.CreateDbContextAsync(ct);
-            var snapshot = await checkDb.RemoteSnapshots.FindAsync(new object[] { item.FilePath }, ct);
+            await using var checkStore = await _storeFactory.CreateStoreAsync(ct);
+            var snapshot = await checkStore.GetSnapshotAsync(item.FilePath, ct);
             if (snapshot != null && !string.IsNullOrEmpty(snapshot.Hash))
             {
                 string currentLocalHash = await FileHasher.ComputeSha256Async(localPath);
@@ -221,8 +220,8 @@ public partial class SyncEngine
         }
 
         // 下载成功后更新本地快照（延后更新，避免下载失败时幻同步）
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        var dbSnapshot = await db.RemoteSnapshots.FindAsync(item.FilePath);
+        await using var store = await _storeFactory.CreateStoreAsync();
+        var dbSnapshot = await store.GetSnapshotAsync(item.FilePath);
 
         // 获取下载后文件的实际哈希和大小（优先使用服务端返回的 ExpectedHash，避免重复计算）
         string downloadedHash;
@@ -249,7 +248,7 @@ public partial class SyncEngine
         else
         {
             // 快照不存在时创建新快照（例如通过 DownloadPathAsync 手动触发的下载）
-            db.RemoteSnapshots.Add(new RemoteSnapshot
+            store.AddSnapshot(new RemoteSnapshot
             {
                 Path = item.FilePath,
                 Type = (int)CloudPan.Contract.FileType.File,
@@ -261,7 +260,7 @@ public partial class SyncEngine
                 IsDownloaded = true // T-037：下载完成即本地已落盘
             });
         }
-        await db.SaveChangesAsync();
+        await store.CommitAsync();
 
         _logger.LogInformation($"下载完成: {item.FilePath}");
         return true;
@@ -270,22 +269,21 @@ public partial class SyncEngine
     /// <summary>将下载任务重新入队。</summary>
     private async Task EnqueueDownloadAsync(string filePath, int? baseVersion)
     {
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        var existing = await db.SyncQueue
-            .FirstOrDefaultAsync(q => q.FilePath == filePath && q.Operation == (int)SyncOperation.Download);
+        await using var store = await _storeFactory.CreateStoreAsync();
+        var existing = await store.GetQueueByPathAndOperationAsync(filePath, (int)SyncOperation.Download);
         if (existing != null)
         {
             return; // 已在队列中
         }
 
-        db.SyncQueue.Add(new SyncQueue
+        store.AddQueueItem(new SyncQueue
         {
             FilePath = filePath,
             Operation = (int)SyncOperation.Download,
             Priority = (int)QueuePriority.Normal,
             BaseVersion = baseVersion ?? 0
         });
-        await db.SaveChangesAsync();
+        await store.CommitAsync();
     }
 
     /// <returns>true = 成功，应从队列移除</returns>
@@ -313,12 +311,12 @@ public partial class SyncEngine
             _logger.LogInformation($"本地删除: {item.FilePath}");
         }
 
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        var snapshot = await db.RemoteSnapshots.FindAsync(item.FilePath);
+        await using var store = await _storeFactory.CreateStoreAsync();
+        var snapshot = await store.GetSnapshotAsync(item.FilePath);
         if (snapshot != null)
         {
-            db.RemoteSnapshots.Remove(snapshot);
-            await db.SaveChangesAsync();
+            store.RemoveSnapshot(snapshot);
+            await store.CommitAsync();
         }
 
         return true;
@@ -334,24 +332,24 @@ public partial class SyncEngine
         }
         NotifyStatus($"重命名: {item.FilePath} → {item.TargetPath}");
         await _api.MoveAsync(item.FilePath, item.TargetPath, item.BaseVersion ?? 0, ct);
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        var snapshot = await db.RemoteSnapshots.FindAsync(item.FilePath);
+        await using var store = await _storeFactory.CreateStoreAsync();
+        var snapshot = await store.GetSnapshotAsync(item.FilePath);
 
         if (snapshot != null && snapshot.Type == (int)CloudPan.Contract.FileType.Directory)
         {
             // T-066：目录重命名——子项快照前缀跟随（旧前缀 → 新前缀，内容/版本跟随），
             // 并清空旧前缀下的未决队列项，避免整棵子树被误判为删除+新增（重下载/批量删除）。
-            await RewriteSubtreeSnapshotsAsync(db, item);
+            await RewriteSubtreeSnapshotsAsync(store, item);
         }
         else
         {
             // 单文件（或目录快照缺失）重命名：移除旧快照、按新路径重建
             if (snapshot != null)
             {
-                db.RemoteSnapshots.Remove(snapshot);
+                store.RemoveSnapshot(snapshot);
             }
             // 为新路径创建快照，避免下次全量扫描将新文件视为"新文件"重新上传
-            db.RemoteSnapshots.Add(new RemoteSnapshot
+            store.AddSnapshot(new RemoteSnapshot
             {
                 Path = item.TargetPath,
                 Type = snapshot?.Type ?? (int)CloudPan.Contract.FileType.File,
@@ -363,7 +361,7 @@ public partial class SyncEngine
                 IsDownloaded = true // T-037：重命名目标已在本机落盘
             });
         }
-        await db.SaveChangesAsync();
+        await store.CommitAsync();
         _logger.LogInformation("重命名完成: {Old} → {New}", item.FilePath, item.TargetPath);
         return true;
     }
@@ -371,15 +369,15 @@ public partial class SyncEngine
     /// <summary>按需下载指定路径的文件（CloudOnly → 本地）。</summary>
     public async Task DownloadPathAsync(string path, CancellationToken ct = default)
     {
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        db.SyncQueue.Add(new SyncQueue
+        await using var store = await _storeFactory.CreateStoreAsync();
+        store.AddQueueItem(new SyncQueue
         {
             FilePath = path,
             Operation = (int)SyncOperation.Download,
             Priority = (int)QueuePriority.High,
             CreatedAt = DateTime.UtcNow.ToString("O")
         });
-        await db.SaveChangesAsync();
+        await store.CommitAsync();
         _logger.LogInformation("按需下载入队: {Path}", path);
     }
 

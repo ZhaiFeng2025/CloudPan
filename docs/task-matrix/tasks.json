@@ -4634,7 +4634,7 @@
       "title": "Client.Core 持久化抽象（Repository/Store 消除领域层直接 EF LINQ）",
       "dimension": "architecture",
       "priority": "P2",
-      "status": "todo",
+      "status": "in-progress",
       "batch": 8,
       "findingId": "F-135",
       "dependsOn": [],
@@ -4666,7 +4666,7 @@
       "attempts": 0,
       "statusReason": null,
       "note": "与行数门禁真实拆分（SyncEngine/MainWindow 责任类）同改 SyncEngine 文件——本批只排本任务，拆分列批次 9 优先避免并行合并冲突。",
-      "updatedAt": null
+      "updatedAt": "2026-08-04"
     },
     {
       "id": "T-094",

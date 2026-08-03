@@ -1,6 +1,5 @@
 using CloudPan.Contract;
 using CloudPan.Infrastructure.Models;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace CloudPan.Client.Core.Services;
@@ -19,13 +18,11 @@ public partial class SyncEngine
 
         string localPath = ToLocalPath(relativePath);
 
-        await using var db = await _dbFactory.CreateDbContextAsync();
+        await using var store = await _storeFactory.CreateStoreAsync();
 
         // 移除队列中所有对该文件的待处理操作，避免重复
-        var pending = await db.SyncQueue
-            .Where(q => q.FilePath == relativePath)
-            .ToListAsync();
-        db.SyncQueue.RemoveRange(pending);
+        var pending = await store.GetQueuesByPathAsync(relativePath, null);
+        store.RemoveQueueItems(pending);
 
         switch (resolution)
         {
@@ -38,7 +35,7 @@ public partial class SyncEngine
                         fileSize = new FileInfo(localPath).Length;
                     }
 
-                    db.SyncQueue.Add(new SyncQueue
+                    store.AddQueueItem(new SyncQueue
                 {
                     FilePath = relativePath,
                     Operation = (int)SyncOperation.Upload,
@@ -50,7 +47,7 @@ public partial class SyncEngine
             }
             case ConflictResolution.KeepRemote:
             {
-                db.SyncQueue.Add(new SyncQueue
+                store.AddQueueItem(new SyncQueue
                 {
                     FilePath = relativePath,
                     Operation = (int)SyncOperation.Download,
@@ -77,18 +74,18 @@ public partial class SyncEngine
                         _logger.LogError(ex, "保留两者时重命名本地文件失败: {Path}", localPath);
                         // F-31：不再透出原始异常字符串
                         ErrorOccurred?.Invoke(relativePath, new ErrorAttribution("本地文件备份失败，无法保留两者", "请关闭可能占用该文件的程序后重试"), SyncOperation.Download);
-                        db.SyncQueue.Add(new SyncQueue
+                        store.AddQueueItem(new SyncQueue
                         {
                             FilePath = relativePath,
                             Operation = (int)SyncOperation.Download,
                             Priority = (int)QueuePriority.High
                         });
-                        await db.SaveChangesAsync();
+                        await store.CommitAsync();
                         return;
                     }
                 }
 
-                db.SyncQueue.Add(new SyncQueue
+                store.AddQueueItem(new SyncQueue
                 {
                     FilePath = relativePath,
                     Operation = (int)SyncOperation.Download,
@@ -99,7 +96,7 @@ public partial class SyncEngine
             }
         }
 
-        await db.SaveChangesAsync();
+        await store.CommitAsync();
         NotifyStatus("冲突已解决: " + relativePath);
         ConflictResolved?.Invoke(relativePath);
     }

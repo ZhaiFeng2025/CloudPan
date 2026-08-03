@@ -1,5 +1,4 @@
 using CloudPan.Infrastructure.Persistence.Client;
-using Microsoft.EntityFrameworkCore;
 
 namespace CloudPan.Client.Core.Services;
 
@@ -59,10 +58,10 @@ internal sealed class SyncProgressTracker
     public string ProgressLabel() => $"{_queueCompleted + 1}/{_totalFileCount}";
 
     /// <summary>从数据库重新计算队列总数和总字节数，避免外部新增项导致的进度倒缩。</summary>
-    public async Task RecalcTotals(ClientDbContext db)
+    public async Task RecalcTotals(IClientStore store)
     {
-        int remaining = await db.SyncQueue.CountAsync();
-        SetTotals(remaining + _queueCompleted, await db.SyncQueue.SumAsync(q => q.FileSize ?? 0));
+        var totals = await store.GetQueueTotalsAsync();
+        SetTotals(totals.Count + _queueCompleted, totals.TotalBytes);
     }
 
     /// <summary>计算并发出当前进度状态（速率估算经 _rateLock 保护非原子类型的读写）。</summary>
