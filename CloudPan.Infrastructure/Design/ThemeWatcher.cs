@@ -1,15 +1,13 @@
-using CloudPan.Infrastructure.Design;
-
-namespace CloudPan.Server.UI;
+namespace CloudPan.Infrastructure.Design;
 
 /// <summary>
-/// 服务端主题跟随器（T-032 深色模式令牌级切换）。
+/// 主题跟随器（T-032 深色模式令牌级切换；T-079 两端收敛至此单一实现）。
 /// 窗口经 <see cref="Watch"/> 一行接入：立即把控件树颜色归一化到当前系统主题，
-/// 并在系统主题切换（ThemeManager.ThemeChanged）时刷新。颜色映射在令牌层
+/// 并在系统主题切换（<see cref="ThemeManager.ThemeChanged"/>）时刷新。颜色映射在令牌层
 /// CloudPanColors.NormalizeToTheme/NormalizeTextToTheme 内完成，UI 不做逐处反色。
-/// 与客户端 ThemeWatcher 同构（两端无共享 UI 项目，按规则 8 各自持有）。
+/// 客户端与服务端 UI 共用本实现，改策略只改一处，两端深色模式行为不分叉。
 /// </summary>
-internal static class ThemeWatcher
+public static class ThemeWatcher
 {
     private static readonly object Gate = new();
     private static readonly List<Form> Forms = new();

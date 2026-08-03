@@ -3974,7 +3974,7 @@
       "title": "ThemeWatcher 双份下沉 Infrastructure/Design（两端只留初始化）",
       "dimension": "simplicity",
       "priority": "P2",
-      "status": "todo",
+      "status": "in-progress",
       "batch": 7,
       "findingId": "F-121",
       "dependsOn": [],
@@ -4001,7 +4001,7 @@
       "attempts": 0,
       "statusReason": null,
       "note": null,
-      "updatedAt": null
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-080",
