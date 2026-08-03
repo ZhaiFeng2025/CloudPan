@@ -1790,7 +1790,7 @@
       "title": "服务端控制器改用生成响应 DTO（删除匿名对象）",
       "dimension": "architecture",
       "priority": "P1",
-      "status": "in-progress",
+      "status": "acceptance",
       "batch": 4,
       "findingId": "F-40",
       "dependsOn": [],
@@ -1821,7 +1821,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
+      "note": "T-040 服务端控制器改用生成响应 DTO（删除匿名对象）。\n\n改动文件：\n- shared-spec.json：版本 1.1.0→1.2.0，api.responses 补全 AdminFile/AdminDevice/AdminLog/AdminStats/Devices/Health/Version/CertFingerprint/Delete/Move/Mkdir/Search/TrashRestore/TrashEmpty 共 22 个响应 DTO\n- CloudPan.CodeGen 重跑：ApiResponses.g.cs 新增 DTO，其余 Generated/*.g.cs 仅版本头 1.1.0→1.2.0 更新\n- CloudPan.Server.Core：删除与生成 DTO 重复的响应记录（TrashItem/VersionRecordInfo/FileEntryInfo/DeviceInfo/SyncLogInfo/ServerStats），ITrashService/IVersionHistoryService/IServerStatusService 及实现改为返回契约类型（规则 0 单一事实来源）\n- CloudPan.Server.Host/Controllers 9 文件：25 处 return Ok(new {...}) 匿名对象全部改为生成 DTO（上传/删除/移动/建目录/搜索/分块进度/完成/状态/Admin×4/Devices/Health/Version/CertFingerprint/Share 创建撤销/Trash 列表恢复清空/Versions 列表回滚）\n- CloudPan.Server.UI/SettingsPage.Guide.cs：DeviceInfo→AdminDeviceItem（GetDevicesAsync 返回类型变更的适配）\n- CloudPan.Tests：ContractSourceScanTests 新增『Controllers 无匿名对象响应』扫描（requirement 2）；FileOperationServiceTests 模拟 ITrashService 改用 Contract.TrashItem；新增 ResponseShapeIntegrationTests（15 条，requirement 3：响应 JSON 反序列化为生成 DTO 断言关键字段）\n\n验证（全部通过）：\n- ① grep -rn 'return Ok(new {' CloudPan.Server.Host/Controllers/ 无匹配（exit 1）\n- ② dotnet run --project CloudPan.CodeGen（生成）+ -- --verify（8 类生成物一致）\n- ③ dotnet build CloudPan.sln -c Release：0 警告 0 错误（TreatWarningsAsErrors 生效）\n- ④ dotnet test CloudPan.Tests -c Release：269 全绿（含新增 15 条 ResponseShapeIntegrationTests）\n\n备注：管理面板端点（/admin/api/*）为 localhost 认证，WebApplicationFactory 测试服务器 RemoteIpAddress 为空无法走 HTTP，故 Admin 响应 DTO 用 JSON 序列化形状断言覆盖（AdminStats_JSON形状与DTO一致 等 3 条）。",
       "updatedAt": "2026-08-03"
     },
     {
