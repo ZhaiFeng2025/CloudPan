@@ -2026,7 +2026,7 @@
       "title": "本地目录创建同步为服务端条目",
       "dimension": "function",
       "priority": "P2",
-      "status": "in-progress",
+      "status": "acceptance",
       "batch": 4,
       "updatedAt": "2026-08-03",
       "findingId": "F-46",
