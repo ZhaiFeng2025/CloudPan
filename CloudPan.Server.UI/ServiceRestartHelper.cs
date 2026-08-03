@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Security.Principal;
 using System.ServiceProcess;
 using CloudPan.Server.Host.Hosting;
@@ -68,12 +67,12 @@ public static class ServiceRestartHelper
     /// <summary>runas 提升执行 sc stop → sc start（参数为常量服务名，无注入面）。</summary>
     private static void RestartServiceElevated()
     {
-        if (!RunElevatedSc($"stop {ServiceName}"))
+        if (!RunElevatedSc("stop", ServiceName))
         {
             return; // 用户取消 UAC
         }
         System.Threading.Thread.Sleep(2000); // 等待停止完成
-        RunElevatedSc($"start {ServiceName}");
+        RunElevatedSc("start", ServiceName);
     }
 
     /// <summary>
@@ -83,46 +82,16 @@ public static class ServiceRestartHelper
     /// </summary>
     public static bool ServiceHasLegacyBinPathParam(string param)
     {
-        try
-        {
-            ProcessStartInfo psi = new ProcessStartInfo("sc.exe")
-            {
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                CreateNoWindow = true,
-                Arguments = $"qc {ServiceName}"
-            };
-            using Process? p = Process.Start(psi);
-            if (p == null)
-            {
-                return false;
-            }
-            string output = p.StandardOutput.ReadToEnd();
-            p.WaitForExit(5000);
-            return output.Contains(param, StringComparison.OrdinalIgnoreCase);
-        }
-        catch (Exception)
-        {
-            return false;
-        }
+        ProcessResult result = ProcessRunner.Run("sc.exe", new[] { "qc", ServiceName },
+            new ProcessRunnerOptions { RedirectOutput = true, TimeoutMs = 5000 });
+        return result.StdOut?.Contains(param, StringComparison.OrdinalIgnoreCase) ?? false;
     }
 
-    private static bool RunElevatedSc(string arguments)
+    private static bool RunElevatedSc(params string[] args)
     {
-        try
-        {
-            ProcessStartInfo psi = new ProcessStartInfo("sc.exe")
-            {
-                Verb = "runas",
-                UseShellExecute = true,
-                Arguments = arguments
-            };
-            using Process? p = Process.Start(psi);
-            return p?.WaitForExit(30000) ?? false;
-        }
-        catch (Exception)
-        {
-            return false; // 用户取消 UAC 或失败
-        }
+        // 参数为常量（stop/start + 服务名），无注入面；runas 模式无法重定向输出，不校验退出码（与历史一致）
+        ProcessResult result = ProcessRunner.Run("sc.exe", args,
+            new ProcessRunnerOptions { RunAsAdmin = true });
+        return result.Started && !result.TimedOut;
     }
 }

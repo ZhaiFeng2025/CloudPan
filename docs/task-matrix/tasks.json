@@ -2328,7 +2328,7 @@
       "title": "提交新版本编排收敛为单一领域辅助（Upload/ChunkedUpload 共用）",
       "dimension": "simplicity",
       "priority": "P1",
-      "status": "acceptance",
+      "status": "done",
       "batch": 5,
       "findingId": "F-51",
       "dependsOn": [],
@@ -2364,7 +2364,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "改动：新增 VersionCommitHelper（CloudPan.Server.Core/Versions/VersionCommitHelper.cs，单点『提交新版本』：ArchiveOldVersionAsync + CommitNewVersionInTransactionAsync + DeleteOrphanArchive，统一事务边界/回滚/孤儿存档清理）；UploadService / ChunkedUploadService.Finalize / VersionHistoryService.Restore 三处改为调用该辅助并删除各自重复编排（StoreVersionAsync/RemoveRange 仅存在于辅助，含修正 UploadService 回滚存档清理路径与 Restore 孤儿存档泄漏）；Program.cs 注册辅助（AddSingleton）；补单测 VersionCommitHelperTests（存档→裁剪→更新单事务、裁剪上限 N+1、事务失败回滚并清理孤儿存档、新建文件）。验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 285/285 通过；grep 'StoreVersionAsync|RemoveRange' UploadService.cs ChunkedUploadService.Finalize.cs 无匹配。",
+      "note": "改动：新增 VersionCommitHelper（CloudPan.Server.Core/Versions/VersionCommitHelper.cs，单点『提交新版本』：ArchiveOldVersionAsync + CommitNewVersionInTransactionAsync + DeleteOrphanArchive，统一事务边界/回滚/孤儿存档清理）；UploadService / ChunkedUploadService.Finalize / VersionHistoryService.Restore 三处改为调用该辅助并删除各自重复编排（StoreVersionAsync/RemoveRange 仅存在于辅助，含修正 UploadService 回滚存档清理路径与 Restore 孤儿存档泄漏）；Program.cs 注册辅助（AddSingleton）；补单测 VersionCommitHelperTests（存档→裁剪→更新单事务、裁剪上限 N+1、事务失败回滚并清理孤儿存档、新建文件）。验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 285/285 通过；grep 'StoreVersionAsync|RemoveRange' UploadService.cs ChunkedUploadService.Finalize.cs 无匹配。验收结论（task-verifier，2026-08-03）：四条自动验收标准全部独立实测通过——AC1 对 UploadService.cs 与 ChunkedUploadService.Finalize.cs 执行 grep -n 'StoreVersionAsync\\|RemoveRange' 无匹配（exit 1），佐证 VersionCommitHelper（CloudPan.Server.Core/Versions/VersionCommitHelper.cs）存在，UploadService（构造注入+单点提交注释）、ChunkedUploadService.Finalize、VersionHistoryService.Restore 三处均经该辅助，重复编排已收敛单一领域辅助；AC2 dotnet test --filter Upload 17/17 通过（覆盖提交新版本事务与回滚）；AC3 dotnet test CloudPan.Tests -c Release 285/285 通过；AC4 dotnet build CloudPan.sln -c Release 0 警告 0 错误。全过，验收通过置 done。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -2372,7 +2372,7 @@
       "title": "进程执行辅助收敛为单一 ProcessRunner",
       "dimension": "simplicity",
       "priority": "P1",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 5,
       "findingId": "F-52",
       "dependsOn": [],
@@ -2402,8 +2402,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "执行 2026-08-03：新建 ProcessRunner.cs（ProcessRunnerOptions：TimeoutMs/RunAsAdmin/RedirectOutput/UseCmd+CmdCommand；统一『启动→WaitForExit 超时→Kill→异步收集 stdout/stderr→错误截断120字符』语义）。ServerInstaller.RunExe/RunCmd 与 ServiceRestartHelper.RunElevatedSc/ServiceHasLegacyBinPathParam 改为薄委托 ProcessRunner，删除 4 处近似实现。参数转义安全保持：exe 直调一律 ArgumentList（runas 不支持则参数为常量），cmd 管道命令硬编码无用户输入；sc qc 由字符串 Arguments 改为 ArgumentList（更安全）。RunElevatedSc 保留历史『不校验退出码』语义（Started && !TimedOut），避免 sc stop 已停止服务非零退出误中止重启链。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过 285/285；grep 'ProcessStartInfo|WaitForExit' CloudPan.Server.UI/ 仅命中 ProcessRunner.cs（无重复实现）。改动文件：CloudPan.Server.UI/ProcessRunner.cs（新增）、CloudPan.Server.UI/ServerInstaller.Process.cs、CloudPan.Server.UI/ServiceRestartHelper.cs、docs/task-matrix/tasks.json。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-053",
