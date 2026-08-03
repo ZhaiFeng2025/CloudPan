@@ -1,7 +1,7 @@
 # CloudPan 任务矩阵 — 状态板
 
 > 契约: docs/task-matrix/tasks.json（schemaVersion=2）｜ 更新: 2026-08-03
-> 统计: 48 任务 = 48 done / 0 待人工确认
+> 统计: 60 任务 = 60 done / 0 待人工确认
 
 | ID | 标题 | 维度 | 优先级 | 状态 | 批次 |
 |---|---|---|---|---|---|
@@ -53,3 +53,15 @@
 | T-046 | 本地目录创建同步为服务端条目 | 功能 | P2 | 已完成 | 4 |
 | T-047 | 选择性同步选择集改排除集语义 | 功能 | P2 | 已完成 | 4 |
 | T-048 | RateLimit 中间件 Timer 泄漏修复 + 豁免清单契约化 | 架构 | P2 | 已完成 | 4 |
+| T-049 | 修复目录删除传播断裂（目录自身墓碑化 + FullScan 目录删除兜底） | 功能 | P1 | 已完成 | 5 |
+| T-050 | Android 删除改走回收站（软删 + 撤销 Snackbar + 回收站 | UX | P1 | 已完成 | 5 |
+| T-051 | 提交新版本编排收敛为单一领域辅助（Upload/ChunkedUpload  | 简洁 | P1 | 已完成 | 5 |
+| T-052 | 进程执行辅助收敛为单一 ProcessRunner | 简洁 | P1 | 已完成 | 5 |
+| T-053 | SettingsForm 测试连接回炉：改走 IApiClient + 白话 | 简洁 | P2 | 已完成 | 5 |
+| T-054 | 排除集语义闭环：覆盖上传方向 + 重新勾选恢复（T-047 补全） | 功能 | P2 | 已完成 | 5 |
+| T-055 | ServerWindow 改经 IServerStatusService（消 | 架构 | P2 | 已完成 | 5 |
+| T-056 | FilesController.Upload 冲突检测下沉 Core | 架构 | P2 | 已完成 | 5 |
+| T-057 | WebSocket 心跳迁移 IHostedService（间隔读 Spec | 架构 | P2 | 已完成 | 5 |
+| T-058 | 服务端路由字面量契约化 + /ws 路径生成 | 简洁 | P2 | 已完成 | 5 |
+| T-059 | Android 文件列表分页（nextCursor 增量加载） | 功能 | P2 | 已完成 | 5 |
+| T-060 | 照片备份队头阻塞修复（失败重试上限 + 游标越过） | 功能 | P2 | 已完成 | 5 |
