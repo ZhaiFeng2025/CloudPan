@@ -158,6 +158,30 @@ public partial class SyncEngine
         if (operation == SyncOperation.Upload)
         {
             string fullPath = NormalizePath(Path.Combine(_syncRoot, relativePath.TrimStart('/')));
+
+            // T-046：目录单独入队 mkdir——目录不是文件，走 ProcessMkdirAsync 建立服务端条目而非丢弃
+            if (Directory.Exists(fullPath))
+            {
+                // 快照已存在且为目录 → 已同步，跳过重复入队
+                var dirSnapshot = await db.RemoteSnapshots.FindAsync(relativePath);
+                if (dirSnapshot != null && dirSnapshot.Type == (int)FileType.Directory)
+                {
+                    _logger.LogDebug("目录已同步，跳过 mkdir 入队: {Path}", relativePath);
+                    return;
+                }
+
+                db.SyncQueue.Add(new SyncQueueItem
+                {
+                    FilePath = relativePath,
+                    Operation = (int)operation,
+                    Priority = (int)QueuePriority.High,
+                    FileSize = 0
+                });
+                await db.SaveChangesAsync();
+                _logger.LogInformation($"入队: {operation} {relativePath}");
+                return;
+            }
+
             if (!File.Exists(fullPath))
             {
                 return;

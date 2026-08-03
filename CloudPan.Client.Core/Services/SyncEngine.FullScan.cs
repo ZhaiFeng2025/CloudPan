@@ -45,8 +45,10 @@ public partial class SyncEngine
 
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
-        // 1. 枚举本地所有文件及目录（忽略 .cloudpan 和临时文件），单次遍历替代原先两次独立遍历
+        // 1. 枚举本地所有文件及目录（忽略 .cloudpan 和临时文件），单次遍历替代原先两次独立遍历。
+        // T-046：目录也纳入枚举（含空目录），用于快照匹配与缺失目录的 mkdir 入队。
         HashSet<string> localFiles = new HashSet<string>();
+        HashSet<string> localDirs = new HashSet<string>();
 
         if (Directory.Exists(NormalizePath(_syncRoot)))
         {
@@ -57,19 +59,21 @@ public partial class SyncEngine
                     continue;
                 }
 
+                string rel = ToRelativePath(fullPath);
                 if (Directory.Exists(fullPath))
                 {
-                    continue; // 只处理文件，跳过目录
+                    localDirs.Add(rel);
+                    continue;
                 }
 
-                string rel = ToRelativePath(fullPath);
                 localFiles.Add(rel);
             }
         }
 
         // 2. 分批加载远端快照（每次 1000 条），避免全量加载到内存
         const int batchSize = 1000;
-        HashSet<string> matchedLocalFiles = new HashSet<string>();
+        // T-046：已匹配的本地路径（文件+目录）——含快照则第 3 步不再重复入队
+        HashSet<string> matchedLocalPaths = new HashSet<string>();
         // 选择性同步（F-23）：CloudOnly 快照路径集合——取消勾选后本地仍残留副本的文件不作为新文件上传
         HashSet<string> cloudOnlyPaths = new HashSet<string>();
         int snapshotCount = 0;
@@ -93,7 +97,7 @@ public partial class SyncEngine
                     continue;
                 }
 
-                if (!localFiles.Contains(snapshot.Path))
+                if (!localFiles.Contains(snapshot.Path) && !localDirs.Contains(snapshot.Path))
                 {
                     // 本地缺失的删除判定（F-37/T-037）：只对『曾落盘且当前缺失』的文件入队 Delete。
                     // 未完成首次下载的快照（IsDownloaded=false）不触发删除传播——远端新文件在下载窗口内
@@ -114,7 +118,7 @@ public partial class SyncEngine
                     continue;
                 }
 
-                matchedLocalFiles.Add(snapshot.Path);
+                matchedLocalPaths.Add(snapshot.Path);
 
                 // 文件：大小对比 + 哈希对比
                 if (snapshot.Type == (int)CloudPan.Contract.FileType.File)
@@ -147,7 +151,7 @@ public partial class SyncEngine
         // 3. 无快照的本地文件 → 新文件，入队上传
         foreach (string path in localFiles)
         {
-            if (matchedLocalFiles.Contains(path))
+            if (matchedLocalPaths.Contains(path))
             {
                 continue;
             }
@@ -162,8 +166,20 @@ public partial class SyncEngine
             await EnqueueLocalChangeAsync(path, SyncOperation.Upload);
         }
 
-        _logger.LogInformation("全量扫描完成（文件: {FileCount}, 快照: {SnapshotCount}）",
-            localFiles.Count, snapshotCount);
+        // T-046：目录补齐——本地目录无快照 → 入队 mkdir（服务端 MkdirAsync 建立目录条目，空目录在其他设备可见）。
+        // 目录快照不会被标记 CloudOnly（ApplyRemoteChanges 目录分支先于 IsPathSelected），故无需 cloudOnlyPaths 过滤。
+        foreach (string path in localDirs)
+        {
+            if (matchedLocalPaths.Contains(path))
+            {
+                continue;
+            }
+
+            await EnqueueLocalChangeAsync(path, SyncOperation.Upload);
+        }
+
+        _logger.LogInformation("全量扫描完成（文件: {FileCount}, 目录: {DirCount}, 快照: {SnapshotCount}）",
+            localFiles.Count, localDirs.Count, snapshotCount);
         if (_firstSyncActive)
         {
             NotifyStatus($"全量扫描本地文件 — {localFiles.Count} 项");

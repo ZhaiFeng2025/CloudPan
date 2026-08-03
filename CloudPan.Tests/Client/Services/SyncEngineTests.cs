@@ -1226,6 +1226,113 @@ public class SyncEngineTests : IDisposable
         // 队列已清空
         Assert.Equal(0, await dbFinal.SyncQueue.CountAsync());
     }
+
+    // ============================================================
+    // 目录同步为服务端条目（T-046）
+    // ============================================================
+
+    [Fact]
+    public async Task FullScan_新建目录_入队mkdir并同步为服务端条目()
+    {
+        // 本地新建空目录（不含快照）——修复前被 File.Exists 丢弃，服务端无条目
+        Directory.CreateDirectory(Path.Combine(_syncRoot, "photos"));
+
+        await _engine.FullScanAsync();
+
+        // 已入队 Upload（mkdir 语义）
+        await using (var dbCheck = await _dbFactory.CreateDbContextAsync())
+        {
+            var item = await dbCheck.SyncQueue.FirstOrDefaultAsync(q => q.FilePath == "/photos");
+            Assert.NotNull(item);
+            Assert.Equal((int)SyncOperation.Upload, item!.Operation);
+        }
+
+        // 处理队列 → ProcessUploadAsync 对目录调 MkdirAsync → 服务端条目 + 目录快照
+        var method = typeof(SyncEngine).GetMethod("ProcessQueueAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+        Task? task = (Task?)method!.Invoke(_engine, [CancellationToken.None]);
+        Assert.NotNull(task);
+        await task;
+
+        Assert.True(_api.MkdirCalls.ContainsKey("/photos")); // 已调服务端 Mkdir
+        await using var dbFinal = await _dbFactory.CreateDbContextAsync();
+        var snapshot = await dbFinal.RemoteSnapshots.FindAsync("/photos");
+        Assert.NotNull(snapshot);
+        Assert.Equal((int)FileType.Directory, snapshot!.Type);
+        Assert.Equal((int)FileState.Synced, snapshot.State);
+        Assert.Equal(0, await dbFinal.SyncQueue.CountAsync()); // 队列已清空
+    }
+
+    [Fact]
+    public async Task ApplyRemoteChanges_远端目录_空目录快照并浏览可见()
+    {
+        // 另一设备在服务端创建了空目录 /photos（FileEntry 行，无尾斜杠路径）
+        var response = new FileTreeResponse(
+            new[]
+            {
+                new FileEntryDto("/photos", (int)FileType.Directory,
+                    null, 0, 3, DateTime.UtcNow.ToString("O"), (int)FileState.Synced)
+            },
+            null, false, 3);
+
+        var method = typeof(SyncEngine).GetMethod("ApplyRemoteChangesAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        Task? task = (Task?)method!.Invoke(_engine, [db, response, CancellationToken.None]);
+        Assert.NotNull(task);
+        await task;
+        await db.SaveChangesAsync();
+
+        // 快照已建（目录无落盘概念，视为已同步）
+        var snapshot = await db.RemoteSnapshots.FindAsync("/photos");
+        Assert.NotNull(snapshot);
+        Assert.Equal((int)FileType.Directory, snapshot!.Type);
+
+        // 浏览视图可见——空目录在其他设备可见
+        var items = await _engine.GetFileBrowserAsync("/");
+        var dir = items.Single(i => i.Path == "/photos");
+        Assert.True(dir.IsDirectory);
+    }
+
+    [Fact]
+    public async Task ProcessRename_目录_快照收敛到新路径()
+    {
+        // 先同步本地目录 /photos（mkdir 建立服务端条目 + 目录快照）
+        Directory.CreateDirectory(Path.Combine(_syncRoot, "photos"));
+        await _engine.EnqueueLocalChangeAsync("/photos", SyncOperation.Upload);
+        var method = typeof(SyncEngine).GetMethod("ProcessQueueAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+        Task? task = (Task?)method!.Invoke(_engine, [CancellationToken.None]);
+        Assert.NotNull(task);
+        await task;
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            var snap = await setupDb.RemoteSnapshots.FindAsync("/photos");
+            Assert.NotNull(snap);
+            Assert.Equal((int)FileType.Directory, snap!.Type);
+        }
+
+        // 本地重命名 /photos → /vacation，经既有 Move 路径收敛（索引已补齐不再 404）
+        Directory.Move(Path.Combine(_syncRoot, "photos"), Path.Combine(_syncRoot, "vacation"));
+        await _engine.EnqueueRenameAsync("/photos", "/vacation");
+
+        task = (Task?)method!.Invoke(_engine, [CancellationToken.None]);
+        Assert.NotNull(task);
+        await task;
+
+        // 已调服务端 Move，旧快照移除、新快照保留目录类型
+        Assert.True(_api.MoveCalls.ContainsKey("/photos"));
+        Assert.False(_api.Files.ContainsKey("/photos"));
+        Assert.True(_api.Files.ContainsKey("/vacation")); // mock 服务端条目已移动
+        await using var dbFinal = await _dbFactory.CreateDbContextAsync();
+        Assert.Null(await dbFinal.RemoteSnapshots.FindAsync("/photos"));
+        var moved = await dbFinal.RemoteSnapshots.FindAsync("/vacation");
+        Assert.NotNull(moved);
+        Assert.Equal((int)FileType.Directory, moved!.Type);
+    }
 }
 
 /// <summary>测试用 ClientDbContext 工厂。</summary>

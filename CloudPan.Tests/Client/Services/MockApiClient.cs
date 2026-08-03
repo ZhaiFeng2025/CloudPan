@@ -15,6 +15,12 @@ public class MockApiClient : IApiClient
     /// <summary>上传调用记录（路径 → 调用次数）。</summary>
     public Dictionary<string, int> UploadCalls { get; } = new();
 
+    /// <summary>mkdir 调用记录（路径 → 调用次数，T-046）。</summary>
+    public Dictionary<string, int> MkdirCalls { get; } = new();
+
+    /// <summary>move/重命名调用记录（旧路径 → 调用次数，T-046）。</summary>
+    public Dictionary<string, int> MoveCalls { get; } = new();
+
     /// <summary>下载调用记录。</summary>
     public Dictionary<string, int> DownloadCalls { get; } = new();
 
@@ -43,7 +49,7 @@ public class MockApiClient : IApiClient
             .Where(kv => kv.Value.Version > sinceVersion)
             .Select(kv => new FileEntryDto(
                 kv.Key,
-                kv.Key.EndsWith('/') ? 1 : 0,
+                kv.Value.Hash == null ? (int)FileType.Directory : (int)FileType.File, // T-046：目录 Hash 为 null（无尾斜杠存储）
                 kv.Value.Hash,
                 kv.Value.Size,
                 kv.Value.Version,
@@ -118,12 +124,12 @@ public class MockApiClient : IApiClient
         DeleteCalls.TryGetValue(path, out int count);
         DeleteCalls[path] = count + 1;
         // 服务端删除 → 移入回收站（对齐 FileOperationService.DeleteAsync 行为，供回收站/撤销测试使用）
-        // 目录在 Files 中以路径+"/" 为键（MkdirAsync），客户端传参为无尾斜杠路径
+        // T-046：目录以无尾斜杠存储且 Hash 为 null；保留 path+"/" 兼容旧测试数据（直接写 /photos/ 键）
         if (Files.TryGetValue(path, out var info))
         {
             Files.Remove(path);
             TrashItems.Add(new TrashItem(path, "mock_" + Guid.NewGuid().ToString("N")[..8],
-                info.Size, false, DateTime.UtcNow.ToString("O"), 0));
+                info.Size, info.Hash == null, DateTime.UtcNow.ToString("O"), 0));
         }
         else if (Files.TryGetValue(path + "/", out var dirInfo))
         {
@@ -136,6 +142,8 @@ public class MockApiClient : IApiClient
 
     public Task MoveAsync(string oldPath, string newPath, int baseVersion, CancellationToken ct = default)
     {
+        MoveCalls.TryGetValue(oldPath, out int count);
+        MoveCalls[oldPath] = count + 1;
         if (Files.TryGetValue(oldPath, out var info))
         {
             Files.Remove(oldPath);
@@ -146,8 +154,10 @@ public class MockApiClient : IApiClient
 
     public Task MkdirAsync(string path, CancellationToken ct = default)
     {
-        string dirPath = path.EndsWith('/') ? path : path + "/";
-        Files[dirPath] = (null!, 0, Files.Count + 1);
+        MkdirCalls.TryGetValue(path, out int count);
+        MkdirCalls[path] = count + 1;
+        // T-046：目录无尾斜杠存储（与真实服务端一致），Hash 为 null 表示目录
+        Files[path] = (null!, 0, Files.Count + 1);
         return Task.CompletedTask;
     }
 
@@ -257,6 +267,8 @@ public class MockApiClient : IApiClient
         TrashItems.Clear();
         Shares.Clear();
         VersionHistory.Clear();
+        MkdirCalls.Clear();
+        MoveCalls.Clear();
         HealthOk = true;
         AuthFailMode = false;
     }

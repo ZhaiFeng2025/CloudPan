@@ -1979,7 +1979,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "执行者记录（T-044）：改动文件：worker/PhotoBackupWorker.kt（连续段游标 KEY_LAST_BACKUP 只推进到连续成功段末尾、遇失败即停、失败及后续下次重试；DATE_ADDED 用 >= 防同秒失败照片被永久排除；接线 BackupLog：Uri+FileHash 去重、内容级哈希去重、远程路径含 8 位哈希短码避免同名覆盖、状态机 Pending→Uploading→Done/Failed）+ data/BackupLogEntity.kt（新增，对齐 spec entities.BackupLog）+ data/BackupLogDao.kt（新增）+ data/BackupStatus.kt（新增，对齐 spec enums.BackupStatus）+ data/AppDatabase.kt（版本 1→2 + MIGRATION_1_2）。验证：dotnet build CloudPan.sln -c Release 成功（0 警告 0 错误，C# 端不受影响）；gradle :app:compileDebugKotlin 因仓库路径含非 ASCII（云盘）被 AGP 拒绝，复制到 ASCII 临时目录（C:/Users/Administrator/AppData/Local/Temp/cloudpan-android-verify）验证：本任务 5 个文件零编译错误，但模块整体编译失败——8 个错误全部位于未改动预存文件 FileRepository.kt（safeCall 返回 Result<Response<X>> 类型不匹配、ensureActive 未导入）与 FileListScreen.kt（loadFiles 未解析、LinearProgressIndicator 签名），经 git 确认 HEAD 即存在、非本任务引入。验收 grep 1/2 通过。手动验收项：1. 设备授予照片读取权限（App 未实现运行时权限请求，需系统设置授权）后首次备份，服务端 /Photos/yyyy-MM/ 文件名含哈希短码，同名不同内容照片不互相覆盖；2. 备份中临时断开服务端，通知提示备份暂停，游标停在失败照片前，恢复后下次运行重试该照片及后续，不丢照片；3. 同内容照片不重复上传（BackupLog 去重），失败照片记录为 Failed、成功后转 Done。",
+      "note": "执行者记录（T-044）：改动文件：worker/PhotoBackupWorker.kt（连续段游标 KEY_LAST_BACKUP 只推进到连续成功段末尾、遇失败即停、失败及后续下次重试；DATE_ADDED 用 >= 防同秒失败照片被永久排除；接线 BackupLog：Uri+FileHash 去重、内容级哈希去重、远程路径含 8 位哈希短码避免同名覆盖、状态机 Pending→Uploading→Done/Failed）+ data/BackupLogEntity.kt（新增，对齐 spec entities.BackupLog）+ data/BackupLogDao.kt（新增）+ data/BackupStatus.kt（新增，对齐 spec enums.BackupStatus）+ data/AppDatabase.kt（版本 1→2 + MIGRATION_1_2）。验证：dotnet build CloudPan.sln -c Release 成功（0 警告 0 错误，C# 端不受影响）；gradle :app:compileDebugKotlin 因仓库路径含非 ASCII（云盘）被 AGP 拒绝，复制到 ASCII 临时目录（C:/Users/Administrator/AppData/Local/Temp/cloudpan-android-verify）验证：本任务 5 个文件零编译错误，但模块整体编译失败——8 个错误全部位于未改动预存文件 FileRepository.kt（safeCall 返回 Result<Response<X>> 类型不匹配、ensureActive 未导入）与 FileListScreen.kt（loadFiles 未解析、LinearProgressIndicator 签名），经 git 确认 HEAD 即存在、非本任务引入。验收 grep 1/2 通过。手动验收项：1. 设备授予照片读取权限（App 未实现运行时权限请求，需系统设置授权）后首次备份，服务端 /Photos/yyyy-MM/ 文件名含哈希短码，同名不同内容照片不互相覆盖；2. 备份中临时断开服务端，通知提示备份暂停，游标停在失败照片前，恢复后下次运行重试该照片及后续，不丢照片；3. 同内容照片不重复上传（BackupLog 去重），失败照片记录为 Failed、成功后转 Done。 验收结论（T-044，task-verifier）：自动标准 2/2 通过——① grep 'LAST_BACKUP|maxDate|DATE_ADDED' PhotoBackupWorker.kt 有连续段推进逻辑（L90 KEY_LAST_BACKUP 读取、L105 DATE_ADDED >= 防同秒失败排除、L111 DATE_ADDED ASC、L174 遇失败 break@photo 即停游标停在失败前、L181 仅推进 segmentEnd 到连续成功段末尾）；② grep -rn 'BackupLog' CloudPan.Android 有匹配（4 文件：PhotoBackupWorker/BackupLogDao/AppDatabase/BackupLogEntity）。附加 dotnet build CloudPan.sln -c Release 成功（0 警告 0 错误）。手动标准代码路径核对存在：单张失败 catch→break 游标不越过失败照片、下次从 lastBackupEpoch 重扫重试；远程路径 buildRemoteName 含 8 位哈希短码避免同名覆盖；Uri+FileHash 去重 + 内容级去重；BackupStatus 状态机 Pending→Uploading→Done/Failed 对齐 spec enums.BackupStatus，BackupLogEntity 字段对齐 spec entities.BackupLog，AppDatabase v2+MIGRATION_1_2。需人工确认：真机授予照片权限后首次备份上传 /Photos/yyyy-MM/ 且文件名含哈希短码；备份中断开服务端游标停在失败前、恢复后重试不丢照片；同内容不重复上传、失败记 Failed。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -1987,7 +1987,7 @@
       "title": "冲突项不阻塞队列其他传输（解除队列饥饿）",
       "dimension": "function",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 4,
       "findingId": "F-45",
       "dependsOn": [],
@@ -2018,7 +2018,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "修复：ProcessQueueAsync 查询时从候选中剔除 _pendingConflicts 中的冲突路径（冲突项保留 DB，由 OnConflictResolved 解决时清除），冲突项不再占用前 5 槽位，其余传输不被饥饿；循环内冲突检查保留作同路径多操作时防御。改动文件：CloudPan.Client.Core/Services/SyncEngine.Queue.cs、CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增单测 ProcessQueue_待解决冲突5个_上传不被饥饿：5 冲突 + 1 上传 → 上传仍被处理且冲突项保留）。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过（270/270，含 SyncEngine 49/49）。",
+      "note": "修复：ProcessQueueAsync 查询时从候选中剔除 _pendingConflicts 中的冲突路径（冲突项保留 DB，由 OnConflictResolved 解决时清除），冲突项不再占用前 5 槽位，其余传输不被饥饿；循环内冲突检查保留作同路径多操作时防御。改动文件：CloudPan.Client.Core/Services/SyncEngine.Queue.cs、CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增单测 ProcessQueue_待解决冲突5个_上传不被饥饿：5 冲突 + 1 上传 → 上传仍被处理且冲突项保留）。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过（270/270，含 SyncEngine 49/49）。【验收 2026-08-03】独立复核通过：① dotnet test --filter SyncEngine → 49/49 全绿（含 ProcessQueue_待解决冲突5个_上传不被饥饿：5 冲突 + 1 上传 → 上传仍被处理）；② dotnet test CloudPan.Tests -c Release → 270/270 全绿；③ dotnet build CloudPan.sln -c Release → Build succeeded，0 警告 0 错误。三条自动验收标准全部通过，无手动项，裁决 done。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -2026,8 +2026,9 @@
       "title": "本地目录创建同步为服务端条目",
       "dimension": "function",
       "priority": "P2",
-      "status": "todo",
+      "status": "in-progress",
       "batch": 4,
+      "updatedAt": "2026-08-03",
       "findingId": "F-46",
       "dependsOn": [],
       "location": "CloudPan.Client.Core/Services/SyncEngine.Changes.cs:160-164; SyncEngine.Scan.cs:287-289",
@@ -2058,8 +2059,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "执行者记录（T-046）：本地目录创建同步为服务端条目——目录成为同步一等公民。改动文件：CloudPan.Client.Core/Services/SyncEngine.Changes.cs（EnqueueLocalChangeAsync 上传分支对目录单独入队 mkdir，不再被 File.Exists 丢弃；目录快照已存在则跳过重复入队）+ SyncEngine.Mkdir.cs（新增 partial：ProcessMkdirAsync 调服务端 MkdirAsync 建立目录条目并记录/更新目录快照）+ SyncEngine.Transfers.cs（ProcessUploadAsync 顶部对目录转发 ProcessMkdirAsync，独立文件承载避免单文件超行数上限）+ SyncEngine.FullScan.cs（全量扫描收集本地目录 localDirs，快照匹配判定含目录，缺失目录入队 mkdir——空目录在其他设备可见）+ CloudPan.Server.Core/Files/FileOperationService.cs（MkdirAsync 不再追加尾斜杠：目录条目以无尾斜杠路径存储，与客户端快照约定/FileIndexService.Move 前缀/浏览路径归一化一致，索引补齐后目录重命名经既有 Move 路径收敛不再 404）+ CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 3 单测：FullScan_新建目录_入队mkdir并同步为服务端条目 / ApplyRemoteChanges_远端目录_空目录快照并浏览可见 / ProcessRename_目录_快照收敛到新路径）+ MockApiClient.cs（MkdirAsync 无尾斜杠存储且 Hash=null 表示目录、GetFileTreeAsync 按 Hash 判目录类型、记录 MkdirCalls/MoveCalls、Reset 清空）。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test --filter SyncEngine -c Release 通过（52/52，含新增 3 个目录测试）；dotnet test CloudPan.Tests -c Release 通过（273/273）。已知边界（非本任务范围）：目录删除传播未实现（客户端全量扫描仅对 File 快照判定删除）；目录条目统一无尾斜杠，本修复前带尾斜杠条目（服务端测试数据）不迁移。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-047",

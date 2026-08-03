@@ -13,6 +13,13 @@ public partial class SyncEngine
     private async Task<bool> ProcessUploadAsync(SyncQueueItem item, CancellationToken ct)
     {
         string localPath = ToLocalPath(item.FilePath);
+
+        // T-046：目录上传走 mkdir 分支（实现见 SyncEngine.Mkdir.cs，独立文件避免超行数上限）
+        if (Directory.Exists(localPath))
+        {
+            return await ProcessMkdirAsync(item, ct);
+        }
+
         if (!File.Exists(localPath))
         {
             _logger.LogWarning($"上传跳过——文件不存在，移除队列项: {item.FilePath}");

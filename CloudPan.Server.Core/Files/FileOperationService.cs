@@ -182,11 +182,8 @@ public class FileOperationService : IFileOperationService
             dirPath = "/" + dirPath;
         }
 
-        // 确保以 / 结尾
-        if (!dirPath.EndsWith('/'))
-        {
-            dirPath += "/";
-        }
+        // T-046：不再追加尾斜杠——目录条目以无尾斜杠路径存储（与客户端快照约定、FileIndexService.Move
+        // 前缀处理、文件浏览路径归一化一致）。客户端同步传参即为无尾斜杠；调用方带尾斜杠亦兼容存储原样。
 
         try
         {
