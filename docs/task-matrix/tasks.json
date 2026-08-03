@@ -2026,7 +2026,7 @@
       "title": "本地目录创建同步为服务端条目",
       "dimension": "function",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 4,
       "updatedAt": "2026-08-03",
       "findingId": "F-46",
@@ -2059,7 +2059,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "执行者记录（T-046）：本地目录创建同步为服务端条目——目录成为同步一等公民。改动文件：CloudPan.Client.Core/Services/SyncEngine.Changes.cs（EnqueueLocalChangeAsync 上传分支对目录单独入队 mkdir，不再被 File.Exists 丢弃；目录快照已存在则跳过重复入队）+ SyncEngine.Mkdir.cs（新增 partial：ProcessMkdirAsync 调服务端 MkdirAsync 建立目录条目并记录/更新目录快照）+ SyncEngine.Transfers.cs（ProcessUploadAsync 顶部对目录转发 ProcessMkdirAsync，独立文件承载避免单文件超行数上限）+ SyncEngine.FullScan.cs（全量扫描收集本地目录 localDirs，快照匹配判定含目录，缺失目录入队 mkdir——空目录在其他设备可见）+ CloudPan.Server.Core/Files/FileOperationService.cs（MkdirAsync 不再追加尾斜杠：目录条目以无尾斜杠路径存储，与客户端快照约定/FileIndexService.Move 前缀/浏览路径归一化一致，索引补齐后目录重命名经既有 Move 路径收敛不再 404）+ CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 3 单测：FullScan_新建目录_入队mkdir并同步为服务端条目 / ApplyRemoteChanges_远端目录_空目录快照并浏览可见 / ProcessRename_目录_快照收敛到新路径）+ MockApiClient.cs（MkdirAsync 无尾斜杠存储且 Hash=null 表示目录、GetFileTreeAsync 按 Hash 判目录类型、记录 MkdirCalls/MoveCalls、Reset 清空）。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test --filter SyncEngine -c Release 通过（52/52，含新增 3 个目录测试）；dotnet test CloudPan.Tests -c Release 通过（273/273）。已知边界（非本任务范围）：目录删除传播未实现（客户端全量扫描仅对 File 快照判定删除）；目录条目统一无尾斜杠，本修复前带尾斜杠条目（服务端测试数据）不迁移。",
+      "note": "执行者记录（T-046）：本地目录创建同步为服务端条目——目录成为同步一等公民。改动文件：CloudPan.Client.Core/Services/SyncEngine.Changes.cs（EnqueueLocalChangeAsync 上传分支对目录单独入队 mkdir，不再被 File.Exists 丢弃；目录快照已存在则跳过重复入队）+ SyncEngine.Mkdir.cs（新增 partial：ProcessMkdirAsync 调服务端 MkdirAsync 建立目录条目并记录/更新目录快照）+ SyncEngine.Transfers.cs（ProcessUploadAsync 顶部对目录转发 ProcessMkdirAsync，独立文件承载避免单文件超行数上限）+ SyncEngine.FullScan.cs（全量扫描收集本地目录 localDirs，快照匹配判定含目录，缺失目录入队 mkdir——空目录在其他设备可见）+ CloudPan.Server.Core/Files/FileOperationService.cs（MkdirAsync 不再追加尾斜杠：目录条目以无尾斜杠路径存储，与客户端快照约定/FileIndexService.Move 前缀/浏览路径归一化一致，索引补齐后目录重命名经既有 Move 路径收敛不再 404）+ CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 3 单测：FullScan_新建目录_入队mkdir并同步为服务端条目 / ApplyRemoteChanges_远端目录_空目录快照并浏览可见 / ProcessRename_目录_快照收敛到新路径）+ MockApiClient.cs（MkdirAsync 无尾斜杠存储且 Hash=null 表示目录、GetFileTreeAsync 按 Hash 判目录类型、记录 MkdirCalls/MoveCalls、Reset 清空）。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test --filter SyncEngine -c Release 通过（52/52，含新增 3 个目录测试）；dotnet test CloudPan.Tests -c Release 通过（273/273）。已知边界（非本任务范围）：目录删除传播未实现（客户端全量扫描仅对 File 快照判定删除）；目录条目统一无尾斜杠，本修复前带尾斜杠条目（服务端测试数据）不迁移。【验收 2026-08-03】独立复核通过：① dotnet test --filter SyncEngine → 52/52 全绿，已核实含 3 个目录用例（FullScan_新建目录_入队mkdir并同步为服务端条目 / ApplyRemoteChanges_远端目录_空目录快照并浏览可见 / ProcessRename_目录_快照收敛到新路径），覆盖目录 mkdir 与空目录可见；② dotnet test CloudPan.Tests -c Release → 273/273 全绿；③ dotnet build CloudPan.sln -c Release → Build succeeded，0 警告 0 错误。三条自动验收标准全部通过，无手动项，裁决 done。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -2093,7 +2093,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "执行者记录（T-047）：选择性同步由『选择集收集（root \"/\" 恒被收集→前缀恒匹配→取消勾选不生效）』改为『排除集语义』——取消勾选的目录真正不再同步。改动文件：CloudPan.Client.UI/UI/SelectiveSyncPanel.cs（SelectedPaths 属性改为排除集：getter 按树勾选态收集顶层未勾选子树，空树/全选返回 {\"/\"} 全选默认，root 未勾选返回空集合=显式全不同步（不再回退 {\"/\"} 全选）；setter/ApplySelections 按排除集回显：空集合=全部取消勾选，含 \"/\"=全选，其余=命中排除子树则取消勾选；移除原 CollectChecked，新增 IsFullyChecked/CollectUnchecked）+ CloudPan.Client.Core/Services/SyncEngine.FullScan.cs（IsPathSelected 改排除集：空集合=全不同步，含 \"/\"=全选（兼容 v1.0.0 旧选择集默认及恒含根节点配置），其余=命中任一排除子树（含深层路径）则不同步）+ CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 5 单测：IsPathSelected_取消勾选子树_该子树false其余路径true / 空集合_显式全不同步 / 全选默认值_全选 / 旧版选择集含根_兼容全选 / 嵌套排除子树_深层不同步且不误伤同级）。语义：空集合=全不同步（字面满足验收『空集合→全不同步』），含 \"/\"=全选（与 v1.0.0 默认配置一致、向后兼容），其余=排除子树（满足『取消勾选=排除该子树，SelectedPaths 只含未勾选排除路径』）。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过（278/278）；dotnet test --filter SyncEngine -c Release 通过（57/57，含新增 5 个 IsPathSelected 用例）。手动验收项：① 设置→选择性同步取消勾选子目录→保存→重启客户端→该目录远端文件不再下载（快照置 CloudOnly）、其余路径正常；② 取消全选→保存→重启→全部路径不同步；③ 全选/默认→保存→重启→全量同步恢复；④ 旧配置（v1.0.0 保存过设置、含 \"/\"）升级后仍为全选同步。已知边界（非本任务范围）：上传侧不经 IsPathSelected 过滤——排除子树内本地新建文件仍会上传（仅下载侧按排除集过滤）；目录快照仍创建（ApplyRemoteChanges 目录分支先于 IsPathSelected）。",
+      "note": "执行者记录（T-047）：选择性同步由『选择集收集（root \"/\" 恒被收集→前缀恒匹配→取消勾选不生效）』改为『排除集语义』——取消勾选的目录真正不再同步。改动文件：CloudPan.Client.UI/UI/SelectiveSyncPanel.cs（SelectedPaths 属性改为排除集：getter 按树勾选态收集顶层未勾选子树，空树/全选返回 {\"/\"} 全选默认，root 未勾选返回空集合=显式全不同步（不再回退 {\"/\"} 全选）；setter/ApplySelections 按排除集回显：空集合=全部取消勾选，含 \"/\"=全选，其余=命中排除子树则取消勾选；移除原 CollectChecked，新增 IsFullyChecked/CollectUnchecked）+ CloudPan.Client.Core/Services/SyncEngine.FullScan.cs（IsPathSelected 改排除集：空集合=全不同步，含 \"/\"=全选（兼容 v1.0.0 旧选择集默认及恒含根节点配置），其余=命中任一排除子树（含深层路径）则不同步）+ CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 5 单测：IsPathSelected_取消勾选子树_该子树false其余路径true / 空集合_显式全不同步 / 全选默认值_全选 / 旧版选择集含根_兼容全选 / 嵌套排除子树_深层不同步且不误伤同级）。语义：空集合=全不同步（字面满足验收『空集合→全不同步』），含 \"/\"=全选（与 v1.0.0 默认配置一致、向后兼容），其余=排除子树（满足『取消勾选=排除该子树，SelectedPaths 只含未勾选排除路径』）。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过（278/278）；dotnet test --filter SyncEngine -c Release 通过（57/57，含新增 5 个 IsPathSelected 用例）。手动验收项：① 设置→选择性同步取消勾选子目录→保存→重启客户端→该目录远端文件不再下载（快照置 CloudOnly）、其余路径正常；② 取消全选→保存→重启→全部路径不同步；③ 全选/默认→保存→重启→全量同步恢复；④ 旧配置（v1.0.0 保存过设置、含 \"/\"）升级后仍为全选同步。已知边界（非本任务范围）：上传侧不经 IsPathSelected 过滤——排除子树内本地新建文件仍会上传（仅下载侧按排除集过滤）；目录快照仍创建（ApplyRemoteChanges 目录分支先于 IsPathSelected）。【验收 2026-08-03】task-verifier 独立复核——自动项全过：① dotnet build CloudPan.sln -c Release → Build succeeded，0 警告 0 错误；② dotnet test --filter SyncEngine（-c Release --no-build）→ 57/57 全绿，已核实含 5 个 IsPathSelected 用例（取消勾选子树_该子树false其余路径true / 空集合_显式全不同步 / 全选默认值_全选 / 旧版选择集含根_兼容全选 / 嵌套排除子树_深层不同步且不误伤同级），覆盖验收『取消勾选子树→IsPathSelected false』与『空集合→全不同步』；③ dotnet test CloudPan.Tests -c Release → 278/278 全绿。手动项代码路径核验（逻辑存在，UI 行为需人工确认）：① 取消勾选子目录→重启→远端不下载：SyncEngine.Scan.cs:172-185 未选中路径快照置 CloudOnly 不入下载队列；SelectiveSyncPanel.cs:20-42 getter 经 CollectUnchecked 收集顶层未勾选子树；TrayAppContext.Actions.cs:81 保存 → SyncEngine.cs:135 从同源 config.SelectedPaths 加载。② 取消全选→全不同步：SelectiveSyncPanel.cs:31-34 root 未勾选返回空集合；SyncEngine.FullScan.cs:253-256 空集合→全不同步。③ 全选/默认→全量同步恢复：SelectiveSyncPanel.cs:26-29 全选返回 \"/\"；SyncEngine.FullScan.cs:258-262 含 \"/\"→全选。④ 旧配置含 \"/\" 升级兼容：SyncEngine.FullScan.cs:258-262 与 SelectiveSyncPanel.cs:214-218 均对含 \"/\" 走全选分支。需人工确认：①重启后排除子树远端文件不再下载（快照 CloudOnly）且其余路径正常；②取消全选保存重启后全部路径不同步；③全选/默认保存重启后全量同步恢复；④v1.0.0 旧配置升级后仍为全选同步。自动全过 + 含手动项 → 留 acceptance 待人工确认。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -2101,7 +2101,7 @@
       "title": "RateLimit 中间件 Timer 泄漏修复 + 豁免清单契约化",
       "dimension": "architecture",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 4,
       "findingId": "F-48",
       "dependsOn": [],
@@ -2132,8 +2132,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "执行者记录（T-048）：RateLimit 中间件 Timer 泄漏修复 + 豁免清单契约化。改动文件：CloudPan.Server.Host/Middleware/RateLimitMiddleware.cs（① 移除 static ConcurrentDictionary + static System.Threading.Timer + 静态构造函数——原无任何 Dispose 路径，进程退出泄漏；限流状态改存 IMemoryCache（Program.cs 已 AddMemoryCache()，可注入），GetOrCreate 条目设 SlidingExpiration=2 分钟，过期条目由缓存内部清理接管，语义与原 1 分钟滑动窗口一致（持续请求时条目存活，超过窗口期后计数重置）；② 豁免路径 4 处魔数字符串改 SpecRoutes 契约常量：FilesUpload/FilesUploadChunk（POST）、FilesDownload（GET StartsWith）、Health，与 shared-spec.json 契约同源，改 spec 重跑 CodeGen 即全链路生效不漂移。契约说明：EndpointSpec 仅有 Method/Path/Auth/Description，无 kind 字段，故 upload/download 豁免以 SpecRoutes 路由常量驱动；/share/{shareId} 等公开端点故意不豁免（按 IP 限流防分享密码暴力破解），不能按 auth==Public 一刀切，Health 豁免用 SpecRoutes.Health 常量）。验证：① grep -n 'System.Threading.Timer' RateLimitMiddleware.cs 无匹配；② grep -n '\"/api/files/upload\"\\|/api/files/download\"' RateLimitMiddleware.cs 无匹配；③ dotnet build CloudPan.sln -c Release → Build succeeded，0 警告 0 错误；④ dotnet test CloudPan.Tests -c Release → 278/278 全绿（含 SpecRoutesConsistencyTests 契约一致性）。",
+      "updatedAt": "2026-08-03"
     }
   ]
 }
