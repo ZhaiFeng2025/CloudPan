@@ -29,11 +29,18 @@ public partial class ApiClient
         string fileHash = await FileHasher.ComputeSha256Async(localPath, ct);
         int totalChunks = (int)Math.Ceiling((double)fileSize / SpecConfig.ChunkSize);
 
-        // 查询服务端进度（断点续传）
-        var status = await GetChunkStatusAsync(remotePath, ct);
+        // 查询服务端进度（断点续传）。fileHash 供服务端 T-076 Finalize 完成窗口识别已完成会话
+        var status = await GetChunkStatusAsync(remotePath, fileHash, ct);
         var receivedChunks = status?.Data?.ReceivedChunks ?? Array.Empty<int>();
         // 服务端当前版本号：isComplete 恢复路径（全块已收）下写入快照用，避免兜底 version=0 引发整文件无谓重下载（T-064）
         int serverVersion = status?.Data?.Version ?? 0;
+
+        // T-076 Finalize 完成窗口：服务端识别出已完成会话（文件已存在且内容 hash 与本地一致）→
+        // 跳过全部块直接写快照，避免整文件重传与 _冲突_ 副本噪音
+        if (status?.Data?.IsComplete == true)
+        {
+            return new UploadResponse(new UploadData(remotePath, serverVersion, fileHash, fileSize, false));
+        }
 
         await using var fileStream = File.OpenRead(localPath);
 
@@ -92,13 +99,17 @@ public partial class ApiClient
         return new UploadResponse(new UploadData(remotePath, serverVersion, fileHash, fileSize, false));
     }
 
-    /// <summary>查询分块上传进度。</summary>
-    public async Task<ChunkStatusResponse?> GetChunkStatusAsync(string path, CancellationToken ct = default)
+    /// <summary>查询分块上传进度。fileHash 供服务端识别已完成会话（T-076，不传则按旧行为）。</summary>
+    public async Task<ChunkStatusResponse?> GetChunkStatusAsync(string path, string? fileHash = null, CancellationToken ct = default)
     {
         try
         {
-            var response = await _http.GetAsync(
-                $"{SpecRoutes.FilesUploadChunkStatus}?path={Uri.EscapeDataString(path)}", ct);
+            string query = $"{SpecRoutes.FilesUploadChunkStatus}?path={Uri.EscapeDataString(path)}";
+            if (!string.IsNullOrWhiteSpace(fileHash))
+            {
+                query += $"&fileHash={Uri.EscapeDataString(fileHash)}";
+            }
+            var response = await _http.GetAsync(query, ct);
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
                 return null;

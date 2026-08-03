@@ -184,7 +184,7 @@ public class MockApiClient : IApiClient
     }
 
     /// <summary>查询分块进度（Mock：始终返回 null，表示无进行中上传）。</summary>
-    public Task<ChunkStatusResponse?> GetChunkStatusAsync(string path, CancellationToken ct = default)
+    public Task<ChunkStatusResponse?> GetChunkStatusAsync(string path, string? fileHash = null, CancellationToken ct = default)
     {
         return Task.FromResult<ChunkStatusResponse?>(null);
     }

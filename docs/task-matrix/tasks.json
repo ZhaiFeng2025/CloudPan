@@ -3849,7 +3849,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "改动文件：SetupForm.Validation.cs（阻塞性安全校验提取为 internal static ValidateFolderSafety 供两端复用，原实例方法改名 ValidateFolderSafetyWithFeedback 保留云盘接管提示+文件统计；新增拒 .cloudpan 元数据目录检查）；SettingsForm.cs（saveHint 文案统一覆盖『服务端地址、同步文件夹或 Token 修改后需重启客户端才生效』+ SaveBtn_Click 保存前 SetupForm.ValidateFolderSafety(SyncRoot) 路径安全校验，非法路径阻止保存并提示）；TrayAppContext.Actions.cs（保存成功文案改为明确『地址/同步文件夹/Token 修改需重启客户端后生效；带宽限制与排除设置已即时生效』，不再承诺立即生效）；CloudPan.Client.UI.csproj（InternalsVisibleTo CloudPan.Tests 供路径校验单测）；CodeQualityTests.cs（SetupForm 1074→1095、SettingsForm 740→745 随 T-075 增行上调并注释增量）；SyncRootPathValidationTests.cs（新增 5 用例：根目录/系统目录/.cloudpan 段/非法字符拒绝，有效文件夹与不存在目录通过）；tasks.json。验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 322/322 通过（新增 5 条路径校验）。AC1 grep『重启』SettingsForm.cs 匹配行 84（三类提示）；AC2 grep『ValidateFolderSafety』SettingsForm.cs:147 保存路径真实调用。手动验收项：① 设置→改同步文件夹→保存：底部提示+成功弹窗均明确『需重启客户端后生效』，重启后新文件夹开始同步 ② 保存时将同步根改为磁盘根目录/系统目录/网络盘/.cloudpan 被阻止并提示 ③ 地址/Token 修改保存后同样出现重启提示。取舍（producer）：全链路热更新列后续，本轮最低成本『明示重启』优于『假即时生效』；Token 自动重连仍属 F-34/T-034 独立链路。",
+      "note": "改动文件：SetupForm.Validation.cs（阻塞性安全校验提取为 internal static ValidateFolderSafety 供两端复用，原实例方法改名 ValidateFolderSafetyWithFeedback 保留云盘接管提示+文件统计；新增拒 .cloudpan 元数据目录检查）；SettingsForm.cs（saveHint 文案统一覆盖『服务端地址、同步文件夹或 Token 修改后需重启客户端才生效』+ SaveBtn_Click 保存前 SetupForm.ValidateFolderSafety(SyncRoot) 路径安全校验，非法路径阻止保存并提示）；TrayAppContext.Actions.cs（保存成功文案改为明确『地址/同步文件夹/Token 修改需重启客户端后生效；带宽限制与排除设置已即时生效』，不再承诺立即生效）；CloudPan.Client.UI.csproj（InternalsVisibleTo CloudPan.Tests 供路径校验单测）；CodeQualityTests.cs（SetupForm 1074→1095、SettingsForm 740→745 随 T-075 增行上调并注释增量）；SyncRootPathValidationTests.cs（新增 5 用例：根目录/系统目录/.cloudpan 段/非法字符拒绝，有效文件夹与不存在目录通过）；tasks.json。验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 322/322 通过（新增 5 条路径校验）。AC1 grep『重启』SettingsForm.cs 匹配行 84（三类提示）；AC2 grep『ValidateFolderSafety』SettingsForm.cs:147 保存路径真实调用。手动验收项：① 设置→改同步文件夹→保存：底部提示+成功弹窗均明确『需重启客户端后生效』，重启后新文件夹开始同步 ② 保存时将同步根改为磁盘根目录/系统目录/网络盘/.cloudpan 被阻止并提示 ③ 地址/Token 修改保存后同样出现重启提示。取舍（producer）：全链路热更新列后续，本轮最低成本『明示重启』优于『假即时生效』；Token 自动重连仍属 F-34/T-034 独立链路。\n【验收 2026-08-03（task-verifier）】AC1 通过：grep -n '重启' CloudPan.Client.UI/UI/SettingsForm.cs 匹配行 83-84，saveHint 文案『服务端地址、同步文件夹或 Token 修改后需重启客户端才生效』覆盖地址/同步根/Token 三类。AC2 通过：grep -rn 'ValidateFolderSafety' 匹配 SettingsForm.cs:147 保存路径真实调用 SetupForm.ValidateFolderSafety(SyncRoot)，属『SettingsForm 保存路径有调用』分支。AC4 通过：dotnet build CloudPan.sln -c Release 0 警告 0 错误。AC3（手动）代码路径核对：ValidateFolderSafety 拒绝清单存在（SetupForm.Validation.cs:26-60 根目录/系统目录/网络盘+可移动盘/.cloudpan 段）；SaveBtn_Click 校验+阻止（SettingsForm.cs:147-153 非法路径 MessageBox 提示『同步文件夹未保存』并 return）；TrayAppContext 成功文案（Actions.cs:90）明确『服务端地址、同步文件夹或 Token 修改需重启客户端后生效』不再承诺立即生效；重启生效链路存在（OpenSettings cfg.SyncRoot=form.SyncRoot + cfg.Save 写配置 → Program.cs:41,62 重启 ResolveStartup 读取 SyncRoot 传 ClientBootstrap）。自动项全过但含手动项 → 保持 acceptance，待人工确认：① 设置→改同步文件夹→保存：底部提示+成功弹窗均明确『需重启客户端后生效』，重启后新文件夹开始同步 ② 保存时将同步根改为磁盘根目录/系统目录/网络盘/.cloudpan 被阻止并提示 ③ 地址/Token 修改保存后同样出现重启提示。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -3857,7 +3857,7 @@
       "title": "分块上传恢复兜底 Finalize 已完成窗口（record 移除后识别已完成会话）",
       "dimension": "function",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 7,
       "findingId": "F-118",
       "dependsOn": [],
@@ -3888,8 +3888,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "执行 2026-08-03（task-executor）：T-076 分块上传 Finalize 完成窗口恢复兜底。问题——Finalize 完成（会话 record 已移除、文件已落盘、索引指向新 hash/version）后客户端崩溃未收到响应而重试，GetStatusAsync(record==null) 与『从未开始』在会话维度不可区分 → 返回 Found=false → 客户端整文件重传，且重传携带的 baseVersion 已过期触发 _冲突_ 副本（版本历史污染 + 多设备收敛噪音）。修复（方案1，不改 Finalize 事务语义）——(1) GetStatusAsync 增加 fileHash 参数：record==null 时按 FileEntry 识别已完成会话（Type=File 且 CurrentHash 与客户端 fileHash 一致，OrdinalIgnoreCase）→ 返回 Found=true/IsComplete=true + 真实版本号，客户端跳过全部块写快照；否则（从未开始/内容不同）保持 Found=false 正常重传。只比 hash 不比 size（SHA-256 一致即内容逐字节一致、大小必然一致，CLAUDE.md 最简）；FileType.File 守卫排除目录条目。(2) 控制器 GetChunkStatus 增加 fileHash 查询参数透传。(3) 客户端 GetChunkStatusAsync 携带 fileHash，UploadChunkedAsync 收到 IsComplete=true 时短路返回 UploadData(真实版本) 直接写快照，不进上传循环。(4) IApiClient/MockApiClient 签名同步（不破坏旧客户端：fileHash 可选）。改动文件——CloudPan.Server.Core/ChunkedUpload/IChunkedUploadService.cs、ChunkedUploadService.cs（GetStatusAsync record==null 分支）；CloudPan.Server.Host/Controllers/FilesController.ChunkedUpload.cs；CloudPan.Client.Core/Services/IApiClient.cs、ApiClient.ChunkedUpload.cs；CloudPan.Tests/Client/Services/MockApiClient.cs；CloudPan.Tests/Server/Services/ChunkedUploadServiceTests.cs（新增 GetStatus_Finalize完成会话已移除_文件已存在且hash一致_返回已完成不重传，断言 isComplete=true+真实版本、hash 不一致保持 Found=false、未带 fileHash 兼容旧行为）；tasks.json。验证——dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test CloudPan.Tests -c Release EXIT=0（323/323 通过，ChunkedUpload 过滤 11/11 含新增 1 条）；dotnet run --project CloudPan.CodeGen -- --verify 全部一致（未改 shared-spec，路由与响应形状不变）。AC2 grep『record == null』ChunkedUploadService.cs:183 有已存在判定分支（:187-192 Type=File + CurrentHash==fileHash）。取舍——选要求方案 1（record==null 查 FileEntry 识别已完成）而非方案 2（Finalize 后保留 record 标记 Finalized）：不改 Finalize 事务边界与移除语义，改动更小；与 T-064 清理『未 Finalized』崩溃窗口互补，两个窗口（未落盘/已落盘）均闭合。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-077",

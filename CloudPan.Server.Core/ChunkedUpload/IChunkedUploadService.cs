@@ -30,8 +30,8 @@ public interface IChunkedUploadService
         string path, int chunkIndex, int totalChunks, string fileHash,
         int baseVersion, string? lastModified, string deviceId, Stream chunkContent);
 
-    /// <summary>查询分块上传进度。</summary>
-    Task<ChunkStatusResult> GetStatusAsync(string path);
+    /// <summary>查询分块上传进度。fileHash 供 T-076 Finalize 完成窗口识别已完成会话（文件已存在且内容一致）。</summary>
+    Task<ChunkStatusResult> GetStatusAsync(string path, string? fileHash = null);
 
     /// <summary>
     /// 重启清扫：清除 isComplete=true 但未 Finalized 的崩溃会话（位图已收全块但文件从未落盘）。

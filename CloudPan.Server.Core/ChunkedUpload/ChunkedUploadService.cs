@@ -171,7 +171,7 @@ public partial class ChunkedUploadService : IChunkedUploadService
     }
 
     /// <inheritdoc />
-    public async Task<ChunkStatusResult> GetStatusAsync(string path)
+    public async Task<ChunkStatusResult> GetStatusAsync(string path, string? fileHash = null)
     {
         await using var db = await _dbFactory.CreateDbContextAsync();
         var record = await db.ChunkedUploads.FindAsync(path);
@@ -182,6 +182,19 @@ public partial class ChunkedUploadService : IChunkedUploadService
 
         if (record == null)
         {
+            // T-076 Finalize 完成窗口兜底：Finalize 已完成（会话 record 已移除、文件已落盘、索引指向新 hash/version），
+            // 客户端未收到响应而重试。此时与『从未开始』在会话维度不可区分——若直接 Found=false，客户端会整文件重传，
+            // 且重传时携带的 baseVersion 已过期 → Finalize 保存 _冲突_ 副本（版本历史污染 + 多设备收敛噪音）。
+            // 识别：文件已存在且内容 hash 与客户端 fileHash 一致 → 判定已完成，返回 isComplete=true + 真实版本号，
+            // 客户端跳过全部块写快照；否则（从未开始或内容不同）保持 Found=false 让客户端正常重传。
+            // 只比较 hash：SHA-256 一致即内容逐字节一致（大小必然一致），无需额外传 size 校验（CLAUDE.md 最简）。
+            if (!string.IsNullOrEmpty(fileHash) && existing != null
+                && existing.Type == (int)FileType.File
+                && !string.IsNullOrEmpty(existing.CurrentHash)
+                && string.Equals(existing.CurrentHash, fileHash, StringComparison.OrdinalIgnoreCase))
+            {
+                return new ChunkStatusResult(true, path, Array.Empty<int>(), 0, true, currentVersion, null, null);
+            }
             return new ChunkStatusResult(false, null, Array.Empty<int>(), 0, false, currentVersion, null, null);
         }
 

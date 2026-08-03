@@ -399,6 +399,51 @@ public class ChunkedUploadServiceTests : Infrastructure.TestBase
         Assert.Equal(2, status.TotalChunks);
     }
 
+    [Fact]
+    public async Task GetStatus_Finalize完成会话已移除_文件已存在且hash一致_返回已完成不重传()
+    {
+        // T-076 Finalize 完成窗口：Finalize 完成后会话 record 已移除、文件已落盘、索引指向新 hash/version。
+        // 客户端崩溃未收到响应而重试 → GetStatusAsync(record==null) 按 fileHash 识别已完成会话：
+        // 返回 isComplete=true + 真实版本号，客户端跳过全部块写快照（不整文件重传、不生成 _冲突_ 副本）。
+        var dbFactory = CreateServerDbFactory();
+        var storage = new FileStorageService(TempDir);
+        var index = new FileIndexService(dbFactory);
+        var version = new VersionService(dbFactory);
+        var syncLog = new SyncLogService(dbFactory, NullLogger<SyncLogService>.Instance);
+        var svc = new ChunkedUploadService(dbFactory, storage, index, version, syncLog,
+            new VersionCommitHelper(storage, NullLogger<VersionCommitHelper>.Instance),
+            new ConflictBackupHelper(storage, index, version, syncLog));
+
+        string path = "/finalize-done.bin";
+        string targetPath = Path.Combine(TempDir, "finalize-done.bin");
+        byte[] content = CreateContent(SpecConfig.ChunkSize + 100);
+        string hash = Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
+        string lastModified = DateTime.UtcNow.AddHours(-1).ToString("O");
+        int fileVersion = await version.NextVersionAsync();
+
+        // 模拟 Finalize 完成后的状态：文件已落盘、索引已指向新 hash/version、会话 record 已移除
+        File.WriteAllBytes(targetPath, content);
+        await index.UpsertFileAsync(path, FileType.File, hash, content.Length, lastModified, fileVersion, FileState.Synced);
+        await using (var verify = await dbFactory.CreateDbContextAsync())
+        {
+            Assert.Null(await verify.ChunkedUploads.FindAsync(path));
+        }
+
+        // 客户端重试查询（携带 fileHash）→ 识别为已完成会话，返回 isComplete=true + 真实版本号
+        var status = await svc.GetStatusAsync(path, hash);
+        Assert.True(status.Found);
+        Assert.True(status.IsComplete);
+        Assert.Equal(fileVersion, status.Version);
+
+        // 内容 hash 不一致（从未开始/本地内容已变更）→ 保持 Found=false，客户端正常重传
+        var statusMismatch = await svc.GetStatusAsync(path, new string('0', 64));
+        Assert.False(statusMismatch.Found);
+
+        // 未携带 fileHash（旧客户端）→ 保持旧行为 Found=false，不破坏兼容
+        var statusNoHash = await svc.GetStatusAsync(path);
+        Assert.False(statusNoHash.Found);
+    }
+
     /// <summary>生成确定性字节内容（模式填充，非随机，便于断言与哈希复现）。</summary>
     private static byte[] CreateContent(int length)
     {

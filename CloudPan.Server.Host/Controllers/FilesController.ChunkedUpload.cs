@@ -83,7 +83,7 @@ public partial class FilesController
     /// GET /api/files/upload/chunk/status — 查询分块上传进度。
     /// </summary>
     [HttpGet(SpecRoutes.FilesUploadChunkStatus)]
-    public async Task<IActionResult> GetChunkStatus([FromQuery] string path)
+    public async Task<IActionResult> GetChunkStatus([FromQuery] string path, [FromQuery] string? fileHash = null)
     {
         if (string.IsNullOrWhiteSpace(path))
         {
@@ -95,7 +95,8 @@ public partial class FilesController
             path = "/" + path;
         }
 
-        var status = await _chunkedUpload.GetStatusAsync(path);
+        // fileHash 供 T-076 Finalize 完成窗口识别已完成会话（record 已移除但文件已落盘、内容一致 → isComplete）
+        var status = await _chunkedUpload.GetStatusAsync(path, fileHash);
 
         if (!status.Found)
         {
