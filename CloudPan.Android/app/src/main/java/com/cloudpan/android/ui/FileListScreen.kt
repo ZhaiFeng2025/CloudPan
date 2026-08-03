@@ -29,6 +29,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cloudpan.android.data.AppDatabase
+import com.cloudpan.android.data.FileConflictException
 import com.cloudpan.android.data.FileEntryDto
 import com.cloudpan.android.data.FileRepository
 import com.cloudpan.android.data.OfflineCacheEntity
@@ -124,6 +125,9 @@ fun FileListScreen(
     var downloadBytes by remember { mutableStateOf(0L) }
     var downloadTotal by remember { mutableStateOf(0L) }
     var deleteTarget by remember { mutableStateOf<FileEntryDto?>(null) }
+    // T-089：删除 409 冲突待决（文件已被其他设备修改）——单个删除目标 / 批量删除冲突路径列表
+    var deleteConflictTarget by remember { mutableStateOf<FileEntryDto?>(null) }
+    var bulkDeleteConflicts by remember { mutableStateOf<List<String>?>(null) }
     var showNewFolderDialog by remember { mutableStateOf(false) }
     var newFolderName by remember { mutableStateOf("") }
     var isRefreshing by remember { mutableStateOf(false) }
@@ -275,7 +279,8 @@ fun FileListScreen(
                 TextButton(onClick = {
                     val f = deleteTarget!!; deleteTarget = null
                     scope.launch {
-                        val r = repository.deleteFile(f.path)
+                        // T-089：携带文件列表中的当前版本（baseVersion），不再恒传 0
+                        val r = repository.deleteFile(f.path, f.version)
                         loadFiles() // 先刷新列表，Snackbar 挂起等待不阻塞
                         if (r.isSuccess) {
                             val trashItem = r.getOrNull()
@@ -296,6 +301,9 @@ fun FileListScreen(
                             } else {
                                 snackbarHostState.showSnackbar("已删除")
                             }
+                        } else if (r.exceptionOrNull() is FileConflictException) {
+                            // T-089：文件已被其他设备修改，弹窗让用户决定强制删除或跳过，不静默
+                            deleteConflictTarget = f
                         } else {
                             snackbarHostState.showSnackbar("删除失败：${r.exceptionOrNull()?.message}")
                         }
@@ -303,6 +311,30 @@ fun FileListScreen(
                 }) { Text("删除", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("取消") } }
+        )
+    }
+
+    // T-089：删除冲突（409）——文件已被其他设备修改，让用户决定强制删除（覆盖）或跳过，不静默
+    if (deleteConflictTarget != null) {
+        AlertDialog(
+            onDismissRequest = { deleteConflictTarget = null },
+            icon = { Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("删除冲突") },
+            text = { Text("「${fileName(deleteConflictTarget!!.path)}」已被其他设备修改，仍要删除吗？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    val f = deleteConflictTarget!!; deleteConflictTarget = null
+                    scope.launch {
+                        // 覆盖：baseVersion=0 强制删除（不校验版本，服务端版本递增）
+                        val r = repository.deleteFile(f.path, 0)
+                        loadFiles()
+                        snackbarHostState.showSnackbar(
+                            if (r.isSuccess) "已删除" else "删除失败：${r.exceptionOrNull()?.message}"
+                        )
+                    }
+                }) { Text("仍删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { deleteConflictTarget = null }) { Text("跳过") } }
         )
     }
 
@@ -318,17 +350,27 @@ fun FileListScreen(
                     showBulkDeleteDialog = false
                     scope.launch {
                         var success = 0; var failed = 0
+                        val conflictPaths = mutableListOf<String>()
                         val deletedItems = mutableListOf<TrashItem>()
                         for (path in selectedPaths) {
-                            val r = repository.deleteFile(path)
+                            // T-089：携带文件列表中的当前版本（baseVersion），不再恒传 0
+                            val version = files.firstOrNull { it.path == path }?.version ?: 0
+                            val r = repository.deleteFile(path, version)
                             if (r.isSuccess) {
                                 success++
                                 r.getOrNull()?.let { deletedItems.add(it) }
+                            } else if (r.exceptionOrNull() is FileConflictException) {
+                                conflictPaths.add(path)
                             } else failed++
                         }
                         selectedPaths = emptySet()
                         isSelectionMode = false
                         loadFiles() // 先刷新列表，Snackbar 挂起等待不阻塞
+                        if (conflictPaths.isNotEmpty()) {
+                            // T-089：冲突项弹窗让用户决定强制删除或跳过，不静默
+                            bulkDeleteConflicts = conflictPaths
+                            return@launch
+                        }
                         if (success > 0 && deletedItems.isNotEmpty()) {
                             val result = snackbarHostState.showSnackbar(
                                 message = "已删除 ${success} 项，可撤销" +
@@ -356,6 +398,35 @@ fun FileListScreen(
                 }) { Text("删除", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { showBulkDeleteDialog = false }) { Text("取消") } }
+        )
+    }
+
+    // T-089：批量删除冲突（409）——冲突项未被删除，让用户决定强制删除（覆盖）或跳过，不静默
+    bulkDeleteConflicts?.let { conflicts ->
+        AlertDialog(
+            onDismissRequest = { bulkDeleteConflicts = null },
+            icon = { Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("删除冲突") },
+            text = { Text("${conflicts.size} 项已被其他设备修改，未删除。是否强制删除这些项？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    bulkDeleteConflicts = null
+                    scope.launch {
+                        // 覆盖：baseVersion=0 强制删除（不校验版本，服务端版本递增）
+                        var forceDeleted = 0; var forceFailed = 0
+                        for (path in conflicts) {
+                            val r = repository.deleteFile(path, 0)
+                            if (r.isSuccess) forceDeleted++ else forceFailed++
+                        }
+                        loadFiles()
+                        snackbarHostState.showSnackbar(
+                            "已强制删除 ${forceDeleted} 项" +
+                                if (forceFailed > 0) "，${forceFailed} 项失败" else ""
+                        )
+                    }
+                }) { Text("强制删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { bulkDeleteConflicts = null }) { Text("跳过") } }
         )
     }
 

@@ -21,6 +21,7 @@ import com.cloudpan.android.data.BackupLogDao
 import com.cloudpan.android.data.BackupLogEntity
 import com.cloudpan.android.data.BackupStatus
 import com.cloudpan.android.data.CloudPanApi
+import com.cloudpan.android.data.FileConflictException
 import com.cloudpan.android.data.SettingsStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -132,6 +133,8 @@ class PhotoBackupWorker(
             // 连续成功段末尾（毫秒）——遇失败即停，不越过失败照片
             var segmentEnd = lastBackupEpoch
             var hasSegmentProgress = false
+            // T-089：月目录 → 目录内「路径→版本」表缓存，避免每张照片都全量拉取该月文件树
+            val folderVersionCache = HashMap<String, Map<String, Int>>()
 
             // 推进连续段末尾：某照片被成功上传/去重跳过/标记 Blocked 处理后，游标即可越过该照片
             fun advanceSegment(dateAdded: Long) {
@@ -174,7 +177,8 @@ class PhotoBackupWorker(
                             contentUri = contentUri,
                             fileName = fileName,
                             dateAdded = dateAdded,
-                            mimeType = mimeType
+                            mimeType = mimeType,
+                            folderVersionCache = folderVersionCache
                         )) {
                             BackupOutcome.Uploaded -> {
                                 uploaded++
@@ -264,7 +268,8 @@ class PhotoBackupWorker(
         contentUri: String,
         fileName: String,
         dateAdded: Long,
-        mimeType: String
+        mimeType: String,
+        folderVersionCache: MutableMap<String, Map<String, Int>>
     ): BackupOutcome {
         val fileHash = file.sha256Hex()
 
@@ -316,7 +321,7 @@ class PhotoBackupWorker(
                 fileHash = fileHash,
                 fileSize = fileSize
             ))
-            uploadPhoto(api, file, remotePath, mimeType)
+            uploadPhoto(api, file, remotePath, mimeType, folderVersionCache)
             // → Done（成功即清零重试计数，避免照片内容变更后再次上传被旧计数误判 Blocked）
             dao.upsert(record.copy(
                 status = BackupStatus.Done.value,
@@ -360,19 +365,50 @@ class PhotoBackupWorker(
         api: CloudPanApi,
         file: File,
         remotePath: String,
-        mimeType: String
+        mimeType: String,
+        folderVersionCache: MutableMap<String, Map<String, Int>>
     ) {
+        // T-089：上传携带目标远程路径当前版本（先查询），不再恒传 0，触发服务端 409 并发保护
+        val baseVersion = resolveRemoteVersion(api, remotePath, folderVersionCache)
         val mediaType = mimeType.toMediaTypeOrNull() ?: "image/jpeg".toMediaTypeOrNull()!!
         val requestBody = file.asRequestBody(mediaType)
         val filePart = MultipartBody.Part.createFormData("file", file.name, requestBody)
         val pathPart = remotePath.toRequestBody(MultipartBody.FORM)
-        val versionPart = "0".toRequestBody(MultipartBody.FORM)
+        val versionPart = baseVersion.toString().toRequestBody(MultipartBody.FORM)
         val modifiedPart = Instant.ofEpochMilli(file.lastModified())
             .toString().toRequestBody(MultipartBody.FORM)
 
         val response = api.uploadFile(filePart, pathPart, versionPart, modifiedPart)
+        if (response.code() == 409) {
+            // 文件已被其他设备修改：不静默覆盖，抛异常进入失败重试/Blocked（通知用户手动处理）
+            throw FileConflictException("照片已被其他设备修改，本次未覆盖")
+        }
         if (!response.isSuccessful) {
             throw Exception("上传失败: ${response.code()} ${response.message()}")
+        }
+    }
+
+    /**
+     * 解析目标远程路径当前版本（上传 baseVersion 用，T-089）。
+     * 按「月目录 → 路径→版本表」缓存，避免每张照片都全量拉取该月文件树；
+     * 文件不存在或查询失败返回 0（baseVersion=0 表示不校验）。
+     */
+    private suspend fun resolveRemoteVersion(
+        api: CloudPanApi,
+        remotePath: String,
+        cache: MutableMap<String, Map<String, Int>>
+    ): Int {
+        val folder = remotePath.substringBeforeLast('/').ifEmpty { "/" }
+        return try {
+            val versions = cache.getOrPut(folder) {
+                val r = api.getFileTreeInFolder(folder, 10000, null)
+                if (r.isSuccessful) {
+                    r.body()?.data?.associate { it.path to it.version } ?: emptyMap()
+                } else emptyMap()
+            }
+            versions[remotePath] ?: 0
+        } catch (_: Exception) {
+            0
         }
     }
 

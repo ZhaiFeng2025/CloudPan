@@ -17,6 +17,15 @@ import java.time.Instant
  */
 private const val FILE_TREE_PAGE_SIZE = 200
 
+/** 版本解析用整目录拉取上限（服务端 Take 上限为 10000，见 FilesController.GetTree）。 */
+private const val VERSION_LOOKUP_LIMIT = 10000
+
+/**
+ * 服务端 409 冲突异常——目标文件已被其他设备修改（客户端 baseVersion 过期）。
+ * 删除/上传携带 baseVersion 后服务端返回 409（T-089），由 UI 给出白话提示 + 覆盖/跳过选项，不静默。
+ */
+class FileConflictException(message: String) : Exception(message)
+
 /**
  * 文件操作仓库——封装 API 调用和错误处理。
  */
@@ -143,12 +152,18 @@ class FileRepository(private val settings: SettingsStore) {
 
     /**
      * 删除文件/文件夹（T-050：软删进回收站，可恢复）。
+     * baseVersion 为乐观并发基准版本（T-089：取自已拉取文件列表的 fileEntry.version）；
+     * 服务端当前版本高于 baseVersion 时返回 409（FileConflictException），由 UI 决定强制删除或跳过，
+     * 不再恒传 0（0 表示不校验，静默覆盖其他设备改动）。
      * 调 POST /api/files/delete（服务端移入回收站 + 墓碑），成功后查回收站列表返回对应条目供撤销；
      * 无匹配条目返回 null（删除成功但不可撤销）。禁止物理删除——回收站是唯一可恢复路径。
      */
-    suspend fun deleteFile(path: String): Result<TrashItem?> {
+    suspend fun deleteFile(path: String, baseVersion: Int): Result<TrashItem?> {
         return safeCall {
-            val r = api().deleteFile(DeleteRequestDto(path, 0))
+            val r = api().deleteFile(DeleteRequestDto(path, baseVersion))
+            if (r.code() == 409) {
+                throw FileConflictException("文件已被其他设备修改")
+            }
             if (!r.isSuccessful) {
                 throw Exception("删除失败: ${r.code()} ${r.message()}")
             }
@@ -161,6 +176,22 @@ class FileRepository(private val settings: SettingsStore) {
             } catch (_: Exception) {
                 null
             }
+        }
+    }
+
+    /**
+     * 查询目标路径当前版本（上传 baseVersion 用，T-089）。
+     * 拉取目标所在文件夹子树查找该路径；文件不存在或查询失败返回 0（baseVersion=0 表示不校验）。
+     */
+    suspend fun resolveBaseVersion(path: String): Int {
+        val folder = path.substringBeforeLast('/').ifEmpty { "/" }
+        return try {
+            val r = api().getFileTreeInFolder(folder, VERSION_LOOKUP_LIMIT, null)
+            if (r.isSuccessful) {
+                r.body()?.data?.firstOrNull { it.path == path }?.version ?: 0
+            } else 0
+        } catch (_: Exception) {
+            0
         }
     }
 
@@ -208,7 +239,13 @@ class FileRepository(private val settings: SettingsStore) {
         }
     }
 
-    suspend fun uploadFile(localFile: File, remotePath: String): Result<UploadResponse> {
+    /**
+     * 上传文件。
+     * baseVersion 为乐观并发基准版本（T-089：调用方经 resolveBaseVersion 先查目标文件当前版本，
+     * 或复用列表 fileEntry.version），不再恒传 0；服务端当前版本更高时返回 409（FileConflictException），
+     * 由 UI 给出覆盖/跳过选项，不静默覆盖其他设备改动。
+     */
+    suspend fun uploadFile(localFile: File, remotePath: String, baseVersion: Int): Result<UploadResponse> {
         return withContext(Dispatchers.IO) {
             try {
                 val mimeType = "application/octet-stream".toMediaTypeOrNull()!!
@@ -217,11 +254,14 @@ class FileRepository(private val settings: SettingsStore) {
                     "file", localFile.name, requestBody
                 )
                 val pathPart = remotePath.toRequestBody(MultipartBody.FORM)
-                val versionPart = "0".toRequestBody(MultipartBody.FORM)
+                val versionPart = baseVersion.toString().toRequestBody(MultipartBody.FORM)
                 val modifiedPart = Instant.ofEpochMilli(localFile.lastModified())
                     .toString().toRequestBody(MultipartBody.FORM)
 
                 val response = api().uploadFile(filePart, pathPart, versionPart, modifiedPart)
+                if (response.code() == 409) {
+                    throw FileConflictException("文件已被其他设备修改")
+                }
                 if (!response.isSuccessful) {
                     return@withContext Result.failure(
                         Exception("上传失败: ${response.code()} ${response.message()}")

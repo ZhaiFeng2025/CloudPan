@@ -4478,7 +4478,7 @@
       "title": "Android 删除/上传携带 baseVersion 触发服务端 409（并发保护对齐 Windows）",
       "dimension": "function",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 8,
       "findingId": "F-131",
       "dependsOn": [],
@@ -4509,8 +4509,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "执行（task-executor 2026-08-04）：改动文件 = CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt（新增 FileConflictException 409 冲突异常 + resolveBaseVersion 版本查询，deleteFile/uploadFile 增加 baseVersion 参数、检测 409 抛 FileConflictException）、ui/FileListScreen.kt（单个删除传 f.version、批量删除从 files 列表查 version；409 弹窗「仍删除/跳过」「强制删除/跳过」不静默）、MainActivity.kt（手动上传先 resolveBaseVersion 再携带 baseVersion；409 弹窗「覆盖/跳过」）、worker/PhotoBackupWorker.kt（uploadPhoto 先 resolveRemoteVersion 携带目标当前版本，月目录版本表缓存避免逐张全量拉树；409 抛 FileConflictException 进入失败重试/Blocked 通知，非静默）。验证：AC1 grep 通过——deleteFile 用 DeleteRequestDto(path, baseVersion)、uploadFile 用 versionPart=baseVersion.toString()，删除/上传均引用 version 变量非恒传 0；AC3 gradle build 未能执行——本机无 Android SDK（local.properties 指向 C:/Users/Administrator/AppData/Local/Android/Sdk 不存在，/c /e 全局搜索无 platform-tools/adb，app-debug.apk 为 8/3 历史产物 SDK 已移除），已对全部改动做 Kotlin 语法与逻辑人工审查；AC2 手动验收项：对已被其他设备修改的文件执行删除/手动上传应出现白话冲突弹窗（删除「仍删除/跳过」、上传「覆盖/跳过」）而非静默覆盖，照片备份 409 应出现失败/Blocked 通知。",
+      "updatedAt": "2026-08-04"
     },
     {
       "id": "T-090",
