@@ -132,16 +132,37 @@ public class VersionHistoryService : IVersionHistoryService
             throw;
         }
 
-        // 5. 原子覆盖目标文件（DB 已提交；Move 失败时文件保持旧内容，下次同步按哈希重传自愈）
+        // 5. 原子覆盖目标文件（DB 已提交）。Move 失败时磁盘仍是旧内容、索引已指向新 hash/version——
+        //    若放任，客户端下轮树同步对齐错误索引永不重传，进入『下载校验失败循环』毒化状态。
+        //    回滚索引到与磁盘一致的旧状态（与分块上传 Finalize 失败回滚同源，VersionCommitHelper 单点）。
         try
         {
             IOFile.Move(tmpPath, targetPath, overwrite: true);
         }
         catch
         {
-            if (IOFile.Exists(tmpPath))
+            try
             {
-                try { IOFile.Delete(tmpPath); } catch { /* 尽力清理 */ }
+                await _versionCommit.RollbackCommittedVersionAsync(
+                    _dbFactory, filePath, currentEntry, storagePath,
+                    extraRollbackWork: db =>
+                    {
+                        // 本次回滚新增的『回滚记录』（Version 全局唯一）内容未真正落位到目标文件，
+                        // 索引回滚后必须一并移除，避免毒化版本历史
+                        var restoredRecord = db.VersionRecords
+                            .FirstOrDefault(v => v.FilePath == filePath && v.Version == newVersion);
+                        if (restoredRecord != null)
+                        {
+                            db.VersionRecords.Remove(restoredRecord);
+                        }
+                    });
+            }
+            finally
+            {
+                if (IOFile.Exists(tmpPath))
+                {
+                    try { IOFile.Delete(tmpPath); } catch { /* 尽力清理 */ }
+                }
             }
             throw;
         }

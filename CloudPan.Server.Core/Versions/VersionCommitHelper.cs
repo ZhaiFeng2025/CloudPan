@@ -129,6 +129,73 @@ public sealed class VersionCommitHelper
         }
     }
 
+    /// <summary>
+    /// 『提交新版本』后 FS 原子覆盖失败的索引回滚（CLAUDE.md 7.1 DB+FS 一致性）。
+    /// 调用方已完成 <see cref="CommitNewVersionInTransactionAsync"/>（DB 事务已提交、索引指向新 hash/version），
+    /// 但随后 Move 覆盖目标失败、磁盘仍是旧内容——若不回滚，客户端下轮树同步对齐错误索引
+    /// （本地内容匹配索引 hash）永不重传，索引与磁盘永久不一致（F-21 毒化状态）。
+    /// 回滚使索引回到与磁盘一致的旧状态：FileEntry 恢复旧 hash/version/size/LastModified/State
+    /// （新建文件则删除条目）、移除本次新增的孤儿 VersionRecord（旧内容仍是磁盘真值）并删除存档文件；
+    /// 客户端重试/下轮扫描按哈希差异重新上传收敛。
+    /// dbFactory 由调用方传入（不注入构造函数，避免扩散构造签名）；extraRollbackWork 供调用方在事务内
+    /// 追加自身版本记录移除（如 RestoreAsync 的 RestoredFromVersion 回滚记录）。
+    /// 使用全新 DbContext：不可复用已提交的 db——其变更追踪器仍持有新值而非 DB 真值（CLAUDE.md 7.3）。
+    /// </summary>
+    public async Task RollbackCommittedVersionAsync(
+        IDbContextFactory<CloudPanDbContext> dbFactory,
+        string path,
+        FileEntry? oldEntry,
+        string? archivePath,
+        Action<CloudPanDbContext>? extraRollbackWork = null)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        await using var tx = await db.Database.BeginTransactionAsync();
+        try
+        {
+            var entry = await db.FileEntries.FindAsync(path);
+            if (entry != null)
+            {
+                if (oldEntry != null)
+                {
+                    entry.CurrentHash = oldEntry.CurrentHash;
+                    entry.CurrentSize = oldEntry.CurrentSize;
+                    entry.Version = oldEntry.Version;
+                    entry.LastModified = oldEntry.LastModified;
+                    entry.State = oldEntry.State;
+                }
+                else
+                {
+                    // 新建文件：磁盘上目标从未落位，移除索引条目
+                    db.FileEntries.Remove(entry);
+                }
+            }
+
+            // 移除本次新增的孤儿版本记录（新建文件无存档，archivePath 必为 null，此处不冲突）
+            if (archivePath != null)
+            {
+                var orphan = await db.VersionRecords
+                    .FirstOrDefaultAsync(v => v.FilePath == path && v.StoragePath == archivePath);
+                if (orphan != null)
+                {
+                    db.VersionRecords.Remove(orphan);
+                }
+            }
+
+            extraRollbackWork?.Invoke(db);
+
+            await db.SaveChangesAsync();
+            await tx.CommitAsync();
+
+            // 事务提交后清理孤儿存档文件（FS 副作用，CLAUDE.md 7.3，统一经辅助）
+            DeleteOrphanArchive(archivePath);
+        }
+        catch
+        {
+            await tx.RollbackAsync();
+            throw;
+        }
+    }
+
     /// <summary>回滚/失败后清理孤儿存档文件（FS 副作用，CLAUDE.md 7.3）。尽力而为，幂等。</summary>
     public void DeleteOrphanArchive(string? archiveStoragePath)
     {

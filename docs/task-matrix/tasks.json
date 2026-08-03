@@ -3284,7 +3284,7 @@
       "title": "分块上传恢复路径返回真实版本号并兜底 isComplete 未落盘会话",
       "dimension": "function",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 6,
       "findingId": "F-75",
       "dependsOn": [],
@@ -3315,7 +3315,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "执行 2026-08-03（task-executor）：改动文件——shared-spec.json（v1.3.0→v1.5.0：ChunkStatusData 新增 version:int、ChunkedUpload 新增 Finalized 布尔列）+ 重跑 CloudPan.CodeGen 再生成 Entities.g.cs/ApiResponses.g.cs/ClientEntities.g.cs/Contract 各 g.cs/Kotlin DTO（仅版本头 + 新字段）；IChunkedUploadService.cs（ChunkStatusResult 新增 Version + CleanupIncompleteSessionsAsync）；ChunkedUploadService.cs（GetStatusAsync 返回服务端当前版本号、isComplete&&未Finalized 视为无会话只读不删、建/重置会话置 Finalized=false、新增启动清扫）；ChunkedUploadService.Finalize.cs（FinalizeAsync 阶段2事务内置 Finalized=true 后移除会话）；FilesController.ChunkedUpload.cs（GetChunkStatus 映射 version）；DatabaseInitializer.cs（启动清扫崩溃会话，非致命）；ApiClient.ChunkedUpload.cs（兜底 UploadData 填状态响应版本，不再填 0）；EF 迁移 AddChunkedUploadFinalized（手工收窄为仅加列，去除 EF 自动生成的索引重建——属模型快照与 InitialCreate 手写 SQL 既有基线差异，且会在 EnsureCreated 时代旧库上因索引已存在而失败，见迁移文件注释）+ 同步还原快照与 Designer 索引基线；MigrationsTests.cs（多迁移断言 + 旧库模拟无 Finalized 列 + 补列断言）；ChunkedUploadServiceTests.cs（新增 2 条：全块已收未 Finalized 视为无会话清扫后允许重传 / isComplete 已 Finalized 返回真实版本号）。验证：dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test CloudPan.Tests -c Release EXIT=0（300/300 通过，ChunkedUpload 过滤 13/13、Migrations 4/4）；dotnet run --project CloudPan.CodeGen -- --verify 12 项一致；grep 'new UploadData(remotePath, 0\\|version.*= 0' CloudPan.Client.Core/Services/ApiClient.ChunkedUpload.cs 无匹配。",
+      "note": "执行 2026-08-03（task-executor）：改动文件——shared-spec.json（v1.3.0→v1.5.0：ChunkStatusData 新增 version:int、ChunkedUpload 新增 Finalized 布尔列）+ 重跑 CloudPan.CodeGen 再生成 Entities.g.cs/ApiResponses.g.cs/ClientEntities.g.cs/Contract 各 g.cs/Kotlin DTO（仅版本头 + 新字段）；IChunkedUploadService.cs（ChunkStatusResult 新增 Version + CleanupIncompleteSessionsAsync）；ChunkedUploadService.cs（GetStatusAsync 返回服务端当前版本号、isComplete&&未Finalized 视为无会话只读不删、建/重置会话置 Finalized=false、新增启动清扫）；ChunkedUploadService.Finalize.cs（FinalizeAsync 阶段2事务内置 Finalized=true 后移除会话）；FilesController.ChunkedUpload.cs（GetChunkStatus 映射 version）；DatabaseInitializer.cs（启动清扫崩溃会话，非致命）；ApiClient.ChunkedUpload.cs（兜底 UploadData 填状态响应版本，不再填 0）；EF 迁移 AddChunkedUploadFinalized（手工收窄为仅加列，去除 EF 自动生成的索引重建——属模型快照与 InitialCreate 手写 SQL 既有基线差异，且会在 EnsureCreated 时代旧库上因索引已存在而失败，见迁移文件注释）+ 同步还原快照与 Designer 索引基线；MigrationsTests.cs（多迁移断言 + 旧库模拟无 Finalized 列 + 补列断言）；ChunkedUploadServiceTests.cs（新增 2 条：全块已收未 Finalized 视为无会话清扫后允许重传 / isComplete 已 Finalized 返回真实版本号）。验证：dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test CloudPan.Tests -c Release EXIT=0（300/300 通过，ChunkedUpload 过滤 13/13、Migrations 4/4）；dotnet run --project CloudPan.CodeGen -- --verify 12 项一致；grep 'new UploadData(remotePath, 0\\|version.*= 0' CloudPan.Client.Core/Services/ApiClient.ChunkedUpload.cs 无匹配。 ｜验收 2026-08-03（task-verifier）：3 条自动验收标准独立执行全部通过——(1) grep 'new UploadData(remotePath, 0\\|version.*= 0' CloudPan.Client.Core/Services/ApiClient.ChunkedUpload.cs 无匹配：兜底路径（:92）填 serverVersion 而非 0，:36 从响应取服务端版本（`?? 0` 为 null 合并，非 version=0 兜底写入）；(2) dotnet test --filter ChunkedUpload 9/9 通过，测试含 GetStatus_全块已收未Finalized_视为无会话_清扫后允许重传 / GetStatus_isComplete已Finalized_返回真实版本号（断言 Assert.Equal(fileVersion, status.Version)）；(3) dotnet test CloudPan.Tests -c Release 300/300 通过 + dotnet build CloudPan.sln -c Release 0 错误 0 警告；附加契约校验 dotnet run --project CloudPan.CodeGen -- --verify 12 项一致。服务端独立核实：GetStatusAsync 返回服务端当前版本号（ChunkedUploadService.cs:182）、isComplete&&!Finalized 视为无会话只读不删（:190）、启动清扫 CleanupIncompleteSessionsAsync 清除崩溃会话（:200-208）、Finalize 事务内置 Finalized=true（ChunkedUploadService.Finalize.cs:116）并返回真实 newVersion（:139）。无手动项。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -3323,7 +3323,7 @@
       "title": "版本回滚 RestoreAsync 失败路径回滚 DB 索引",
       "dimension": "function",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 6,
       "findingId": "F-79",
       "dependsOn": [],
@@ -3354,8 +3354,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "执行 2026-08-03（task-executor）：问题——RestoreAsync 步骤5 IOFile.Move 覆盖失败时 DB 索引已提交（指向新 hash/version）而磁盘仍旧内容，客户端下轮树同步对齐错误索引永不重传，进入『下载校验失败循环』毒化状态。修复——将 ChunkedUpload Finalize 的 RollbackFinalizeAsync 回滚逻辑提取为 VersionCommitHelper.RollbackCommittedVersionAsync 单点（dbFactory 作方法参数传入，不注入构造函数避免扩散 6 处测试构造点），RestoreAsync Move 失败时经该单点回滚：FileEntry 恢复旧 hash/version/size/LastModified/State + 移除本次存档孤儿 VersionRecord + extraRollbackWork 移除本次回滚记录（Version==newVersion 全局唯一，避免误删历史 RestoredFromVersion 记录）+ finally 清理 tmp；ChunkedUpload 路径委托同一单点，两条路径行为不分叉。改动文件——CloudPan.Server.Core/Versions/VersionCommitHelper.cs（新增 RollbackCommittedVersionAsync，注释 F-21/CLAUDE.md 7.1 7.3）、CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.Finalize.cs（RollbackFinalizeAsync 委托单点，删重复实现）、CloudPan.Server.Core/Versions/VersionHistoryService.cs（步骤5 catch 改为回滚+清理 tmp 后 rethrow）、CloudPan.Tests/Server/Services/VersionHistoryServiceTests.cs（新增 Restore_Move失败_回滚索引保持与磁盘一致：FileShare.Read 锁目标阻止 Move 覆盖、global_version 消费=3 证明走至 Move 阶段、磁盘hash==索引hash、无 RestoredFromVersion 孤儿记录、tmp 清理、锁释放后重试成功）。验证——dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test CloudPan.Tests -c Release EXIT=0（301/301 通过，VersionHistory 过滤 5/5 含新测试）；grep -n 'Rollback|回滚' VersionHistoryService.cs 有失败回滚处理。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-066",
