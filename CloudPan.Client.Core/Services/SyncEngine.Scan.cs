@@ -154,10 +154,10 @@ public partial class SyncEngine
 
             if (item.Type == (int)FileType.Directory)
             {
-                // 目录：只更新快照，不下载
+                // 目录：只更新快照，不下载（目录无落盘概念，视为已同步）
                 if (snapshot == null)
                 {
-                    db.RemoteSnapshots.Add(MakeSnapshot(item, item.State));
+                    db.RemoteSnapshots.Add(MakeSnapshot(item, item.State, isDownloaded: true));
                 }
                 else
                 {
@@ -168,7 +168,7 @@ public partial class SyncEngine
                 continue;
             }
 
-            // 选择性同步：不在选中路径内的文件标记为 CloudOnly，不入下载队列
+            // 选择性同步：不在选中路径内的文件标记为 CloudOnly，不入下载队列（本地无副本，IsDownloaded 保持 false）
             if (!IsPathSelected(item.Path))
             {
                 if (snapshot == null)
@@ -214,17 +214,22 @@ public partial class SyncEngine
                     }
             }
 
-            // 快照更新移到下载成功后——此处仅记录快照创建，不更新版本号
+            // 快照更新移到下载成功后——此处仅记录快照创建，不更新版本号。
+            // IsDownloaded=false：下载完成前不得视为「已落盘」，全量扫描据此不触发删除传播（T-037）。
             if (snapshot == null)
                 {
                     db.RemoteSnapshots.Add(MakeSnapshot(item, item.State));
                 }
-                // 版本/哈希/大小更新在 ProcessDownloadAsync 成功后执行
+                // 版本/哈希/大小/IsDownloaded 更新在 ProcessDownloadAsync 成功后执行
             }
         }
     }
 
-    private static RemoteSnapshot MakeSnapshot(FileEntryDto item, int state) => new()
+    /// <summary>
+    /// 构建远程快照。<paramref name="isDownloaded"/> 标记「本地是否已成功落盘」（T-037）：
+    /// 下载开始前创建的快照为 false（远端新文件首次下载窗口），下载完成后由 ProcessDownloadAsync 置 true。
+    /// </summary>
+    private static RemoteSnapshot MakeSnapshot(FileEntryDto item, int state, bool isDownloaded = false) => new()
     {
         Path = item.Path,
         Type = item.Type,
@@ -232,7 +237,8 @@ public partial class SyncEngine
         Size = item.CurrentSize,
         Version = item.Version,
         State = state,
-        LastModified = item.LastModified
+        LastModified = item.LastModified,
+        IsDownloaded = isDownloaded
     };
 
     // ============================================================
@@ -322,11 +328,21 @@ public partial class SyncEngine
 
                 if (!localFiles.Contains(snapshot.Path))
                 {
-                    // 本地已删除的文件 → 入队删除
-                    if (snapshot.Type == (int)CloudPan.Contract.FileType.File)
+                    // 本地缺失的删除判定（F-37/T-037）：只对『曾落盘且当前缺失』的文件入队 Delete。
+                    // 未完成首次下载的快照（IsDownloaded=false）不触发删除传播——远端新文件在下载窗口内
+                    // 快照已建但本地无文件，若按旧逻辑判定本地删除会取消未决下载并把服务端唯一副本移入回收站。
+                    if (snapshot.Type == (int)CloudPan.Contract.FileType.File
+                        && snapshot.IsDownloaded)
                     {
-                        _logger.LogInformation("全量扫描检测到本地删除: {Path}", snapshot.Path);
-                        await EnqueueLocalChangeAsync(snapshot.Path, SyncOperation.Delete);
+                        // 该路径存在未决下载项 → 下载窗口内跳过删除判定，待下载完成后再判定
+                        bool hasPendingDownload = await db.SyncQueue
+                            .AnyAsync(q => q.FilePath == snapshot.Path
+                                && q.Operation == (int)SyncOperation.Download, ct);
+                        if (!hasPendingDownload)
+                        {
+                            _logger.LogInformation("全量扫描检测到本地删除: {Path}", snapshot.Path);
+                            await EnqueueLocalChangeAsync(snapshot.Path, SyncOperation.Delete);
+                        }
                     }
                     continue;
                 }

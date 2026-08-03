@@ -203,13 +203,13 @@ public class SyncEngineTests : IDisposable
     [Fact]
     public async Task FullScan_本地删除_入队删除()
     {
-        // 快照中有文件，但本地没有
+        // 快照中有文件（曾落盘 IsDownloaded=true），但本地没有 → 正常传播删除
         await using (var setupDb = await _dbFactory.CreateDbContextAsync())
         {
             setupDb.RemoteSnapshots.Add(new RemoteSnapshot
             {
-                Path = "/deleted-locally.txt", Type = 0, Size = 5,
-                Version = 2, State = 0, Hash = "hash"
+                Path = "/deleted-locally.txt", Type = (int)FileType.File, Size = 5,
+                Version = 2, State = (int)FileState.Synced, Hash = "hash", IsDownloaded = true
             });
             await setupDb.SaveChangesAsync();
         }
@@ -220,6 +220,65 @@ public class SyncEngineTests : IDisposable
         var item = await dbCheck.SyncQueue.FirstOrDefaultAsync(q => q.FilePath == "/deleted-locally.txt");
         Assert.NotNull(item);
         Assert.Equal((int)SyncOperation.Delete, item.Operation);
+    }
+
+    // T-037：下载窗口保护——远端新文件首次下载未完成时不误删
+    [Fact]
+    public async Task FullScan_下载未完成快照_本地缺失_不误删()
+    {
+        // 场景（F-37）：另一设备上传的新文件落在『快照已建但下载未完成』窗口内——本地无文件，
+        // 快照 IsDownloaded=false（下载完成前不得视为已落盘）
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.Add(new RemoteSnapshot
+            {
+                Path = "/pending-download.txt", Type = (int)FileType.File, Size = 100,
+                Version = 1, State = (int)FileState.Synced, Hash = "hash", IsDownloaded = false
+            });
+            await setupDb.SaveChangesAsync();
+        }
+
+        // 5 分钟兜底全量扫描
+        await _engine.FullScanAsync();
+
+        await using var dbCheck = await _dbFactory.CreateDbContextAsync();
+        // 不误删：既不入队 Delete，也不取消未决下载
+        int deleteCount = await dbCheck.SyncQueue.CountAsync(q =>
+            q.FilePath == "/pending-download.txt" && q.Operation == (int)SyncOperation.Delete);
+        Assert.Equal(0, deleteCount);
+    }
+
+    // T-037 第 3 点：扫描入队 Delete 前检查 SyncQueue 未决下载项
+    [Fact]
+    public async Task FullScan_存在未决下载项_已落盘快照本地缺失_不误删()
+    {
+        // 场景：快照曾落盘（IsDownloaded=true）但本地当前缺失，SyncQueue 存在该路径未决下载项
+        //（如远端更新后的重下载窗口）→ 跳过删除判定，待下载完成后再判定
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.Add(new RemoteSnapshot
+            {
+                Path = "/redownload.txt", Type = (int)FileType.File, Size = 100,
+                Version = 2, State = (int)FileState.Synced, Hash = "hash", IsDownloaded = true
+            });
+            setupDb.SyncQueue.Add(new SyncQueueItem
+            {
+                FilePath = "/redownload.txt", Operation = (int)SyncOperation.Download,
+                Priority = (int)QueuePriority.Normal, BaseVersion = 2
+            });
+            await setupDb.SaveChangesAsync();
+        }
+
+        await _engine.FullScanAsync();
+
+        await using var dbCheck = await _dbFactory.CreateDbContextAsync();
+        // 不判定删除
+        int deleteCount = await dbCheck.SyncQueue.CountAsync(q =>
+            q.FilePath == "/redownload.txt" && q.Operation == (int)SyncOperation.Delete);
+        Assert.Equal(0, deleteCount);
+        // 未决下载项保留（未被 EnqueueLocalChangeAsync(Delete) 取消）
+        Assert.Equal(1, await dbCheck.SyncQueue.CountAsync(q =>
+            q.FilePath == "/redownload.txt" && q.Operation == (int)SyncOperation.Download));
     }
 
     [Fact]
@@ -383,6 +442,36 @@ public class SyncEngineTests : IDisposable
         await task;
 
         Assert.False(File.Exists(filePath)); // 本地副本已删除
+    }
+
+    // T-037：远端新文件首次下载——树返回 Synced，快照创建但下载未完成，IsDownloaded 不得为 true
+    [Fact]
+    public async Task ApplyRemoteChanges_新远端文件_快照未标记已落盘()
+    {
+        var response = new FileTreeResponse(
+            new[]
+            {
+                new FileEntryDto("/new-remote.bin", (int)CloudPan.Contract.FileType.File,
+                    "hash", 100, 2, DateTime.UtcNow.ToString("O"), (int)CloudPan.Contract.FileState.Synced)
+            },
+            null, false, 2);
+
+        var method = typeof(SyncEngine).GetMethod("ApplyRemoteChangesAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        Task? task = (Task?)method!.Invoke(_engine, [db, response, CancellationToken.None]);
+        Assert.NotNull(task);
+        await task;
+        await db.SaveChangesAsync();
+
+        var snapshot = await db.RemoteSnapshots.FindAsync("/new-remote.bin");
+        Assert.NotNull(snapshot);
+        Assert.False(snapshot!.IsDownloaded); // 下载完成前不得标记为已落盘
+        // 已入队下载
+        Assert.NotNull(await db.SyncQueue.FirstOrDefaultAsync(q =>
+            q.FilePath == "/new-remote.bin" && q.Operation == (int)SyncOperation.Download));
     }
 
     [Fact]
@@ -1080,6 +1169,7 @@ public class SyncEngineTests : IDisposable
         var snapshot = await dbFinal.RemoteSnapshots.FindAsync("/cloud-dl.txt");
         Assert.NotNull(snapshot);
         Assert.Equal((int)FileState.Synced, snapshot!.State);
+        Assert.True(snapshot.IsDownloaded); // T-037：下载完成后标记已落盘，删除判定恢复
 
         // 队列已清空
         Assert.Equal(0, await dbFinal.SyncQueue.CountAsync());

@@ -103,6 +103,7 @@ public partial class SyncEngine
             snapshot.Hash = result?.Data.Hash ?? snapshot.Hash;
             snapshot.State = (int)CloudPan.Contract.FileState.Synced;
             snapshot.LastModified = lastModified; // T-036：快照记录远程修改时间（与上传携带值一致）
+            snapshot.IsDownloaded = true; // T-037：文件在本地落盘（上传成功）
         }
         else if (result != null)
         {
@@ -114,7 +115,8 @@ public partial class SyncEngine
                 Size = result.Data.Size,
                 Version = result.Data.Version,
                 State = (int)CloudPan.Contract.FileState.Synced,
-                LastModified = lastModified
+                LastModified = lastModified,
+                IsDownloaded = true // T-037：上传成功即本地已落盘
             });
         }
         await db.SaveChangesAsync();
@@ -235,6 +237,7 @@ public partial class SyncEngine
             dbSnapshot.Size = downloadedSize;
             dbSnapshot.State = (int)CloudPan.Contract.FileState.Synced;
             dbSnapshot.LastModified = result?.LastModified; // T-036：快照记录远程真实修改时间
+            dbSnapshot.IsDownloaded = true; // T-037：下载完成即本地已落盘，全量扫描可据此判定删除
         }
         else
         {
@@ -247,7 +250,8 @@ public partial class SyncEngine
                 Size = downloadedSize,
                 Version = item.BaseVersion ?? 0,
                 State = (int)CloudPan.Contract.FileState.Synced,
-                LastModified = result?.LastModified
+                LastModified = result?.LastModified,
+                IsDownloaded = true // T-037：下载完成即本地已落盘
             });
         }
         await db.SaveChangesAsync();
@@ -334,7 +338,8 @@ public partial class SyncEngine
             Size = snapshot?.Size ?? 0,
             Version = item.BaseVersion ?? snapshot?.Version ?? 0,
             State = (int)CloudPan.Contract.FileState.Synced,
-            LastModified = snapshot?.LastModified // T-036：跟随旧快照的远程修改时间
+            LastModified = snapshot?.LastModified, // T-036：跟随旧快照的远程修改时间
+            IsDownloaded = true // T-037：重命名目标已在本机落盘
         });
         await db.SaveChangesAsync();
         _logger.LogInformation("重命名完成: {Old} → {New}", item.FilePath, item.TargetPath);
