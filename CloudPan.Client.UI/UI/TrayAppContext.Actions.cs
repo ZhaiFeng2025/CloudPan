@@ -1,3 +1,4 @@
+using CloudPan.Client.Core.Composition;
 using CloudPan.Client.Core.Models;
 using Microsoft.Win32;
 
@@ -62,9 +63,8 @@ public partial class TrayAppContext
     {
         try
         {
-            ClientConfig cfg = ClientConfig.Load(
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "CloudPan", "client-config.json"));
+            // T-043：复用 DI 注入的持久化配置实例（与 MainWindow 托盘关闭提示同源），不再单独读盘
+            ClientConfig cfg = _config;
             SettingsForm form = new SettingsForm(
                 Program.ServerUrl, Program.SyncRoot, Program.Token,
                 cfg.UploadLimitBps, cfg.DownloadLimitBps, cfg.SelectedPaths);
@@ -79,9 +79,7 @@ public partial class TrayAppContext
                 cfg.UploadLimitBps = form.UploadLimitBps;
                 cfg.DownloadLimitBps = form.DownloadLimitBps;
                 cfg.SelectedPaths = form.SelectedPaths;
-                cfg.Save(Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "CloudPan", "client-config.json"));
+                cfg.Save(ClientBootstrap.GetConfigPath());
                 MessageBox.Show("设置已保存。部分更改需要重启客户端后生效。",
                     "CloudPan", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }

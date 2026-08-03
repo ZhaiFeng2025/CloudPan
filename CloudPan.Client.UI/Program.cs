@@ -1,4 +1,5 @@
 using CloudPan.Client.Core.Composition;
+using CloudPan.Client.Core.Models;
 using CloudPan.Client.Core.Services;
 using CloudPan.Contract;
 using CloudPan.Infrastructure.Design;
@@ -58,7 +59,7 @@ public static class Program
         Application.DoEvents();
 
         // 4. 启动装配（建目录/设备ID/日志/DI/建库）；失败提示并退出
-        ClientBootstrap bootstrap = new ClientBootstrap(ServerUrl, SyncRoot, Token);
+        ClientBootstrap bootstrap = new ClientBootstrap(ServerUrl, SyncRoot, Token, startup.Config);
         try
         {
             bootstrap.Prepare();
@@ -114,7 +115,8 @@ public static class Program
         wsClient.OnDisconnected += OnWsDisconnected;
         initForm.Close();
 
-        Application.Run(new TrayAppContext(engine, wsClient));
+        var clientConfig = bootstrap.Provider.GetRequiredService<ClientConfig>();
+        Application.Run(new TrayAppContext(engine, wsClient, clientConfig));
     }
 
     /// <summary>WebSocket 连接建立：清除离线标志。</summary>

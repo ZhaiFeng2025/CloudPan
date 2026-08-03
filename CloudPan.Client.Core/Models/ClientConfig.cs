@@ -16,6 +16,9 @@ public class ClientConfig
     public long DownloadLimitBps { get; set; } = 0;
     public List<string> SelectedPaths { get; set; } = new() { "/" };
 
+    /// <summary>用户是否已了解关闭窗口时隐藏到托盘的行为（原 ClientSettings.TrayCloseAcknowledged，T-043 并入）。</summary>
+    public bool TrayCloseAcknowledged { get; set; }
+
     private static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = true, PropertyNameCaseInsensitive = true };
 
     /// <summary>加载配置。文件不存在或损坏时返回默认配置。</summary>

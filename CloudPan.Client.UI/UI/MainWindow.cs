@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Drawing.Drawing2D;
+using CloudPan.Client.Core.Composition;
 using CloudPan.Client.Core.Models;
 using CloudPan.Client.Core.Services;
 using CloudPan.Contract;
@@ -49,6 +50,7 @@ public partial class MainWindow : Form
     private string? _searchText;
 
     private readonly SyncEngine _engine;
+    private readonly ClientConfig _config;
     private bool _paused;
 
     // 日志列表容量上限
@@ -88,9 +90,10 @@ public partial class MainWindow : Form
     // 构造
     // ================================================================
 
-    public MainWindow(SyncEngine engine)
+    public MainWindow(SyncEngine engine, ClientConfig config)
     {
         _engine = engine;
+        _config = config;
 
         // ── 窗口属性 ──
         Text = "CloudPan — 文件同步";
@@ -162,8 +165,7 @@ public partial class MainWindow : Form
     {
         if (e.CloseReason == CloseReason.UserClosing)
         {
-            var settings = SettingsStore.Load();
-            if (!settings.TrayCloseAcknowledged)
+            if (!_config.TrayCloseAcknowledged)
             {
                 var result = MessageBox.Show(
                     "关闭窗口后 CloudPan 将继续在后台运行，\n托盘图标仍然可见。\n\n" +
@@ -176,8 +178,8 @@ public partial class MainWindow : Form
                     e.Cancel = true;
                     return;
                 }
-                settings.TrayCloseAcknowledged = true;
-                settings.Save();
+                _config.TrayCloseAcknowledged = true;
+                _config.Save(ClientBootstrap.GetConfigPath());
             }
 
             e.Cancel = true;

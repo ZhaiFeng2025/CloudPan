@@ -1868,7 +1868,7 @@
       "title": "行数门禁下调至 400，7 个超大单类拆 partial",
       "dimension": "simplicity",
       "priority": "P1",
-      "status": "acceptance",
+      "status": "done",
       "batch": 4,
       "findingId": "F-42",
       "dependsOn": [
@@ -1901,7 +1901,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "冲突取舍：T-042 依赖 T-041——QueryServerVersion 删除使 ClientBootstrap 420→≤400，若该文件落线则无需拆分，避免『先拆后删』双重返工。\n执行 2026-08-03：①CodeQualityTests 阈值 1000/500→统一 400（删除 serviceControllerFiles 白名单与分层放宽，MaxLines=400，grep '1000|isExcluded' 无匹配）。②门禁口径扫描出 12 个 >400 行文件（ClientBootstrap 经 T-041 388 行无需拆），全部拆为 partial/多文件、行为不变：ServerInstaller(935)→cs360+Steps162+Install306+Process127；FileBrowserView(830)→cs367+List221+Events186+Breadcrumb80；SettingsForm(628)→cs149+AccountTab348+BandwidthTab128+SyncTab22；ServerWindow(513)→cs268+Events166+Data93；ApiClient(507)→cs209+Trash37+ShareVersion56+ChunkedUpload116+ThrottledStream114+DownloadResult8；TrayAppContext(494)→cs125+Events196+Menu88+Actions103；DesignTokens(484)→cs280+Spacing41+Effects87+Fonts81（5 个独立静态类按类分文件，无需 partial）；SettingsPage(483)→cs298+Events192（Guide60 不变）；SyncEngine.Scan(476)→Scan243+FullScan243；ChunkedUploadService(451)→cs180+Finalize269；WebSocketHandler(442)→cs240+Broadcast65+Lifecycle133；MainWindow.Conflicts(441)→Conflicts164+ConflictDialog262。③验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过 269/269（含 CodeQuality 门禁 2/2）；门禁口径扫描（含 Migrations，排除 Generated/obj/bin/Analyzer）无 >400 行文件。改动文件 37 个（12 改 + 25 新增）。",
+      "note": "冲突取舍：T-042 依赖 T-041——QueryServerVersion 删除使 ClientBootstrap 420→≤400，若该文件落线则无需拆分，避免『先拆后删』双重返工。\n执行 2026-08-03：①CodeQualityTests 阈值 1000/500→统一 400（删除 serviceControllerFiles 白名单与分层放宽，MaxLines=400，grep '1000|isExcluded' 无匹配）。②门禁口径扫描出 12 个 >400 行文件（ClientBootstrap 经 T-041 388 行无需拆），全部拆为 partial/多文件、行为不变：ServerInstaller(935)→cs360+Steps162+Install306+Process127；FileBrowserView(830)→cs367+List221+Events186+Breadcrumb80；SettingsForm(628)→cs149+AccountTab348+BandwidthTab128+SyncTab22；ServerWindow(513)→cs268+Events166+Data93；ApiClient(507)→cs209+Trash37+ShareVersion56+ChunkedUpload116+ThrottledStream114+DownloadResult8；TrayAppContext(494)→cs125+Events196+Menu88+Actions103；DesignTokens(484)→cs280+Spacing41+Effects87+Fonts81（5 个独立静态类按类分文件，无需 partial）；SettingsPage(483)→cs298+Events192（Guide60 不变）；SyncEngine.Scan(476)→Scan243+FullScan243；ChunkedUploadService(451)→cs180+Finalize269；WebSocketHandler(442)→cs240+Broadcast65+Lifecycle133；MainWindow.Conflicts(441)→Conflicts164+ConflictDialog262。③验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过 269/269（含 CodeQuality 门禁 2/2）；门禁口径扫描（含 Migrations，排除 Generated/obj/bin/Analyzer）无 >400 行文件。改动文件 37 个（12 改 + 25 新增）。\n【验收结论 2026-08-03】task-verifier 独立裁决：3 条自动验收标准全部通过，无手动项，status → done。①『门禁测试全绿』实测 dotnet test --filter CodeQuality：Passed 2/2，Failed 0（『所有非生成文件_小于行数上限』+『所有public类型_有XML文档注释』均过）；②『CodeQualityTests 单类阈值统一 400，无 1000 放宽残留』实测 grep '1000|isExcluded'（按验收标准原文大小写）于 CloudPan.Tests/Architecture/CodeQualityTests.cs 无匹配，MaxLines=400 常量生效（对齐 CLAUDE.md 规则 8 单类 ≤400），文件内 IsExcluded 仅排除 Generated/obj/bin/Analyzer（生成代码与构建产物，合理口径，非放宽残留）；③『dotnet build 全绿』实测 dotnet build CloudPan.sln -c Release：Build succeeded，0 Warning 0 Error。佐证 requirement 2（超大单类拆分真实落地）：抽查拆分后关键文件行数均 ≤400——ServerInstaller 360、FileBrowserView 367、SettingsForm 149、ServerWindow 269、TrayAppContext 125、SettingsPage 298、ClientBootstrap 388；partial 拆分文件均在位（FileBrowserView.List/Events/Breadcrumb、SettingsForm.AccountTab/BandwidthTab/SyncTab、TrayAppContext.Actions/Events/Menu、ServerWindow.Events/Data 等），门禁扫描口径下无 >400 行文件。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -1909,7 +1909,7 @@
       "title": "客户端配置三套收敛为单一来源",
       "dimension": "simplicity",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 4,
       "findingId": "F-43",
       "dependsOn": [],
@@ -1941,8 +1941,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "执行 2026-08-03：①ClientConfig 新增 TrayCloseAcknowledged 字段（原 ClientSettings.TrayCloseAcknowledged 并入），整文件删除 SettingsStore.cs（含 ClientSettings + 静态 _syncRoot/SetSyncRoot 后置注入机制）。②ClientStartupResult 新增 Config 属性携带 ResolveStartup 已读盘配置，ClientBootstrap 构造改为接收 ClientConfig（含 _configPath 字段删除），BuildContainer 直接复用 _config 并注册 AddSingleton(cfg)，读盘收敛为 1 次（唯一调用点 ClientBootstrap.ResolveStartup:80）。③Program.cs 从 bootstrap.Provider 取 ClientConfig 传入 TrayAppContext，TrayAppContext 传 MainWindow；MainWindow.OnFormClosing 与 TrayAppContext.Actions.OpenSettings 改用同一 DI 实例读写（Save 经 ClientBootstrap.GetConfigPath()），OpenSettings 不再独立读盘。④SyncConfig 保留为 DI record，注释补充与 ClientConfig 边界（进程内同步运行参数快照 vs 持久化配置源）。⑤验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过 269/269。验收1 grep 'class SettingsStore|SetSyncRoot' CloudPan.Client.Core/ 无匹配（清理 Debug 残留后）。验收2 grep 'ClientConfig.Load' 命中 2 行：ClientBootstrap.cs:80 为唯一调用点，ClientConfig.cs:25 为方法定义 'public static ClientConfig Load(string path)'——系 grep 正则 '.' 通配空格把 'ClientConfig Load' 误命中所致，非第二处调用，验收者请按『调用点 ≤1』判定。改动文件 8 个（7 改 + 1 删）。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-044",

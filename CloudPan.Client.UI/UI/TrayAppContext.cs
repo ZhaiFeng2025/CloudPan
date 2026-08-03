@@ -1,3 +1,4 @@
+using CloudPan.Client.Core.Models;
 using CloudPan.Client.Core.Services;
 using CloudPan.Infrastructure.Design;
 
@@ -18,6 +19,7 @@ public partial class TrayAppContext : ApplicationContext
     private readonly CancellationTokenSource _cts = new();
     private readonly SyncEngine _engine;
     private readonly WebSocketClient _wsClient;
+    private readonly ClientConfig _config;
     private readonly System.Collections.Concurrent.ConcurrentQueue<string> _conflictPaths = new();
     private readonly System.Threading.SynchronizationContext? _syncCtx; // UI 同步上下文（构造函数捕获，供具名事件处理器）
     private readonly System.Collections.Concurrent.ConcurrentQueue<string> _recentActivity = new(); // 最近同步活动（托盘文本）
@@ -26,11 +28,12 @@ public partial class TrayAppContext : ApplicationContext
     /// <summary>重配引导已提示过（F-34/T-034）：防 HTTP 队列与 WebSocket 双重 401 同时弹两次；连接恢复/重配成功后重置。</summary>
     private volatile bool _reconfigPromptShown;
 
-    public TrayAppContext(SyncEngine engine, WebSocketClient wsClient)
+    public TrayAppContext(SyncEngine engine, WebSocketClient wsClient, ClientConfig config)
     {
         _engine = engine;
         _wsClient = wsClient;
-        _mainWindow = new MainWindow(engine);
+        _config = config;
+        _mainWindow = new MainWindow(engine, config);
 
         // ===== 托盘图标 =====
         // 不设 ContextMenuStrip，避免拦截鼠标事件。

@@ -26,12 +26,16 @@ public sealed class ClientStartupResult
     /// <summary>Token DPAPI 解密失败原因（null = 正常）；非空时由 UI 提示用户重新配置。</summary>
     public string? TokenDecryptError { get; }
 
-    internal ClientStartupResult(string serverUrl, string syncRoot, string token, string? tokenDecryptError)
+    /// <summary>启动时从磁盘加载的持久化配置（ResolveStartup 唯一读盘结果，供 BuildContainer 复用，T-043）。</summary>
+    public ClientConfig Config { get; }
+
+    internal ClientStartupResult(string serverUrl, string syncRoot, string token, string? tokenDecryptError, ClientConfig config)
     {
         ServerUrl = serverUrl;
         SyncRoot = syncRoot;
         Token = token;
         TokenDecryptError = tokenDecryptError;
+        Config = config;
     }
 }
 
@@ -110,7 +114,7 @@ public sealed class ClientBootstrap
             }
         }
 
-        return new ClientStartupResult(serverUrl, syncRoot, token, tokenDecryptError);
+        return new ClientStartupResult(serverUrl, syncRoot, token, tokenDecryptError, savedConfig);
     }
 
     /// <summary>DPAPI 加密 Token 并持久化配置（JSON，原子写入）。失败抛异常，由 UI 决定重试。</summary>
@@ -129,7 +133,7 @@ public sealed class ClientBootstrap
     private readonly string _serverUrl;
     private readonly string _syncRoot;
     private readonly string _token;
-    private readonly string _configPath;
+    private readonly ClientConfig _config;
 
     /// <summary>配置目录（{syncRoot}/.cloudpan）。</summary>
     public string ConfigDir { get; private set; } = "";
@@ -143,17 +147,17 @@ public sealed class ClientBootstrap
     /// <summary>DI 容器（Prepare 之后可用）。</summary>
     public ServiceProvider Provider { get; private set; } = null!;
 
-    /// <summary>创建组合根实例（服务端地址/同步根/Token 需为最终生效值）。</summary>
-    public ClientBootstrap(string serverUrl, string syncRoot, string token)
+    /// <summary>创建组合根实例（服务端地址/同步根/Token 需为最终生效值；config 为 ResolveStartup 已读盘的持久化配置，复用避免二次读盘，T-043）。</summary>
+    public ClientBootstrap(string serverUrl, string syncRoot, string token, ClientConfig config)
     {
         _serverUrl = serverUrl;
         _syncRoot = syncRoot;
         _token = token;
-        _configPath = GetConfigPath();
+        _config = config;
     }
 
     /// <summary>
-    /// 启动装配：建目录 → 设备 ID → SettingsStore 注入同步根 → Serilog → DI 容器 → 建库（Migrate）。
+    /// 启动装配：建目录 → 设备 ID → Serilog → DI 容器 → 建库（Migrate）。
     /// 目录创建失败抛 InvalidOperationException（消息含 UI 提示文案）。
     /// </summary>
     public void Prepare()
@@ -180,8 +184,6 @@ public sealed class ClientBootstrap
                 $"配置目录创建失败:\n{ConfigDir}\n\n原因: {ex.Message}\n\n请检查磁盘空间和权限。", ex);
         }
 
-        // 注入同步根到 SettingsStore（领域层，避免其捕获陈旧路径）
-        SettingsStore.SetSyncRoot(_syncRoot);
         DeviceId = LoadOrCreateDeviceId(ConfigDir);
         InitializeLogging(_syncRoot);
         Provider = BuildContainer();
@@ -308,8 +310,10 @@ public sealed class ClientBootstrap
 
         services.AddLogging(b => b.AddSerilog(dispose: true));
 
-        // 重新加载配置（如果 SetupForm 刚保存过）
-        ClientConfig cfg = ClientConfig.Load(_configPath);
+        // 复用 ResolveStartup 已读盘的配置（T-043：读盘收敛为 1 次，BuildContainer 不再重复 Load）
+        ClientConfig cfg = _config;
+        // 持久化配置单例注册：供 UI（MainWindow 托盘关闭提示 / TrayAppContext 设置窗口）读写同一实例
+        services.AddSingleton(cfg);
         SyncConfig syncConfig = new SyncConfig
         {
             SyncRoot = _syncRoot,
