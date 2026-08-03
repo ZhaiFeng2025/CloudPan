@@ -17,6 +17,7 @@ public partial class SettingsForm : Form
     private Button _saveBtn = null!;
     private Button _testConnBtn = null!;
     private Label _connResultIcon = null!;
+    private Label _connResultText = null!;
     private Button _tokenToggleBtn = null!;
     private Label _storageSizeLabel = null!;
 

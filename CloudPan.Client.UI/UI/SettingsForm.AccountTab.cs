@@ -1,3 +1,5 @@
+using System.Net;
+using CloudPan.Client.Core.Services;
 using CloudPan.Infrastructure.Design;
 
 namespace CloudPan.Client.UI;
@@ -78,6 +80,17 @@ public partial class SettingsForm
             TextAlign = ContentAlignment.MiddleCenter,
         };
         serverRow.Controls.Add(_connResultIcon);
+
+        // T-053：测试连接结果白话文字（成功/失败原因+下一步），随图标一起反馈，不弹模态框
+        _connResultText = new Label
+        {
+            Text = "",
+            AutoSize = true,
+            Margin = new Padding(4, 0, 0, 0),
+            TextAlign = ContentAlignment.MiddleLeft,
+            MaximumSize = new Size(300, 0),
+        };
+        serverRow.Controls.Add(_connResultText);
 
         panel.Controls.Add(serverRow, 0, 2);
 
@@ -228,13 +241,17 @@ public partial class SettingsForm
 
     private async void TestConnection_Click(object? sender, EventArgs e)
     {
-        // 清除上次连接结果图标
+        // 清除上次连接结果反馈
         _connResultIcon.Text = "";
+        _connResultText.Text = "";
 
         string url = _serverBox.Text.Trim().TrimEnd('/');
         if (string.IsNullOrEmpty(url))
         {
-            MessageBox.Show(this, "请先输入服务端地址", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            _connResultIcon.Text = "✗";
+            _connResultIcon.ForeColor = CloudPanColors.ErrorRed;
+            _connResultText.Text = "请先输入服务端地址";
+            _connResultText.ForeColor = CloudPanColors.ErrorRed;
             return;
         }
 
@@ -242,31 +259,66 @@ public partial class SettingsForm
         _testConnBtn.Text = "连接中...";
         try
         {
-            using HttpClient httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-            var response = await httpClient.GetAsync($"{url}/api/health");
-            if (response.IsSuccessStatusCode)
-            {
-                _connResultIcon.Text = "✓";
-                _connResultIcon.ForeColor = CloudPanColors.SuccessGreen;
-                MessageBox.Show(this, "连接成功！服务端正常运行。", "测试连接", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
-            else
-            {
-                _connResultIcon.Text = "✗";
-                _connResultIcon.ForeColor = CloudPanColors.ErrorRed;
-                MessageBox.Show(this, $"服务端返回状态码: {(int)response.StatusCode}", "连接失败", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
+            // T-053：改走 ApiClient（唯一证书/代理/超时装配点），不再手建 HttpClient 拼 /api/health；
+            // 自签证书静默接受 → 测试结果与真实同步连接一致，不自签服务端上假失败
+            using CancellationTokenSource cts = new(TimeSpan.FromSeconds(5));
+            using ApiClient api = new(url, _tokenBox.Text.Trim());
+            await api.EnsureHealthAsync(cts.Token);
+
+            _connResultIcon.Text = "✓";
+            _connResultIcon.ForeColor = CloudPanColors.SuccessGreen;
+            _connResultText.Text = "连接成功，服务端正常运行";
+            _connResultText.ForeColor = CloudPanColors.SuccessGreen;
         }
         catch (Exception ex)
         {
+            (string reason, string nextStep) = ClassifyTestError(ex);
             _connResultIcon.Text = "✗";
             _connResultIcon.ForeColor = CloudPanColors.ErrorRed;
-            MessageBox.Show(this, $"无法连接: {ex.Message}", "连接失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            _connResultText.Text = nextStep.Length == 0 ? reason : $"{reason}（{nextStep}）";
+            _connResultText.ForeColor = CloudPanColors.ErrorRed;
         }
         finally
         {
             _testConnBtn.Enabled = true;
             _testConnBtn.Text = "测试连接";
+        }
+    }
+
+    /// <summary>测试连接失败白话归因（ErrorAttribution 风格）：不透出裸状态码与底层异常原文。</summary>
+    private static (string Reason, string NextStep) ClassifyTestError(Exception exception)
+    {
+        foreach (Exception leaf in Flatten(exception))
+        {
+            switch (leaf)
+            {
+                case HttpRequestException http when http.StatusCode == HttpStatusCode.NotFound:
+                    return ("服务端地址不正确", "请检查地址是否完整，例如 http://192.168.1.100:8443");
+                case HttpRequestException http when http.StatusCode is null:
+                    return ("无法连接到服务端", "请确认台式机已开机、云盘服务正在运行");
+                case TaskCanceledException:
+                    return ("连接超时", "请检查网络，或确认地址与端口是否正确");
+            }
+        }
+        return ("连接失败", "请检查地址与网络后重试");
+    }
+
+    /// <summary>递归解包 AggregateException 全部内层异常（CLAUDE.md 7.3，与 ErrorAttribution.Flatten 同语义）。</summary>
+    private static IEnumerable<Exception> Flatten(Exception exception)
+    {
+        if (exception is AggregateException aggregate)
+        {
+            foreach (Exception inner in aggregate.Flatten().InnerExceptions)
+            {
+                foreach (Exception leaf in Flatten(inner))
+                {
+                    yield return leaf;
+                }
+            }
+        }
+        else
+        {
+            yield return exception;
         }
     }
 

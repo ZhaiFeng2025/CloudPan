@@ -74,6 +74,16 @@ public partial class ApiClient : IApiClient, IDisposable
         }
     }
 
+    /// <summary>
+    /// 健康检查（设置页测试连接用，T-053）：失败抛底层异常供白话归因，不再吞异常返回 false。
+    /// 与 HealthCheckAsync 区分：后者供后台轮询（只关心是否连上），本方法供交互式测试（需要解释失败原因）。
+    /// </summary>
+    public async Task EnsureHealthAsync(CancellationToken ct = default)
+    {
+        var response = await _http.GetAsync(SpecRoutes.Health, ct);
+        response.EnsureSuccessStatusCode();
+    }
+
     /// <summary>获取文件树（增量）。</summary>
     public async Task<FileTreeResponse?> GetFileTreeAsync(int sinceVersion, int limit = 5000, string? subPath = null, string? cursor = null, CancellationToken ct = default)
     {

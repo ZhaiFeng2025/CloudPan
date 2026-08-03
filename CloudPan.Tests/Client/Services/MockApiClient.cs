@@ -43,6 +43,15 @@ public class MockApiClient : IApiClient
 
     public Task<bool> HealthCheckAsync(CancellationToken ct = default) => Task.FromResult(HealthOk);
 
+    public Task EnsureHealthAsync(CancellationToken ct = default)
+    {
+        if (!HealthOk)
+        {
+            throw new HttpRequestException("模拟健康检查失败", null, System.Net.HttpStatusCode.ServiceUnavailable);
+        }
+        return Task.CompletedTask;
+    }
+
     public Task<FileTreeResponse?> GetFileTreeAsync(int sinceVersion, int limit = 5000, string? subPath = null, string? cursor = null, CancellationToken ct = default)
     {
         List<FileEntryDto> items = Files

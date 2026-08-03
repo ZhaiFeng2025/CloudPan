@@ -11,6 +11,9 @@ public interface IApiClient
     /// <summary>健康检查。</summary>
     Task<bool> HealthCheckAsync(CancellationToken ct = default);
 
+    /// <summary>健康检查（设置页测试连接用，T-053）：失败抛底层异常（HttpRequestException/TaskCanceledException），供调用方按 ErrorAttribution 风格白话归因；成功正常返回。</summary>
+    Task EnsureHealthAsync(CancellationToken ct = default);
+
     /// <summary>获取文件树（增量）。</summary>
     Task<FileTreeResponse?> GetFileTreeAsync(int sinceVersion, int limit = 5000, string? subPath = null, string? cursor = null, CancellationToken ct = default);
 

@@ -2402,7 +2402,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "执行 2026-08-03：新建 ProcessRunner.cs（ProcessRunnerOptions：TimeoutMs/RunAsAdmin/RedirectOutput/UseCmd+CmdCommand；统一『启动→WaitForExit 超时→Kill→异步收集 stdout/stderr→错误截断120字符』语义）。ServerInstaller.RunExe/RunCmd 与 ServiceRestartHelper.RunElevatedSc/ServiceHasLegacyBinPathParam 改为薄委托 ProcessRunner，删除 4 处近似实现。参数转义安全保持：exe 直调一律 ArgumentList（runas 不支持则参数为常量），cmd 管道命令硬编码无用户输入；sc qc 由字符串 Arguments 改为 ArgumentList（更安全）。RunElevatedSc 保留历史『不校验退出码』语义（Started && !TimedOut），避免 sc stop 已停止服务非零退出误中止重启链。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过 285/285；grep 'ProcessStartInfo|WaitForExit' CloudPan.Server.UI/ 仅命中 ProcessRunner.cs（无重复实现）。改动文件：CloudPan.Server.UI/ProcessRunner.cs（新增）、CloudPan.Server.UI/ServerInstaller.Process.cs、CloudPan.Server.UI/ServiceRestartHelper.cs、docs/task-matrix/tasks.json。",
+      "note": "执行 2026-08-03：新建 ProcessRunner.cs（ProcessRunnerOptions：TimeoutMs/RunAsAdmin/RedirectOutput/UseCmd+CmdCommand；统一『启动→WaitForExit 超时→Kill→异步收集 stdout/stderr→错误截断120字符』语义）。ServerInstaller.RunExe/RunCmd 与 ServiceRestartHelper.RunElevatedSc/ServiceHasLegacyBinPathParam 改为薄委托 ProcessRunner，删除 4 处近似实现。参数转义安全保持：exe 直调一律 ArgumentList（runas 不支持则参数为常量），cmd 管道命令硬编码无用户输入；sc qc 由字符串 Arguments 改为 ArgumentList（更安全）。RunElevatedSc 保留历史『不校验退出码』语义（Started && !TimedOut），避免 sc stop 已停止服务非零退出误中止重启链。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过 285/285；grep 'ProcessStartInfo|WaitForExit' CloudPan.Server.UI/ 仅命中 ProcessRunner.cs（无重复实现）。改动文件：CloudPan.Server.UI/ProcessRunner.cs（新增）、CloudPan.Server.UI/ServerInstaller.Process.cs、CloudPan.Server.UI/ServiceRestartHelper.cs、docs/task-matrix/tasks.json。 验收 2026-08-03（task-verifier）：①「Server.UI 无重复进程执行实现」——grep -rn 'ProcessStartInfo|WaitForExit' CloudPan.Server.UI/ 源码命中仅 ProcessRunner.cs（bin/obj 命中为编译产物 DLL，非源码），ServerInstaller.Process.cs 与 ServiceRestartHelper.cs 无 ProcessStartInfo/WaitForExit，通过。②「安装器服务安装/重启路径正常（手动）」——代码路径核对：RunExe/RunCmd 薄委托 ProcessRunner.Run，RunElevatedSc 经 ProcessRunner（RunAsAdmin=true，参数为常量 stop/start+服务名，保留 Started&&!TimedOut 历史语义），ServiceHasLegacyBinPathParam 经 ProcessRunner（RedirectOutput+ArgumentList，比原字符串 Arguments 更安全）；cmd 管道命令硬编码、直调 exe 全部 ArgumentList 自动转义，注入面无退化——逻辑存在，实际服务安装/重启需人工确认。③「全量测试全绿 + dotnet build 全绿」——dotnet test CloudPan.Tests -c Release 通过 285/285（Failed:0）；dotnet build CloudPan.sln -c Release 0 警告 0 错误，通过。结论：自动项全部通过，含 1 手动项；状态保持 acceptance，待人工确认项：安装器服务安装/重启路径正常。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -2410,7 +2410,7 @@
       "title": "SettingsForm 测试连接回炉：改走 IApiClient + 白话反馈（T-041 残留）",
       "dimension": "simplicity",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 5,
       "findingId": "F-53",
       "dependsOn": [],
@@ -2445,8 +2445,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "T-041 回炉任务：批次 4 T-041 标记完成但被 UI 层绕开，同一 HttpClient 装配的契约收敛仍留第二入口（simplicity F-53 与 ux U-7 同源合并）。",
-      "updatedAt": null
+      "note": "执行 2026-08-03：删除 SettingsForm.AccountTab 手建 HttpClient 与魔数 \"/api/health\"，测试连接改走 IApiClient.EnsureHealthAsync（新增，内部引用 SpecRoutes.Health；失败抛底层异常供白话归因），经 ApiClient 唯一证书/代理/超时装配点（自签证书静默接受 → 自签服务端不再假失败）。成功/失败均改图标+文字反馈（复用 _connResultIcon + 新增 _connResultText），成功不弹模态框；失败按 ErrorAttribution 风格白话归因（404→检查服务端地址；连不上→确认台式机已开机/服务运行；超时→检查网络），不透出裸状态码与异常原文。MockApiClient 补齐接口实现。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过 285/285；grep 'new HttpClient' SettingsForm.AccountTab.cs 与 grep '\"/api/health\"' CloudPan.Client.UI/ 均无匹配。改动文件：CloudPan.Client.Core/Services/IApiClient.cs、CloudPan.Client.Core/Services/ApiClient.cs、CloudPan.Client.UI/UI/SettingsForm.cs、CloudPan.Client.UI/UI/SettingsForm.AccountTab.cs、CloudPan.Tests/Client/Services/MockApiClient.cs、docs/task-matrix/tasks.json。任务背景：T-041 回炉任务（批次 4 T-041 标记完成但被 UI 层绕开，同一 HttpClient 装配的契约收敛仍留第二入口，simplicity F-53 与 ux U-7 同源合并）。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-054",
