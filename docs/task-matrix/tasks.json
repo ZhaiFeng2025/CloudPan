@@ -3935,7 +3935,7 @@
       "title": "回收站恢复目标已存在收敛（检测→CONFLICT/改名恢复 + 白话原因）",
       "dimension": "function",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 7,
       "findingId": "F-120",
       "dependsOn": [],
@@ -3966,7 +3966,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "执行 2026-08-03（task-executor）：T-078 回收站恢复目标已存在收敛。问题——RestoreAsync 直接 File.Move(overwrite:false)/Directory.Move，删除后同路径重建（或其他设备同步回同路径）时目标已存在 → IOException → 兜底 INTERNAL_ERROR（UserMessage『恢复文件时出现错误，请稍后重试』），无归因且恢复永久不可行。修复（对齐 T-077 重命名撞名语义：409 明确归因，不自动追加 _恢复_后缀，自动唯一化作 v1.1 增强）——TrashService.RestoreAsync 在恢复移动前检测目标（File.Exists/Directory.Exists(targetPath)）已存在 → 提前返回 409 CONFLICT（UserMessage『目标位置已有文件，请先处理或改名』），不再落 IOException 兜底 INTERNAL_ERROR；检测在版本分配前不消耗版本号，回收站条目保留可重试。客户端 SyncManageService.RestoreTrashAsync 对 409 CONFLICT 不再吞成裸 false 显示泛化『恢复失败』，抛白话可操作归因（『目标位置已有文件，请先处理或改名』，覆盖/改名/取消由用户据此决策），UI 现有 catch 直接展示。改动文件——CloudPan.Server.Core/Trash/TrashService.cs（RestoreAsync 目标已存在前置检测 :114-128，409 分支 :121-126）；CloudPan.Client.Core/Services/SyncManageService.cs（RestoreTrashAsync 新增 Conflict 归因 catch，改 46-66）；CloudPan.Tests/Server/Services/TrashServiceTests.cs（新增 Restore_目标文件已存在_返回CONFLICT而非INTERNAL_ERROR + Restore_目标目录已存在_返回CONFLICT：断言 409 + UserMessage 含『目标位置已有文件』+ 回收站条目保留 + 重建文件未被覆盖）；tasks.json。验证——dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test CloudPan.Tests -c Release --filter Trash 26/26 通过（含新增 2 条）；dotnet test CloudPan.Tests -c Release 全量 326/326 通过（原 324 + 新增 2）。AC2 grep『CONFLICT|IOException』TrashService.cs 恢复路径有 CONFLICT 分支（:124），无裸 IOException 兜底 INTERNAL_ERROR。取舍——按 producer 取舍选 409 明确归因而非自动追加 _恢复_时间戳后缀（与 T-077 同语义收敛，用户可先处理目标或改名恢复，恢复不静默改变路径）。",
+      "note": "执行 2026-08-03（task-executor）：T-078 回收站恢复目标已存在收敛。问题——RestoreAsync 直接 File.Move(overwrite:false)/Directory.Move，删除后同路径重建（或其他设备同步回同路径）时目标已存在 → IOException → 兜底 INTERNAL_ERROR（UserMessage『恢复文件时出现错误，请稍后重试』），无归因且恢复永久不可行。修复（对齐 T-077 重命名撞名语义：409 明确归因，不自动追加 _恢复_后缀，自动唯一化作 v1.1 增强）——TrashService.RestoreAsync 在恢复移动前检测目标（File.Exists/Directory.Exists(targetPath)）已存在 → 提前返回 409 CONFLICT（UserMessage『目标位置已有文件，请先处理或改名』），不再落 IOException 兜底 INTERNAL_ERROR；检测在版本分配前不消耗版本号，回收站条目保留可重试。客户端 SyncManageService.RestoreTrashAsync 对 409 CONFLICT 不再吞成裸 false 显示泛化『恢复失败』，抛白话可操作归因（『目标位置已有文件，请先处理或改名』，覆盖/改名/取消由用户据此决策），UI 现有 catch 直接展示。改动文件——CloudPan.Server.Core/Trash/TrashService.cs（RestoreAsync 目标已存在前置检测 :114-128，409 分支 :121-126）；CloudPan.Client.Core/Services/SyncManageService.cs（RestoreTrashAsync 新增 Conflict 归因 catch，改 46-66）；CloudPan.Tests/Server/Services/TrashServiceTests.cs（新增 Restore_目标文件已存在_返回CONFLICT而非INTERNAL_ERROR + Restore_目标目录已存在_返回CONFLICT：断言 409 + UserMessage 含『目标位置已有文件』+ 回收站条目保留 + 重建文件未被覆盖）；tasks.json。验证——dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test CloudPan.Tests -c Release --filter Trash 26/26 通过（含新增 2 条）；dotnet test CloudPan.Tests -c Release 全量 326/326 通过（原 324 + 新增 2）。AC2 grep『CONFLICT|IOException』TrashService.cs 恢复路径有 CONFLICT 分支（:124），无裸 IOException 兜底 INTERNAL_ERROR。取舍——按 producer 取舍选 409 明确归因而非自动追加 _恢复_时间戳后缀（与 T-077 同语义收敛，用户可先处理目标或改名恢复，恢复不静默改变路径）。验收 2026-08-03（task-verifier）：独立复核 3 条 AC 全过——AC1 dotnet test CloudPan.Tests -c Release --filter Trash 26/26 通过（含新增 Restore_目标文件已存在_返回CONFLICT + Restore_目标目录已存在_返回CONFLICT）；AC2 实读 TrashService.cs:114-166，RestoreAsync 恢复移动前（:121）检测 File.Exists/Directory.Exists(targetPath) 已存在即返回 DomainError(HttpErrorCode.CONFLICT,'目标位置已有文件'):123-125，:161-164 泛化 catch 仅作意外错误回退（非目标已存在的兜底路径），:248 IOException 注释属 MoveToTrashAsync 非恢复路径，确认无裸 IOException 兜底 INTERNAL_ERROR；AC3 dotnet test CloudPan.Tests -c Release 326/326 通过 + dotnet build CloudPan.sln -c Release 0 警告 0 错误。无手动项，结论：通过 → done。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -3974,7 +3974,7 @@
       "title": "ThemeWatcher 双份下沉 Infrastructure/Design（两端只留初始化）",
       "dimension": "simplicity",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 7,
       "findingId": "F-121",
       "dependsOn": [],
@@ -4000,7 +4000,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "执行 2026-08-03（task-executor）：T-079 ThemeWatcher 双份下沉。问题——ThemeWatcher 在 CloudPan.Client.UI/UI/ThemeWatcher.cs（144 行）与 CloudPan.Server.UI/ThemeWatcher.cs（145 行）逐字同构双份，主题跟随策略（订阅 ThemeManager.ThemeChanged → 回 UI 线程 → ApplyToTree 含 ListView/Button FlatAppearance 归一化）改一处须同步两处，两端深色模式行为有分叉风险。修复——单一实现移至 CloudPan.Infrastructure/Design/ThemeWatcher.cs（public static，逐字同构迁移，仅依赖 WinForms/System.Drawing），删除两端各 ~144 行重复实现；两端 UI 调用点（MainWindow/SetupForm/SettingsForm/ServerWindow/ServerInstaller 各一行 ThemeWatcher.Watch(this)）已 using CloudPan.Infrastructure.Design 故零改动，仍为一行初始化绑定；主题变更仍经 ThemeManager.ThemeChanged 事件暴露。CloudPan.Infrastructure.csproj 启用 UseWindowsForms（T-079：ThemeWatcher 依赖 Form/Control 等 WinForms 类型；WindowsDesktop 框架随之自带 System.Drawing 与 Microsoft.Win32.SystemEvents，原显式包引用 System.Drawing.Common 8.0.0 / Microsoft.Win32.SystemEvents 8.0.0 移除——原注释理由『非 WinForms 项目不自动带 WindowsDesktop 框架』因 UseWindowsForms 失效，保留将产生重复程序集）。改动文件——CloudPan.Infrastructure/Design/ThemeWatcher.cs（新增 144 行）；CloudPan.Client.UI/UI/ThemeWatcher.cs（删除）；CloudPan.Server.UI/ThemeWatcher.cs（删除）；CloudPan.Infrastructure/CloudPan.Infrastructure.csproj（+UseWindowsForms，-2 包引用）；tasks.json。验证——grep -rln 'class ThemeWatcher' 全库仅 1 处（CloudPan.Infrastructure/Design/ThemeWatcher.cs:10），CloudPan.Client.UI/CloudPan.Server.UI 无匹配（含验收标准原命令）；dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test CloudPan.Tests -c Release 326/326 通过；dotnet test --filter Architecture 13/13 通过。",
+      "note": "执行 2026-08-03（task-executor）：T-079 ThemeWatcher 双份下沉。问题——ThemeWatcher 在 CloudPan.Client.UI/UI/ThemeWatcher.cs（144 行）与 CloudPan.Server.UI/ThemeWatcher.cs（145 行）逐字同构双份，主题跟随策略（订阅 ThemeManager.ThemeChanged → 回 UI 线程 → ApplyToTree 含 ListView/Button FlatAppearance 归一化）改一处须同步两处，两端深色模式行为有分叉风险。修复——单一实现移至 CloudPan.Infrastructure/Design/ThemeWatcher.cs（public static，逐字同构迁移，仅依赖 WinForms/System.Drawing），删除两端各 ~144 行重复实现；两端 UI 调用点（MainWindow/SetupForm/SettingsForm/ServerWindow/ServerInstaller 各一行 ThemeWatcher.Watch(this)）已 using CloudPan.Infrastructure.Design 故零改动，仍为一行初始化绑定；主题变更仍经 ThemeManager.ThemeChanged 事件暴露。CloudPan.Infrastructure.csproj 启用 UseWindowsForms（T-079：ThemeWatcher 依赖 Form/Control 等 WinForms 类型；WindowsDesktop 框架随之自带 System.Drawing 与 Microsoft.Win32.SystemEvents，原显式包引用 System.Drawing.Common 8.0.0 / Microsoft.Win32.SystemEvents 8.0.0 移除——原注释理由『非 WinForms 项目不自动带 WindowsDesktop 框架』因 UseWindowsForms 失效，保留将产生重复程序集）。改动文件——CloudPan.Infrastructure/Design/ThemeWatcher.cs（新增 144 行）；CloudPan.Client.UI/UI/ThemeWatcher.cs（删除）；CloudPan.Server.UI/ThemeWatcher.cs（删除）；CloudPan.Infrastructure/CloudPan.Infrastructure.csproj（+UseWindowsForms，-2 包引用）；tasks.json。验证——grep -rln 'class ThemeWatcher' 全库仅 1 处（CloudPan.Infrastructure/Design/ThemeWatcher.cs:10），CloudPan.Client.UI/CloudPan.Server.UI 无匹配（含验收标准原命令）；dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test CloudPan.Tests -c Release 326/326 通过；dotnet test --filter Architecture 13/13 通过。验收 2026-08-03（task-verifier）：独立复核 2 条 AC 全过——AC1 全库 grep 'class ThemeWatcher' 仅 1 处（CloudPan.Infrastructure/Design/ThemeWatcher.cs:10），CloudPan.Client.UI/CloudPan.Server.UI 无匹配（仅 5 处一行调用点 ThemeWatcher.Watch(this)：MainWindow:123/SettingsForm:62/SetupForm:195/ServerInstaller:292/ServerWindow:242）；AC2 dotnet test --filter Architecture 13/13 通过 + dotnet build CloudPan.sln -c Release 0 警告 0 错误。实读 ThemeWatcher.cs:10-143：单一实现经 ThemeManager.ThemeChanged 事件暴露、BeginInvoke 回 UI 线程，符合『两端只留初始化』。无手动项，结论：通过 → done。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -4008,7 +4008,7 @@
       "title": "DesignTokens 死令牌清理（0 引用效果/颜色/FontSpec）",
       "dimension": "simplicity",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 7,
       "findingId": "F-122",
       "dependsOn": [],
@@ -4039,8 +4039,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "执行 2026-08-03（task-executor）：T-080 DesignTokens 死令牌清理。问题——CloudPanEffects 阴影/圆角/时长/透明度令牌、CloudPanFonts 的 FontSpec 结构与 8 个预设、CloudPanColors 的 8 个颜色令牌全库 0 引用（grep 逐一核实），属装饰令牌，违背『令牌即唯一来源』承诺——改令牌时无法区分真实使用与装饰。修复——逐令牌 grep 确认引用数后删除 0 引用令牌：CloudPanEffects 删 ShadowInfo 结构 + ShadowSm/Md/Lg/Xl/Elevated、CornerRadiusNone/Sm/Lg/Round、DurationInstant/Fast/Slow/Emphasis、OverlayAlpha/DisabledOpacity/HoverOpacity，仅保留 CornerRadiusMd（消费点 ServerWindow.Events.cs:121,127 SetRoundedRegion）与 DurationNormal（消费点 ServerInstaller.Steps.cs:144 定时器 Interval），均注释消费者；CloudPanFonts 删 FontSpec 结构 + 8 预设（Title/Subtitle/Body/BodyBold/BodySmall/Caption/Monospace/Button）+ SizeTitle（删除后 0 引用），保留 FontFamily/FontFamilyMono/SizeSubtitle/SizeBodyMin/SizeBody/SizeBodySmall/SizeCaption/SizeMono（均有消费者，注释代表性消费点）；CloudPanColors 删 InfoBlue/TextLink/BorderFocus/BackgroundHover/BackgroundOverlay/SeparatorGray/DisabledBg/DisabledText 8 个 0 引用颜色（公开属性+PalettePairs+Light/Dark 组共 8×4 处），保留 25 个有消费者颜色，同步修正 PalettePairs 顺序注释与测试注释（32 对→25 对）；删除后全库 .cs 仅剩说明性注释提及已删令牌名，无任何代码引用。改动文件——CloudPan.Infrastructure/Design/DesignTokens.Effects.cs（87→18 行）；DesignTokens.Fonts.cs（81→29 行）；DesignTokens.cs（280→251 行）；CloudPan.Tests/Infrastructure/Design/DesignTokensThemeTests.cs（注释 32→25 对）；tasks.json。验证——dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet build CloudPan.sln -c Debug EXIT=0（刷新 bin 产物使 AC grep 不含旧令牌元数据）；dotnet test CloudPan.Tests -c Release 326/326 通过；dotnet test --filter Architecture 13/13 通过；AC1 原文 grep『InfoBlue|FontSpec|ShadowSm|CornerRadiusRound|DurationSlow|DisabledBg』CloudPan.Client.UI/CloudPan.Server.UI/CloudPan.Server.Core/CloudPan.Client.Core 0 匹配（EXIT=1）。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-081",
