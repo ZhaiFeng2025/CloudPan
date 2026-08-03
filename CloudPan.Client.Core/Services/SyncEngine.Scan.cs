@@ -142,6 +142,12 @@ public partial class SyncEngine
                 {
                     SafeDelete(localPath);
                 }
+                else if (Directory.Exists(localPath))
+                {
+                    // T-049：目录墓碑——递归删除本地目录（含残留子项），避免空目录幽灵残留
+                    // 并被下次 FullScan 当作『无快照本地目录』重新 mkdir 复活。
+                    SafeDeleteDirectory(localPath);
+                }
 
                 if (snapshot != null)
                 {
@@ -154,10 +160,13 @@ public partial class SyncEngine
 
             if (item.Type == (int)FileType.Directory)
             {
-                // 目录：只更新快照，不下载（目录无落盘概念，视为已同步）
+                // 目录：只更新快照，不下载（目录无落盘概念）。
+                // T-049：远端目录快照 IsDownloaded=false——IsDownloaded 在此语义为『目录曾在本机物化』：
+                // 本机创建并同步的目录（ProcessMkdirAsync）为 true；远端目录未在本机物化，FullScan
+                // 目录删除兜底据此不误判（否则空目录在首次同步未物化时被判定为本地删除 → 删除-重建振荡）。
                 if (snapshot == null)
                 {
-                    db.RemoteSnapshots.Add(MakeSnapshot(item, item.State, isDownloaded: true));
+                    db.RemoteSnapshots.Add(MakeSnapshot(item, item.State, isDownloaded: false));
                 }
                 else
                 {

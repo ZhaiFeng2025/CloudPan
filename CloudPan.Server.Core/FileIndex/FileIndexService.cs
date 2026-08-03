@@ -128,10 +128,14 @@ public class FileIndexService : IFileIndexService
 
         if (isDirectory)
         {
-            // 目录：前缀覆盖目录自身（/dir/ 以 /dir/ 开头）及全部后代
-            string prefix = path.TrimEnd('/') + "/";
+            // 目录：目录自身条目 + 全部后代。生产目录条目按 T-046 约定无尾斜杠存储（/dir 而非 /dir/），
+            // 仅前缀匹配（Path LIKE 'path/%'）会漏掉目录自身条目 → 目录 FileEntry 永不被墓碑化，
+            // 空目录在服务端索引中幽灵残留（F-49）。改为 `Path == path OR Path LIKE 'path/%'`：
+            //   · Path == normalized 命中目录自身条目（无尾斜杠存储）；
+            //   · Path.StartsWith(normalized + "/") 命中全部后代（含历史带尾斜杠的 /dir/ 自身条目）。
+            string normalized = path.TrimEnd('/');
             targets.AddRange(await db.FileEntries
-                .Where(f => f.Path.StartsWith(prefix))
+                .Where(f => f.Path == normalized || f.Path.StartsWith(normalized + "/"))
                 .ToListAsync());
         }
         else
@@ -231,8 +235,24 @@ public class FileIndexService : IFileIndexService
     {
         await using var db = await _dbFactory.CreateDbContextAsync();
 
-        if (await db.FileEntries.AnyAsync(f => f.Path == path))
+        var existing = await db.FileEntries.FindAsync(path);
+        if (existing != null)
         {
+            // T-049：同名墓碑（FileState.Deleting）复活为有效目录——目录软删后（墓碑保留窗口内）
+            // 同名重建不再因『已存在路径』返回 409。墓碑已被物理清理的路径（FileEntry 行已删）
+            // 走下方新建分支。非墓碑（Synced 活动条目）路径已存在 → 维持抛异常。
+            if (existing.State == (int)FileState.Deleting)
+            {
+                existing.Type = (int)FileType.Directory;
+                existing.CurrentHash = null;
+                existing.CurrentSize = 0;
+                existing.Version = version;
+                existing.LastModified = DateTime.UtcNow.ToString("O");
+                existing.State = (int)FileState.Synced;
+                await db.SaveChangesAsync();
+                return;
+            }
+
             throw new InvalidOperationException($"路径已存在: {path}");
         }
 

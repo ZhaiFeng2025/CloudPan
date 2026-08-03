@@ -281,6 +281,53 @@ public class SyncEngineTests : IDisposable
             q.FilePath == "/redownload.txt" && q.Operation == (int)SyncOperation.Download));
     }
 
+    // T-049：FullScan 目录删除兜底——本地目录缺失且快照为目录（曾在本机物化 IsDownloaded=true）→ 入队 Delete
+    [Fact]
+    public async Task FullScan_本地目录缺失_快照为目录_入队Delete()
+    {
+        // 快照中目录曾在本机物化（本机创建并同步），但本地目录已被删除 → 5 分钟兜底扫描应传播删除
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.Add(new RemoteSnapshot
+            {
+                Path = "/photos", Type = (int)FileType.Directory,
+                Version = 3, State = (int)FileState.Synced, IsDownloaded = true
+            });
+            await setupDb.SaveChangesAsync();
+        }
+
+        await _engine.FullScanAsync();
+
+        await using var dbCheck = await _dbFactory.CreateDbContextAsync();
+        var item = await dbCheck.SyncQueue.FirstOrDefaultAsync(q => q.FilePath == "/photos");
+        Assert.NotNull(item);
+        Assert.Equal((int)SyncOperation.Delete, item.Operation);
+    }
+
+    // T-049：远端未物化目录快照（IsDownloaded=false）本地缺失 → 不误判删除（防删除-重建振荡）
+    [Fact]
+    public async Task FullScan_远端未物化目录快照_本地缺失_不误删()
+    {
+        // 远端空目录快照（ApplyRemoteChanges 创建，IsDownloaded=false，未在本机物化）
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.Add(new RemoteSnapshot
+            {
+                Path = "/photos", Type = (int)FileType.Directory,
+                Version = 2, State = (int)FileState.Synced, IsDownloaded = false
+            });
+            await setupDb.SaveChangesAsync();
+        }
+
+        await _engine.FullScanAsync();
+
+        await using var dbCheck = await _dbFactory.CreateDbContextAsync();
+        // 不误删：远端空目录不应被本机 FullScan 判定为本地删除（否则删除-重建振荡）
+        int deleteCount = await dbCheck.SyncQueue.CountAsync(q =>
+            q.FilePath == "/photos" && q.Operation == (int)SyncOperation.Delete);
+        Assert.Equal(0, deleteCount);
+    }
+
     [Fact]
     public async Task FullScan_忽略隐藏文件和临时文件()
     {

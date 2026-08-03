@@ -115,6 +115,16 @@ public partial class SyncEngine
                             await EnqueueLocalChangeAsync(snapshot.Path, SyncOperation.Delete);
                         }
                     }
+                    // T-049：目录删除兜底——本地目录缺失且快照为目录且『曾在本机物化』(IsDownloaded=true)
+                    // → 入队 Delete，目录删除有 5 分钟兜底扫描（不再只依赖 FileSystemWatcher）。
+                    // 远端目录快照（IsDownloaded=false，未物化）不触发，防止空目录首次同步未物化时
+                    // 被误判为本地删除 → 删除-重建振荡（F-49）。
+                    else if (snapshot.Type == (int)CloudPan.Contract.FileType.Directory
+                        && snapshot.IsDownloaded)
+                    {
+                        _logger.LogInformation("全量扫描检测到本地目录删除: {Path}", snapshot.Path);
+                        await EnqueueLocalChangeAsync(snapshot.Path, SyncOperation.Delete);
+                    }
                     continue;
                 }
 

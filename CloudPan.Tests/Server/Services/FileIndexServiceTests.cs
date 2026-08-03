@@ -90,20 +90,23 @@ public class FileIndexServiceTests : Infrastructure.TestBase
         var dbFactory = CreateServerDbFactory();
         FileIndexService index = new FileIndexService(dbFactory);
 
-        await index.CreateDirectoryAsync("/parent/", 1);
+        // T-049：对齐生产无尾斜杠约定（T-046）——目录条目以无尾斜杠路径存储。
+        // 修复前仅前缀匹配（Path LIKE '/parent/%'）漏掉目录自身条目 → 目录 FileEntry 永不被墓碑化。
+        await index.CreateDirectoryAsync("/parent", 1);
         await index.UpsertFileAsync("/parent/child1.txt", FileType.File, "hash", 10,
             DateTime.UtcNow.ToString("O"), 2);
         await index.UpsertFileAsync("/parent/child2.txt", FileType.File, "hash", 20,
             DateTime.UtcNow.ToString("O"), 3);
 
-        var deleted = await index.SoftDeleteAsync("/parent/", isDirectory: true, newVersion: 9);
+        var deleted = await index.SoftDeleteAsync("/parent", isDirectory: true, newVersion: 9);
 
-        Assert.Contains("/parent/", deleted);
+        // 目录自身 + 后代均被墓碑化（F-49：目录自身条目不再被前缀匹配漏掉）
+        Assert.Contains("/parent", deleted);
         Assert.Contains("/parent/child1.txt", deleted);
         Assert.Contains("/parent/child2.txt", deleted);
 
         // 墓碑保留：所有条目均在，标记 Deleting 且版本号提升
-        Assert.Equal((int)FileState.Deleting, (await index.GetByPathAsync("/parent/"))!.State);
+        Assert.Equal((int)FileState.Deleting, (await index.GetByPathAsync("/parent"))!.State);
         Assert.Equal(9, (await index.GetByPathAsync("/parent/child1.txt"))!.Version);
         Assert.Equal((int)FileState.Deleting, (await index.GetByPathAsync("/parent/child2.txt"))!.State);
     }
@@ -284,9 +287,10 @@ public class FileIndexServiceTests : Infrastructure.TestBase
         var dbFactory = CreateServerDbFactory();
         FileIndexService index = new FileIndexService(dbFactory);
 
-        await index.CreateDirectoryAsync("/my-folder/", 1);
+        // T-049：对齐生产无尾斜杠约定（T-046）——目录条目以无尾斜杠路径存储
+        await index.CreateDirectoryAsync("/my-folder", 1);
 
-        var entry = await index.GetByPathAsync("/my-folder/");
+        var entry = await index.GetByPathAsync("/my-folder");
         Assert.NotNull(entry);
         Assert.Equal((int)FileType.Directory, entry.Type);
     }
@@ -297,10 +301,30 @@ public class FileIndexServiceTests : Infrastructure.TestBase
         var dbFactory = CreateServerDbFactory();
         FileIndexService index = new FileIndexService(dbFactory);
 
-        await index.CreateDirectoryAsync("/dup/", 1);
+        await index.CreateDirectoryAsync("/dup", 1);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            index.CreateDirectoryAsync("/dup/", 2));
+            index.CreateDirectoryAsync("/dup", 2));
+    }
+
+    // T-049：目录软删（墓碑保留窗口内）后同名重建——墓碑复活为 Synced，不再因已存在路径抛 409
+    [Fact]
+    public async Task CreateDirectory_同名墓碑_复活为Synced目录()
+    {
+        var dbFactory = CreateServerDbFactory();
+        FileIndexService index = new FileIndexService(dbFactory);
+
+        await index.CreateDirectoryAsync("/revive", 1);
+        await index.SoftDeleteAsync("/revive", isDirectory: true, newVersion: 2);
+
+        // 同名重建：墓碑条目复活为有效目录（不抛 InvalidOperationException）
+        await index.CreateDirectoryAsync("/revive", 3);
+
+        var entry = await index.GetByPathAsync("/revive");
+        Assert.NotNull(entry);
+        Assert.Equal((int)FileType.Directory, entry.Type);
+        Assert.Equal((int)FileState.Synced, entry.State);
+        Assert.Equal(3, entry.Version);
     }
 
     [Fact]
