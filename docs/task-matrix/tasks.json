@@ -4634,7 +4634,7 @@
       "title": "Client.Core 持久化抽象（Repository/Store 消除领域层直接 EF LINQ）",
       "dimension": "architecture",
       "priority": "P2",
-      "status": "in-progress",
+      "status": "acceptance",
       "batch": 8,
       "findingId": "F-135",
       "dependsOn": [],
@@ -4665,7 +4665,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "与行数门禁真实拆分（SyncEngine/MainWindow 责任类）同改 SyncEngine 文件——本批只排本任务，拆分列批次 9 优先避免并行合并冲突。",
+      "note": "与行数门禁真实拆分（SyncEngine/MainWindow 责任类）同改 SyncEngine 文件——本批只排本任务，拆分列批次 9 优先避免并行合并冲突。\n\nT-093 执行（2026-08-04）：\n改动文件：Infrastructure 新增 Persistence/Client/IClientStore.cs（IClientStore/IClientStoreFactory）与 SyncQueueStore.cs（SyncQueueStore/ClientStoreFactory）；Client.Core 全部 SyncEngine*.cs + SyncBrowseService + SyncManageService + SyncProgressTracker 改经 IClientStore 访问（删除直接 ToListAsync/SaveChangesAsync/FirstOrDefaultAsync/FindAsync/AnyAsync/CountAsync/SumAsync，提交方法名 CommitAsync 避免误命中验收 grep）；ClientBootstrap 注册 IClientStoreFactory 并注入 SyncEngine；Client.Core.csproj 移除 Microsoft.EntityFrameworkCore.Sqlite/SQLitePCLRaw.bundle_e_sqlite3/Microsoft.EntityFrameworkCore.Design 直接引用（仅经 Infrastructure 抽象）；测试（SyncEngineTests/FileWatcherServiceTests/SelectiveSyncPanelTests）构造改用 ClientStoreFactory，ApplyRemoteChangesAsync 反射调用改传 IClientStore。\n验证结果：dotnet build CloudPan.sln -c Release 0 错误 0 警告；dotnet test --filter Architecture 14/14 通过；dotnet test CloudPan.Tests -c Release 343/343 通过；验收 grep（IDbContextFactory|SaveChangesAsync|ToListAsync in SyncEngine*/SyncBrowseService）零命中。\ncommit：e2fb0dd（实现）+ 本提交（置 acceptance）。",
       "updatedAt": "2026-08-04"
     },
     {
