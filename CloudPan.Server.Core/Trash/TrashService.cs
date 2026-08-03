@@ -224,7 +224,7 @@ public class TrashService : ITrashService
     }
 
     /// <inheritdoc />
-    public Task MoveToTrashAsync(string relativePath, bool isDirectory)
+    public Task<string> MoveToTrashAsync(string relativePath, bool isDirectory)
     {
         string trashDir = GetTrashDir();
         Directory.CreateDirectory(trashDir);
@@ -232,7 +232,12 @@ public class TrashService : ITrashService
         string sourcePath = _storage.GetAbsolutePath(relativePath);
         string timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
         string fileName = Path.GetFileName(relativePath.TrimEnd('/'));
-        string trashFileName = $"{timestamp}_{fileName}";
+        // F-38/T-038：秒级时间戳 + 文件名在『同秒删除两个目录同名文件』时碰撞，
+        // File.Move 抛 IOException → 旧代码物理删除兜底 → 第二个文件永久丢失。
+        // 追加 GUID 保证回收站实体名唯一；meta 名 = 实体名 + ".json" 同步唯一化
+        // （客户端 SyncEngine.RestoreTrashAsync 依赖此命名：meta 文件名 = TrashFileName + ".json"）。
+        string uniqueSuffix = Guid.NewGuid().ToString("N");
+        string trashFileName = $"{timestamp}_{uniqueSuffix}_{fileName}";
         string trashFilePath = Path.Combine(trashDir, trashFileName);
 
         if (isDirectory && Directory.Exists(sourcePath))
@@ -253,10 +258,10 @@ public class TrashService : ITrashService
             DeletedAt = DateTime.UtcNow.ToString("O")
         };
 
-        string metaPath = Path.Combine(trashDir, $"{timestamp}_{fileName}.json");
+        string metaPath = Path.Combine(trashDir, $"{trashFileName}.json");
         File.WriteAllText(metaPath, JsonSerializer.Serialize(entry));
 
-        return Task.CompletedTask;
+        return Task.FromResult(Path.GetFileName(metaPath));
     }
 
     /// <summary>递归重建目录下所有子文件/子目录的索引（回收站恢复目录时，删除操作已移除全部子 FileEntry）。</summary>

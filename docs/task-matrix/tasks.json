@@ -1673,7 +1673,7 @@
       "title": "修复全量扫描误删下载中文件（远端新文件首次下载保护）",
       "dimension": "function",
       "priority": "P1",
-      "status": "acceptance",
+      "status": "done",
       "batch": 4,
       "findingId": "F-37",
       "dependsOn": [],
@@ -1705,7 +1705,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "修复全量扫描误删下载中文件（F-37）：RemoteSnapshot 新增 IsDownloaded 布尔标记「本地是否已落盘」——下载开始前创建的快照保持 false（远端新文件首次下载窗口），下载完成/上传成功/重命名目标置 true；FullScanCoreAsync 删除判定只对『曾落盘且本地缺失』的文件入队 Delete，且入队前检查 SyncQueue 该路径是否存在未决下载项（存在则跳过，待下载完成后再判定）。\n改动文件：CloudPan.Client.Core/Models/ClientDbContext.cs（RemoteSnapshot.IsDownloaded）；CloudPan.Client.Core/Services/SyncEngine.Scan.cs（MakeSnapshot 增 isDownloaded 参数：目录 true/CloudOnly 与首次下载快照 false；FullScanCore 删除判定 IsDownloaded+未决下载检查）；CloudPan.Client.Core/Services/SyncEngine.Transfers.cs（ProcessUpload/ProcessDownload/ProcessRename 成功路径置 IsDownloaded=true）；新增 EF 迁移 20260803024436_AddRemoteSnapshotIsDownloaded（dotnet ef 8.0.22 生成，存量库默认值 true 保持删除传播不回退）+ Designer + ModelSnapshot 更新；CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 FullScan_下载未完成快照_本地缺失_不误删、FullScan_存在未决下载项_已落盘快照本地缺失_不误删、ApplyRemoteChanges_新远端文件_快照未标记已落盘 三用例；FullScan_本地删除_入队删除 置 IsDownloaded=true 表征『曾落盘后被删』；DownloadPathAsync_处理队列 断言下载完成 IsDownloaded=true）；CloudPan.Tests/Infrastructure/MigrationsTests.cs（新增 IsDownloaded 列与迁移存在断言，覆盖全新库与旧库升级两路径）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter SyncEngine 48/48 通过（含新增下载窗口保护两路径）；全量 dotnet test CloudPan.Tests -c Release 251/251 通过。",
+      "note": "修复全量扫描误删下载中文件（F-37）：RemoteSnapshot 新增 IsDownloaded 布尔标记「本地是否已落盘」——下载开始前创建的快照保持 false（远端新文件首次下载窗口），下载完成/上传成功/重命名目标置 true；FullScanCoreAsync 删除判定只对『曾落盘且本地缺失』的文件入队 Delete，且入队前检查 SyncQueue 该路径是否存在未决下载项（存在则跳过，待下载完成后再判定）。\n改动文件：CloudPan.Client.Core/Models/ClientDbContext.cs（RemoteSnapshot.IsDownloaded）；CloudPan.Client.Core/Services/SyncEngine.Scan.cs（MakeSnapshot 增 isDownloaded 参数：目录 true/CloudOnly 与首次下载快照 false；FullScanCore 删除判定 IsDownloaded+未决下载检查）；CloudPan.Client.Core/Services/SyncEngine.Transfers.cs（ProcessUpload/ProcessDownload/ProcessRename 成功路径置 IsDownloaded=true）；新增 EF 迁移 20260803024436_AddRemoteSnapshotIsDownloaded（dotnet ef 8.0.22 生成，存量库默认值 true 保持删除传播不回退）+ Designer + ModelSnapshot 更新；CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 FullScan_下载未完成快照_本地缺失_不误删、FullScan_存在未决下载项_已落盘快照本地缺失_不误删、ApplyRemoteChanges_新远端文件_快照未标记已落盘 三用例；FullScan_本地删除_入队删除 置 IsDownloaded=true 表征『曾落盘后被删』；DownloadPathAsync_处理队列 断言下载完成 IsDownloaded=true）；CloudPan.Tests/Infrastructure/MigrationsTests.cs（新增 IsDownloaded 列与迁移存在断言，覆盖全新库与旧库升级两路径）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter SyncEngine 48/48 通过（含新增下载窗口保护两路径）；全量 dotnet test CloudPan.Tests -c Release 251/251 通过。\n【验收结论 2026-08-03】task-verifier 独立裁决：通过。验收标准①『dotnet test --filter SyncEngine』实测 48/48 通过（Failed 0 / Passed 48 / Skipped 0）；验收标准②『dotnet test CloudPan.Tests -c Release』实测 251/251 通过（Failed 0 / Passed 251 / Skipped 0）；验收标准③『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error。独立代码核查（不依赖执行者 note）：RemoteSnapshot.IsDownloaded（ClientDbContext.cs:95）真实存在；SyncEngine.Scan.cs:329-348 删除判定双重保护真实落位——本地缺失时仅『Type==File && IsDownloaded』入队 Delete，且入队前经 SyncQueue.AnyAsync(FilePath==path && Operation==Download) 检查未决下载项存在则跳过；MakeSnapshot 默认 isDownloaded=false（远端新文件首次下载窗口保护）；Transfers.cs 上传/下载/重命名成功路径均置 IsDownloaded=true（:106/:119/:240/:254/:342）；EF 迁移 20260803024436_AddRemoteSnapshotIsDownloaded 存在且存量库默认值 true 保持删除传播不回退。验收标准①要求的两路径用例均存在且通过：FullScan_下载未完成快照_本地缺失_不误删（下载未完成→扫描不误删）、FullScan_本地删除_入队删除（下载完成→删除传播）、FullScan_存在未决下载项_已落盘快照本地缺失_不误删（未决下载检查独立路径）、ApplyRemoteChanges_新远端文件_快照未标记已落盘、DownloadPathAsync_处理队列_下载到本地并转Synced。三条自动标准全过，无手动项。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -1713,7 +1713,7 @@
       "title": "回收站文件名唯一化，移入失败不再物理删除兜底",
       "dimension": "function",
       "priority": "P1",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 4,
       "findingId": "F-38",
       "dependsOn": [],
@@ -1744,8 +1744,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "【T-038 执行 2026-08-03】回收站文件名唯一化，移入失败不再物理删除兜底（F-38）。\n唯一化：TrashService.MoveToTrashAsync 回收站实体名由 {yyyyMMddHHmmss}_{fileName} 改为 {yyyyMMddHHmmss}_{GUID}_{fileName}（GUID N 格式，32 位十六进制），meta 名 = 实体名 + '.json' 同步唯一化——保持客户端 SyncEngine.RestoreTrashAsync『meta 文件名 = TrashFileName + \".json\"』命名不变量；MoveToTrashAsync 返回 meta 文件名（供软删失败回滚恢复）。\n删除顺序（DB+FS 一致）：FileOperationService.DeleteAsync 由『先软删索引→再移入回收站（失败物理删除兜底）』改为『先移入回收站（失败保留原文件返回错误）→再软删索引（失败经 _trash.RestoreAsync 回滚恢复原位）』——移入失败时索引未动、不向客户端传播假删除、可直接重试；删除原 _storage.Delete/_storage.DeleteDirectory 物理删除兜底（回收站唯一兜底路径不再静默丢数据）。\n改动文件：CloudPan.Server.Core/Trash/ITrashService.cs（MoveToTrashAsync 返回 Task<string> meta 文件名）、CloudPan.Server.Core/Trash/TrashService.cs（实体名加 GUID + meta 名同步唯一化）、CloudPan.Server.Core/Files/IFileOperationService.cs（DeleteAsync 注释更新）、CloudPan.Server.Core/Files/FileOperationService.cs（DeleteAsync 调整顺序+去兜底）、CloudPan.Tests/Server/Services/TrashServiceTests.cs（新增 MoveToTrash_同秒删除两个目录同名文件_均进回收站且可分别恢复，含 meta 命名不变量断言）、CloudPan.Tests/Server/Services/FileOperationServiceTests.cs（新增 ThrowingTrashService 桩 + Delete_MoveToTrash失败_保留原文件不物理删除，方法名含 Trash 子串可被验收 --filter Trash 命中）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Trash 23/23 通过（含新增同名碰撞与移入失败两用例）；全量 dotnet test CloudPan.Tests -c Release 253/253 通过（原 251 + 新增 2）；验收 grep -n '_storage.Delete' CloudPan.Server.Core/Files/FileOperationService.cs 无匹配（exit 1）。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-039",

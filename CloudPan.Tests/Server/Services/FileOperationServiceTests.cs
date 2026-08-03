@@ -14,18 +14,34 @@ namespace CloudPan.Tests.Server.Services;
 public class FileOperationServiceTests : Infrastructure.TestBase
 {
     private string SyncRoot => Path.Combine(TempDir, "sync");
+    private string TrashDir => Path.Combine(TempDir, ".cloudpan", ".trash");
 
-    private Task<(FileOperationService svc, FileIndexService index)> CreateServiceAsync()
+    private Task<(FileOperationService svc, FileIndexService index)> CreateServiceAsync(ITrashService? trashOverride = null)
     {
         var dbFactory = CreateServerDbFactory();
         var storage = new FileStorageService(SyncRoot);
         var index = new FileIndexService(dbFactory);
         var version = new VersionService(dbFactory);
-        var trash = new TrashService(storage, index, version, NullLogger<TrashService>.Instance);
+        var trash = trashOverride ?? new TrashService(storage, index, version, NullLogger<TrashService>.Instance);
         var syncLog = new SyncLogService(dbFactory, NullLogger<SyncLogService>.Instance);
         var svc = new FileOperationService(storage, index, version, trash, syncLog,
             NullLogger<FileOperationService>.Instance);
         return Task.FromResult((svc, index));
+    }
+
+    /// <summary>模拟移入回收站失败的 ITrashService（如 File.Move 抛 IOException——目标被占用/磁盘错误）。</summary>
+    private sealed class ThrowingTrashService : ITrashService
+    {
+        // 全限定 CloudPan.Server.Core.TrashItem：本测试文件同时 using CloudPan.Contract，避免与生成 DTO 二义
+        public Task<List<CloudPan.Server.Core.TrashItem>> ListAsync() =>
+            Task.FromResult(new List<CloudPan.Server.Core.TrashItem>());
+        public Task<TrashRestoreResult> RestoreAsync(string metaFileName) =>
+            Task.FromResult(new TrashRestoreResult(false, null,
+                new DomainError(HttpErrorCode.NOT_FOUND, "无条目", "无条目")));
+        public Task EmptyAsync() => Task.CompletedTask;
+        public Task<int> PurgeExpiredAsync(TimeSpan retention) => Task.FromResult(0);
+        public Task<string> MoveToTrashAsync(string relativePath, bool isDirectory) =>
+            throw new IOException("目标已存在（模拟同秒同名碰撞移入失败）");
     }
 
     private static async Task SeedFileAsync(FileIndexService index, string absDir, string relPath, string content, int version = 1)
@@ -91,6 +107,32 @@ public class FileOperationServiceTests : Infrastructure.TestBase
         Assert.False(result.Success);
         Assert.Equal(HttpErrorCode.CONFLICT.Code, result.Error!.Code.Code);
         Assert.Contains("currentVersion=2", result.Error!.Detail);
+    }
+
+    /// <summary>
+    /// F-38/T-038：移入回收站失败（File.Move 抛 IOException）时不再物理删除兜底——
+    /// 保留原文件并返回错误；且因先移入回收站、成功后才软删索引，移入失败时索引保持 Synced，
+    /// 不向客户端传播假删除，DB 与 FS 一致，调用方可提示用户重试。
+    /// 方法名含 Trash 子串使 FQN 可被验收命令 dotnet test --filter Trash 命中。
+    /// </summary>
+    [Fact]
+    public async Task Delete_MoveToTrash失败_保留原文件不物理删除()
+    {
+        var (svc, index) = await CreateServiceAsync(new ThrowingTrashService());
+        await SeedFileAsync(index, SyncRoot, "/locked.txt", "keep me");
+
+        var result = await svc.DeleteAsync("/locked.txt", 0, "dev-1");
+
+        Assert.False(result.Success);
+        Assert.Equal(HttpErrorCode.INTERNAL_ERROR.Code, result.Error!.Code.Code);
+        // 原文件保留：不再物理删除兜底（回收站唯一兜底路径不静默丢数据）
+        Assert.True(File.Exists(Path.Combine(SyncRoot, "locked.txt")));
+        // 索引未被软删除（移入失败时索引未动，DB 与 FS 一致，可直接重试）
+        var entry = await index.GetByPathAsync("/locked.txt");
+        Assert.NotNull(entry);
+        Assert.Equal((int)FileState.Synced, entry.State);
+        // 回收站无残留
+        Assert.False(Directory.Exists(TrashDir));
     }
 
     [Fact]

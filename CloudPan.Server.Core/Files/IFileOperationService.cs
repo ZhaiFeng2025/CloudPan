@@ -23,7 +23,7 @@ public sealed record UploadConflictResult(string ConflictPath, int CurrentVersio
 /// </summary>
 public interface IFileOperationService
 {
-    /// <summary>删除文件/目录：先删索引、再移入回收站（失败兜底物理删除），写入审计日志。</summary>
+    /// <summary>删除文件/目录：先移入回收站（失败保留原文件返回错误）、再软删索引，写入审计日志。</summary>
     Task<FileDeleteResult> DeleteAsync(string path, int baseVersion, string deviceId);
 
     /// <summary>移动/重命名：先更新索引、再移动物理文件（失败回滚索引），写入审计日志。</summary>

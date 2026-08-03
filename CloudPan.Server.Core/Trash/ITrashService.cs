@@ -24,6 +24,6 @@ public interface ITrashService
     /// <summary>清理超过保留期的回收站条目（过期实体 + 元数据一并删除）。返回清理的条目数。</summary>
     Task<int> PurgeExpiredAsync(TimeSpan retention);
 
-    /// <summary>将文件/目录移入回收站（写入元数据记录）。</summary>
-    Task MoveToTrashAsync(string relativePath, bool isDirectory);
+    /// <summary>将文件/目录移入回收站（写入元数据记录）。返回元数据文件名（供移入后索引软删失败时回滚恢复）。</summary>
+    Task<string> MoveToTrashAsync(string relativePath, bool isDirectory);
 }

@@ -107,6 +107,56 @@ public class TrashServiceTests : Infrastructure.TestBase
     }
 
     /// <summary>
+    /// F-38/T-038：两个目录下同名文件同一秒删除（批量删除/重复清理真实场景）——
+    /// 回收站文件名含 GUID 唯一化，第二个文件不再因 File.Move 目标已存在抛 IOException 被物理删除兜底丢失，
+    /// 两个文件均进回收站且可分别恢复；meta 文件名 = TrashFileName + ".json" 不变量（客户端 SyncEngine.RestoreTrashAsync 依赖）不漂移。
+    /// </summary>
+    [Fact]
+    public async Task MoveToTrash_同秒删除两个目录同名文件_均进回收站且可分别恢复()
+    {
+        var dbFactory = CreateServerDbFactory();
+        var storage = new FileStorageService(SyncRoot);
+        var index = new FileIndexService(dbFactory);
+        var version = new VersionService(dbFactory);
+        var svc = new TrashService(storage, index, version, NullLogger<TrashService>.Instance);
+
+        // 两个目录下同名文件
+        Directory.CreateDirectory(Path.Combine(SyncRoot, "dirA"));
+        Directory.CreateDirectory(Path.Combine(SyncRoot, "dirB"));
+        await File.WriteAllTextAsync(Path.Combine(SyncRoot, "dirA", "same.txt"), "AA");
+        await File.WriteAllTextAsync(Path.Combine(SyncRoot, "dirB", "same.txt"), "BB");
+        await index.UpsertFileAsync("/dirA/same.txt", FileType.File, "hashA", 2, DateTime.UtcNow.ToString("O"), 1);
+        await index.UpsertFileAsync("/dirB/same.txt", FileType.File, "hashB", 2, DateTime.UtcNow.ToString("O"), 2);
+
+        // 背靠背移入（同秒场景：秒级时间戳相同，靠 GUID 保证实体名唯一）
+        await svc.MoveToTrashAsync("/dirA/same.txt", isDirectory: false);
+        await svc.MoveToTrashAsync("/dirB/same.txt", isDirectory: false);
+
+        // 两个文件均进回收站（实体、元数据各 2），且实体文件名互不相同（文件名唯一化）
+        string[] entities = Directory.GetFiles(TrashDir).Where(f => !f.EndsWith(".json")).ToArray();
+        string[] metas = Directory.GetFiles(TrashDir, "*.json");
+        Assert.Equal(2, entities.Length);
+        Assert.Equal(2, metas.Length);
+        Assert.Equal(2, entities.Select(Path.GetFileName).Distinct().Count());
+
+        // meta 文件名 = TrashFileName + ".json"（客户端 SyncEngine.RestoreTrashAsync 恢复依赖的命名不变量）
+        foreach (string meta in metas)
+        {
+            var node = JsonNode.Parse(await File.ReadAllTextAsync(meta))!.AsObject();
+            Assert.Equal(Path.GetFileName(meta), node["TrashFileName"]!.GetValue<string>() + ".json");
+        }
+
+        // 两个文件均可分别恢复
+        foreach (string meta in metas)
+        {
+            var result = await svc.RestoreAsync(Path.GetFileName(meta));
+            Assert.True(result.Success);
+        }
+        Assert.True(File.Exists(Path.Combine(SyncRoot, "dirA", "same.txt")));
+        Assert.True(File.Exists(Path.Combine(SyncRoot, "dirB", "same.txt")));
+    }
+
+    /// <summary>
     /// F-24/T-024 路径穿越拒绝：MetaFileName 为用户输入，含目录分隔符（/、\）或绝对路径的穿越
     /// 一律返回 BAD_REQUEST，且不得读取/删除 trashDir 之外的文件。
     /// </summary>

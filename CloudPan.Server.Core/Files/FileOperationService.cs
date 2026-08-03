@@ -68,24 +68,38 @@ public class FileOperationService : IFileOperationService
         // 分配新版本号（软删除墓碑据此传播给客户端增量同步）
         int newVersion = await _version.NextVersionAsync();
 
-        // 软删除墓碑：FileEntry 行保留并标记 FileState.Deleting，客户端树查询据其删除本地副本
-        //（失败则抛异常，文件保持原样，索引与 FS 一致）
-        await _index.SoftDeleteAsync(path, isDirectory, newVersion);
-
-        // 再移入回收站（FS）；失败则物理删除兜底，避免孤儿文件
+        // 先移入回收站（FS），成功后软删索引（DB）——DB 与 FS 任一步失败文件都保持可恢复：
+        //   · 移入失败：索引未动、原文件保留并返回错误（不再物理删除兜底——回收站是删除唯一可恢复路径，
+        //     兜底物理删除 = 静默永久丢数据，F-38；且不向客户端传播假删除，调用方可提示用户重试）；
+        //   · 软删失败：把已移入回收站的文件回滚恢复原位，保持 DB 与 FS 一致。
+        string metaFileName;
         try
         {
-            await _trash.MoveToTrashAsync(path, isDirectory);
+            metaFileName = await _trash.MoveToTrashAsync(path, isDirectory);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "移入回收站失败，尝试物理删除: {Path}", path);
-            try
+            _logger.LogWarning(ex, "移入回收站失败，保留原文件: {Path}", path);
+            return new FileDeleteResult(false, null, null,
+                new DomainError(HttpErrorCode.INTERNAL_ERROR, $"移入回收站失败: {ex.Message}", "删除失败，请稍后重试"));
+        }
+
+        try
+        {
+            // 软删除墓碑：FileEntry 行保留并标记 FileState.Deleting，客户端树查询据其删除本地副本
+            await _index.SoftDeleteAsync(path, isDirectory, newVersion);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "软删除失败，回滚回收站移动: {Path}", path);
+            var rollback = await _trash.RestoreAsync(metaFileName);
+            if (!rollback.Success)
             {
-                if (isDirectory) { _storage.DeleteDirectory(path); }
-                else { _storage.Delete(path); }
+                _logger.LogError("回滚回收站移动失败——文件已存于回收站（元数据 {Meta}），需手动恢复: {Path}（{Reason}）",
+                    metaFileName, path, rollback.Error?.UserMessage ?? rollback.Error?.Message);
             }
-            catch (Exception ex2) { _logger.LogWarning(ex2, "物理删除失败: {Path}", path); }
+            return new FileDeleteResult(false, null, null,
+                new DomainError(HttpErrorCode.INTERNAL_ERROR, $"删除失败: {ex.Message}", "删除失败，请稍后重试"));
         }
 
         // 写入审计日志（删除成功）
