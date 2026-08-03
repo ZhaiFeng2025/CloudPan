@@ -89,6 +89,8 @@ public class RemoteSnapshot
     public long Size { get; set; }
     public int Version { get; set; }
     public int State { get; set; }
+    /// <summary>服务端最后修改时间（ISO 8601 字符串，来自 /api/tree 的 lastModified；供冲突展示远程版本真实时间）。</summary>
+    public string? LastModified { get; set; }
 }
 
 /// <summary>同步游标（单行表）。</summary>

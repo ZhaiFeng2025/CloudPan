@@ -1,3 +1,4 @@
+using System.Globalization;
 using CloudPan.Client.Core.Models;
 using CloudPan.Contract;
 using Microsoft.EntityFrameworkCore;
@@ -39,6 +40,7 @@ public partial class SyncEngine
 
             string? remoteHash = null;
             long? remoteSize = null;
+            string? remoteLastModified = null; // T-036：远程真实修改时间来自 /api/tree 快照
             try
             {
                 await using var snapDb = await _dbFactory.CreateDbContextAsync(ct);
@@ -47,10 +49,12 @@ public partial class SyncEngine
                 {
                     remoteHash = remoteSnapshot.Hash;
                     remoteSize = remoteSnapshot.Size;
+                    remoteLastModified = remoteSnapshot.LastModified;
                 }
             }
             catch (Exception snapEx) { _logger.LogWarning(snapEx, "获取远程快照失败（非关键）"); }
 
+            DateTime? remoteModifiedTime = ParseRemoteLastModified(remoteLastModified);
             ConflictInfo conflictInfo = new ConflictInfo(
                 RelativePath: item.FilePath,
                 LocalPath: localPath,
@@ -59,7 +63,7 @@ public partial class SyncEngine
                 LocalFileSize: localSize,
                 RemoteFileSize: remoteSize,
                 RemoteHash: remoteHash
-            );
+            ) with { RemoteModifiedTime = remoteModifiedTime };
 
             _pendingConflicts.TryAdd(item.FilePath, conflictInfo);
             ConflictDetected?.Invoke(conflictInfo);
@@ -98,6 +102,7 @@ public partial class SyncEngine
             snapshot.Version = result?.Data.Version ?? snapshot.Version;
             snapshot.Hash = result?.Data.Hash ?? snapshot.Hash;
             snapshot.State = (int)CloudPan.Contract.FileState.Synced;
+            snapshot.LastModified = lastModified; // T-036：快照记录远程修改时间（与上传携带值一致）
         }
         else if (result != null)
         {
@@ -108,7 +113,8 @@ public partial class SyncEngine
                 Hash = result.Data.Hash,
                 Size = result.Data.Size,
                 Version = result.Data.Version,
-                State = (int)CloudPan.Contract.FileState.Synced
+                State = (int)CloudPan.Contract.FileState.Synced,
+                LastModified = lastModified
             });
         }
         await db.SaveChangesAsync();
@@ -135,6 +141,7 @@ public partial class SyncEngine
                     var localModified = File.GetLastWriteTimeUtc(localPath);
                     long currentLocalSize = new FileInfo(localPath).Length;
 
+                    DateTime? remoteModifiedTime = ParseRemoteLastModified(snapshot.LastModified); // T-036：来自 /api/tree 快照
                     ConflictInfo conflictInfo = new ConflictInfo(
                         RelativePath: item.FilePath,
                         LocalPath: localPath,
@@ -143,7 +150,7 @@ public partial class SyncEngine
                         LocalFileSize: currentLocalSize,
                         RemoteFileSize: item.FileSize,
                         RemoteHash: snapshot.Hash
-                    );
+                    ) with { RemoteModifiedTime = remoteModifiedTime };
 
                     _pendingConflicts.TryAdd(item.FilePath, conflictInfo);
                     ConflictDetected?.Invoke(conflictInfo);
@@ -227,6 +234,7 @@ public partial class SyncEngine
             dbSnapshot.Hash = downloadedHash;
             dbSnapshot.Size = downloadedSize;
             dbSnapshot.State = (int)CloudPan.Contract.FileState.Synced;
+            dbSnapshot.LastModified = result?.LastModified; // T-036：快照记录远程真实修改时间
         }
         else
         {
@@ -238,7 +246,8 @@ public partial class SyncEngine
                 Hash = downloadedHash,
                 Size = downloadedSize,
                 Version = item.BaseVersion ?? 0,
-                State = (int)CloudPan.Contract.FileState.Synced
+                State = (int)CloudPan.Contract.FileState.Synced,
+                LastModified = result?.LastModified
             });
         }
         await db.SaveChangesAsync();
@@ -324,7 +333,8 @@ public partial class SyncEngine
             Hash = snapshot?.Hash,
             Size = snapshot?.Size ?? 0,
             Version = item.BaseVersion ?? snapshot?.Version ?? 0,
-            State = (int)CloudPan.Contract.FileState.Synced
+            State = (int)CloudPan.Contract.FileState.Synced,
+            LastModified = snapshot?.LastModified // T-036：跟随旧快照的远程修改时间
         });
         await db.SaveChangesAsync();
         _logger.LogInformation("重命名完成: {Old} → {New}", item.FilePath, item.TargetPath);
@@ -344,5 +354,19 @@ public partial class SyncEngine
         });
         await db.SaveChangesAsync();
         _logger.LogInformation("按需下载入队: {Path}", path);
+    }
+
+    /// <summary>解析 /api/tree 的 lastModified（ISO 8601）为本地时间；解析失败返回 null（远程版本面板显示未知）。</summary>
+    private static DateTime? ParseRemoteLastModified(string? lastModified)
+    {
+        if (string.IsNullOrEmpty(lastModified))
+        {
+            return null;
+        }
+        if (DateTime.TryParse(lastModified, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out DateTime dt))
+        {
+            return dt.ToLocalTime();
+        }
+        return null;
     }
 }

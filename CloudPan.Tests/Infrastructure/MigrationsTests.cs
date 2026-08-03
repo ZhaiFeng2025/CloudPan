@@ -106,11 +106,18 @@ public class MigrationsTests : IDisposable
         using ClientDbContext db = CreateClientDb(dbPath);
         db.Database.Migrate();
 
-        Assert.Contains("InitialCreate", db.Database.GetAppliedMigrations().Single());
+        // T-036 起客户端有两个迁移（InitialCreate + AddRemoteSnapshotLastModified），不再用 Single() 断言
+        var applied = db.Database.GetAppliedMigrations().ToList();
+        Assert.Contains(applied, m => m.Contains("InitialCreate"));
+        Assert.Contains(applied, m => m.Contains("AddRemoteSnapshotLastModified"));
         List<string> tables = TableNames(db);
         Assert.Contains("__EFMigrationsHistory", tables);
         foreach (string t in new[] { "SyncQueue", "RemoteSnapshots", "SyncCursor" })
             Assert.Contains(t, tables);
+        // T-036：RemoteSnapshots 已补 LastModified 列
+        Assert.True(db.Database.SqlQueryRaw<int>(
+                "SELECT COUNT(*) FROM pragma_table_info('RemoteSnapshots') WHERE name='LastModified';")
+            .ToList().First() > 0);
     }
 
     [Fact]
@@ -167,7 +174,10 @@ public class MigrationsTests : IDisposable
         using (ClientDbContext db = CreateClientDb(dbPath))
         {
             Assert.True(SyncQueueHasTargetPath(db));
-            Assert.Contains("InitialCreate", db.Database.GetAppliedMigrations().Single());
+            // T-036 起客户端有两个迁移，不再用 Single() 断言
+            var applied = db.Database.GetAppliedMigrations().ToList();
+            Assert.Contains(applied, m => m.Contains("InitialCreate"));
+            Assert.Contains(applied, m => m.Contains("AddRemoteSnapshotLastModified"));
             SyncQueueItem row = db.SyncQueue.Single();
             Assert.Equal("/old.txt", row.FilePath);
             Assert.Equal(0, row.RetryCount);

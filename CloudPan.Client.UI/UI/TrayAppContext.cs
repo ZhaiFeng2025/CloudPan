@@ -115,7 +115,11 @@ public class TrayAppContext : ApplicationContext
         }
     }
 
-    /// <summary>冲突检测 → 托盘气泡 + 警告图标。</summary>
+    /// <summary>
+    /// 冲突检测 → 托盘气泡 + 警告图标。
+    /// T-036：聚合与非模态列表由 MainWindow.OnConflictDetected（引擎事件直接订阅）负责，
+    /// 此处不再调用 ShowConflictWarning，避免同一冲突被二次加入/重复弹窗。
+    /// </summary>
     private void OnConflictDetected(ConflictInfo conflictInfo)
     {
         string path = conflictInfo.RelativePath;
@@ -128,8 +132,6 @@ public class TrayAppContext : ApplicationContext
             _trayIcon.Text = "CloudPan — 文件冲突";
             _trayIcon.ShowBalloonTip(5000, "CloudPan — 文件冲突",
                 $"检测到文件冲突: {path}\n点击查看详情", ToolTipIcon.Warning);
-
-            _mainWindow.ShowConflictWarning(path);
         }, null);
     }
 
@@ -269,14 +271,11 @@ public class TrayAppContext : ApplicationContext
             _isPaused ? ToolTipIcon.Warning : ToolTipIcon.Info);
     }
 
-    /// <summary>查看冲突菜单项。</summary>
+    /// <summary>查看冲突菜单项：打开主窗的非模态聚合冲突列表（T-036）。</summary>
     private void ConflictItem_Click(object? sender, EventArgs e)
     {
         ShowWindow();
-        if (_conflictPaths.TryDequeue(out string? lastPath))
-        {
-            _mainWindow.ShowConflictWarning(lastPath);
-        }
+        _mainWindow.ShowConflictList();
     }
 
     /// <summary>开机自启菜单项：切换并持久化状态。</summary>

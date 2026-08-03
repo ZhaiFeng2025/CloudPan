@@ -514,6 +514,56 @@ public class SyncEngineTests : IDisposable
         Assert.Equal(1, remaining);
     }
 
+    // T-036：409 冲突的 RemoteModifiedTime 从 /api/tree 快照的 LastModified 取真实时间（不再恒 null）
+    [Fact]
+    public async Task ProcessUpload_双设备并发编辑409_冲突信息带真实远程修改时间()
+    {
+        string filePath = Path.Combine(_syncRoot, "remote-mod.txt");
+        await File.WriteAllTextAsync(filePath, "本机编辑内容");
+
+        // 设备 A 两次上传（服务端 v1 → v2）；设备 B 的快照停留在 v1，含 /api/tree 的 lastModified
+        await _api.UploadAsync(filePath, "/remote-mod.txt", baseVersion: 0, lastModified: DateTime.UtcNow.ToString("O"));
+        await _api.UploadAsync(filePath, "/remote-mod.txt", baseVersion: 1, lastModified: DateTime.UtcNow.ToString("O"));
+
+        DateTime remoteModifiedUtc = new DateTime(2026, 8, 2, 9, 30, 0, DateTimeKind.Utc);
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.Add(new RemoteSnapshot
+            {
+                Path = "/remote-mod.txt", Type = 0, Size = new FileInfo(filePath).Length,
+                Version = 1, State = 0, Hash = "hash-v1",
+                LastModified = remoteModifiedUtc.ToString("O") // T-036：快照记录远程真实修改时间
+            });
+            await setupDb.SaveChangesAsync();
+        }
+
+        await _engine.EnqueueLocalChangeAsync("/remote-mod.txt", SyncOperation.Upload);
+
+        ConflictInfo? conflictInfo = null;
+        _conflictHandler = ci => { conflictInfo = ci; };
+        _engine.ConflictDetected += _conflictHandler;
+        try
+        {
+            var method = typeof(SyncEngine).GetMethod("ProcessQueueAsync",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            Assert.NotNull(method);
+            Task? task = (Task?)method!.Invoke(_engine, [CancellationToken.None]);
+            Assert.NotNull(task);
+            await task;
+        }
+        finally
+        {
+            _engine.ConflictDetected -= _conflictHandler;
+            _conflictHandler = null;
+        }
+
+        Assert.NotNull(conflictInfo);
+        Assert.Equal("/remote-mod.txt", conflictInfo!.RelativePath);
+        // 远程版本面板展示真实修改时间（本地时区），不再是「未知」
+        Assert.NotNull(conflictInfo.RemoteModifiedTime);
+        Assert.Equal(remoteModifiedUtc, conflictInfo.RemoteModifiedTime!.Value.ToUniversalTime());
+    }
+
     // ============================================================
     // 连续 401 触发重配引导测试（F-34/T-034）
     // ============================================================

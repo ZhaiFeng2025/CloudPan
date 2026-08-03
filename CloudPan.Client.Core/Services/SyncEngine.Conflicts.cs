@@ -103,4 +103,25 @@ public partial class SyncEngine
         NotifyStatus("冲突已解决: " + relativePath);
         ConflictResolved?.Invoke(relativePath);
     }
+
+    /// <summary>
+    /// 下载服务端当前版本到临时目录，返回临时文件路径（用于冲突解决时的「打开两版本对比」）。
+    /// 下载失败或服务端无此文件返回 null。
+    /// </summary>
+    public async Task<string?> DownloadRemoteToTempAsync(string relativePath, CancellationToken ct = default)
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), "CloudPanCompare");
+        Directory.CreateDirectory(tempDir);
+        string ext = Path.GetExtension(relativePath);
+        string tempPath = Path.Combine(tempDir,
+            $"{Path.GetFileNameWithoutExtension(relativePath)}.remote{DateTime.Now:yyyyMMddHHmmss}{ext}");
+
+        var result = await _api.DownloadAsync(relativePath, tempPath, ct: ct);
+        if (result == null || !File.Exists(tempPath))
+        {
+            return null;
+        }
+        _logger.LogInformation("已下载服务端版本到临时文件供对比: {Path} → {Temp}", relativePath, tempPath);
+        return tempPath;
+    }
 }

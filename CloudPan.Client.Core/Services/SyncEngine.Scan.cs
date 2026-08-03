@@ -163,6 +163,7 @@ public partial class SyncEngine
                 {
                     snapshot.Version = item.Version;
                     snapshot.State = item.State;
+                    snapshot.LastModified = item.LastModified; // T-036：远程修改时间跟随快照
                 }
                 continue;
             }
@@ -177,6 +178,7 @@ public partial class SyncEngine
                 else
                 {
                     snapshot.State = (int)FileState.CloudOnly;
+                    snapshot.LastModified = item.LastModified; // T-036：远程修改时间跟随快照
                 }
 
                 continue;
@@ -190,6 +192,7 @@ public partial class SyncEngine
                     // 哈希相同 → 内容未变，直接更新版本号
                     snapshot.Version = item.Version;
                     snapshot.State = item.State;
+                    snapshot.LastModified = item.LastModified; // T-036：远程修改时间跟随快照
                     _logger.LogInformation($"跳过下载（哈希未变）: {item.Path}");
                 }
                 else
@@ -228,7 +231,8 @@ public partial class SyncEngine
         Hash = item.CurrentHash,
         Size = item.CurrentSize,
         Version = item.Version,
-        State = state
+        State = state,
+        LastModified = item.LastModified
     };
 
     // ============================================================
