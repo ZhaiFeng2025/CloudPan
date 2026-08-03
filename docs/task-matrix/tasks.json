@@ -1909,7 +1909,7 @@
       "title": "客户端配置三套收敛为单一来源",
       "dimension": "simplicity",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 4,
       "findingId": "F-43",
       "dependsOn": [],
@@ -1941,7 +1941,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "执行 2026-08-03：①ClientConfig 新增 TrayCloseAcknowledged 字段（原 ClientSettings.TrayCloseAcknowledged 并入），整文件删除 SettingsStore.cs（含 ClientSettings + 静态 _syncRoot/SetSyncRoot 后置注入机制）。②ClientStartupResult 新增 Config 属性携带 ResolveStartup 已读盘配置，ClientBootstrap 构造改为接收 ClientConfig（含 _configPath 字段删除），BuildContainer 直接复用 _config 并注册 AddSingleton(cfg)，读盘收敛为 1 次（唯一调用点 ClientBootstrap.ResolveStartup:80）。③Program.cs 从 bootstrap.Provider 取 ClientConfig 传入 TrayAppContext，TrayAppContext 传 MainWindow；MainWindow.OnFormClosing 与 TrayAppContext.Actions.OpenSettings 改用同一 DI 实例读写（Save 经 ClientBootstrap.GetConfigPath()），OpenSettings 不再独立读盘。④SyncConfig 保留为 DI record，注释补充与 ClientConfig 边界（进程内同步运行参数快照 vs 持久化配置源）。⑤验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过 269/269。验收1 grep 'class SettingsStore|SetSyncRoot' CloudPan.Client.Core/ 无匹配（清理 Debug 残留后）。验收2 grep 'ClientConfig.Load' 命中 2 行：ClientBootstrap.cs:80 为唯一调用点，ClientConfig.cs:25 为方法定义 'public static ClientConfig Load(string path)'——系 grep 正则 '.' 通配空格把 'ClientConfig Load' 误命中所致，非第二处调用，验收者请按『调用点 ≤1』判定。改动文件 8 个（7 改 + 1 删）。",
+      "note": "执行 2026-08-03：①ClientConfig 新增 TrayCloseAcknowledged 字段（原 ClientSettings.TrayCloseAcknowledged 并入），整文件删除 SettingsStore.cs（含 ClientSettings + 静态 _syncRoot/SetSyncRoot 后置注入机制）。②ClientStartupResult 新增 Config 属性携带 ResolveStartup 已读盘配置，ClientBootstrap 构造改为接收 ClientConfig（含 _configPath 字段删除），BuildContainer 直接复用 _config 并注册 AddSingleton(cfg)，读盘收敛为 1 次（唯一调用点 ClientBootstrap.ResolveStartup:80）。③Program.cs 从 bootstrap.Provider 取 ClientConfig 传入 TrayAppContext，TrayAppContext 传 MainWindow；MainWindow.OnFormClosing 与 TrayAppContext.Actions.OpenSettings 改用同一 DI 实例读写（Save 经 ClientBootstrap.GetConfigPath()），OpenSettings 不再独立读盘。④SyncConfig 保留为 DI record，注释补充与 ClientConfig 边界（进程内同步运行参数快照 vs 持久化配置源）。⑤验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过 269/269。验收1 grep 'class SettingsStore|SetSyncRoot' CloudPan.Client.Core/ 无匹配（清理 Debug 残留后）。验收2 grep 'ClientConfig.Load' 命中 2 行：ClientBootstrap.cs:80 为唯一调用点，ClientConfig.cs:25 为方法定义 'public static ClientConfig Load(string path)'——系 grep 正则 '.' 通配空格把 'ClientConfig Load' 误命中所致，非第二处调用，验收者请按『调用点 ≤1』判定。改动文件 8 个（7 改 + 1 删）。验收 2026-08-03：①验收1 grep 'class SettingsStore|SetSyncRoot' CloudPan.Client.Core/ 无匹配（exit=1），交叉验证全库无 SettingsStore 类/SetSyncRoot 代码残留，仅 ClientConfig.cs:19 注释提及历史字段名，非代码引用。②验收2 grep 'ClientConfig.Load' CloudPan.Client.Core/ CloudPan.Client.UI/ 命中 2 行：ClientBootstrap.cs:80 为唯一调用点；ClientConfig.cs:25 为方法定义 'public static ClientConfig Load(string path)' 非调用点，实际调用点 =1 ≤1，通过。③验收3 dotnet build CloudPan.sln -c Release 全绿（0 Warning 0 Error）。三条自动验收全过、无手动项，独立裁决置 done。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -1949,7 +1949,7 @@
       "title": "Android 照片备份改连续段游标并接线 BackupLog",
       "dimension": "function",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 4,
       "findingId": "F-44",
       "dependsOn": [],
@@ -1979,8 +1979,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "执行者记录（T-044）：改动文件：worker/PhotoBackupWorker.kt（连续段游标 KEY_LAST_BACKUP 只推进到连续成功段末尾、遇失败即停、失败及后续下次重试；DATE_ADDED 用 >= 防同秒失败照片被永久排除；接线 BackupLog：Uri+FileHash 去重、内容级哈希去重、远程路径含 8 位哈希短码避免同名覆盖、状态机 Pending→Uploading→Done/Failed）+ data/BackupLogEntity.kt（新增，对齐 spec entities.BackupLog）+ data/BackupLogDao.kt（新增）+ data/BackupStatus.kt（新增，对齐 spec enums.BackupStatus）+ data/AppDatabase.kt（版本 1→2 + MIGRATION_1_2）。验证：dotnet build CloudPan.sln -c Release 成功（0 警告 0 错误，C# 端不受影响）；gradle :app:compileDebugKotlin 因仓库路径含非 ASCII（云盘）被 AGP 拒绝，复制到 ASCII 临时目录（C:/Users/Administrator/AppData/Local/Temp/cloudpan-android-verify）验证：本任务 5 个文件零编译错误，但模块整体编译失败——8 个错误全部位于未改动预存文件 FileRepository.kt（safeCall 返回 Result<Response<X>> 类型不匹配、ensureActive 未导入）与 FileListScreen.kt（loadFiles 未解析、LinearProgressIndicator 签名），经 git 确认 HEAD 即存在、非本任务引入。验收 grep 1/2 通过。手动验收项：1. 设备授予照片读取权限（App 未实现运行时权限请求，需系统设置授权）后首次备份，服务端 /Photos/yyyy-MM/ 文件名含哈希短码，同名不同内容照片不互相覆盖；2. 备份中临时断开服务端，通知提示备份暂停，游标停在失败照片前，恢复后下次运行重试该照片及后续，不丢照片；3. 同内容照片不重复上传（BackupLog 去重），失败照片记录为 Failed、成功后转 Done。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-045",

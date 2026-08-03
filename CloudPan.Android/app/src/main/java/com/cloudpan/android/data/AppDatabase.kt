@@ -4,17 +4,40 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 /**
  * CloudPan Android 本地 Room 数据库。
  */
-@Database(entities = [OfflineCacheEntity::class], version = 1, exportSchema = false)
+@Database(
+    entities = [OfflineCacheEntity::class, BackupLogEntity::class],
+    version = 2,
+    exportSchema = false
+)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun offlineCacheDao(): OfflineCacheDao
+    abstract fun backupLogDao(): BackupLogDao
 
     companion object {
         @Volatile
         private var INSTANCE: AppDatabase? = null
+
+        /** v1→v2：新增 BackupLog 表（与 shared-spec.json → entities.BackupLog 列对齐）。 */
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `BackupLog` (" +
+                        "`id` INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, " +
+                        "`localUri` TEXT NOT NULL, " +
+                        "`remotePath` TEXT NOT NULL, " +
+                        "`fileHash` TEXT NOT NULL, " +
+                        "`fileSize` INTEGER NOT NULL, " +
+                        "`status` INTEGER NOT NULL, " +
+                        "`createdAt` TEXT NOT NULL)"
+                )
+            }
+        }
 
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -22,7 +45,10 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "cloudpan_cache.db"
-                ).build().also { INSTANCE = it }
+                )
+                    .addMigrations(MIGRATION_1_2)
+                    .build()
+                    .also { INSTANCE = it }
             }
         }
     }
