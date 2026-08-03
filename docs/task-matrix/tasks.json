@@ -4439,7 +4439,7 @@
       "title": "版本存档与缩略图缓存存储回收（BackgroundHostedService 统一回收任务）",
       "dimension": "function",
       "priority": "P2",
-      "status": "in-progress",
+      "status": "acceptance",
       "batch": 8,
       "findingId": "F-130",
       "dependsOn": [],
