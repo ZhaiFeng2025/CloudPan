@@ -4355,7 +4355,7 @@
       "title": "客户端 HTTP 接口签名契约化（C# IApiClient 与 Kotlin Retrofit 由 CodeGen 生成）",
       "dimension": "architecture",
       "priority": "P1",
-      "status": "todo",
+      "status": "in-progress",
       "batch": 8,
       "findingId": "F-128",
       "dependsOn": [],
@@ -4392,8 +4392,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "取舍：先扩展生成器+更新基线（对齐规则 0 精神，同批次 6 T-061 先例），避免先手工补端点再生成返工。",
-      "updatedAt": null
+      "note": "执行中：客户端 HTTP 接口签名契约化（C# IApiClient 与 Kotlin Retrofit 由 CodeGen 生成）。",
+      "updatedAt": "2026-08-04"
     },
     {
       "id": "T-087",

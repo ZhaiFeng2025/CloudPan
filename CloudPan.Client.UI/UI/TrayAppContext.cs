@@ -19,7 +19,7 @@ public partial class TrayAppContext : ApplicationContext
     private readonly CancellationTokenSource _cts = new();
     private readonly SyncEngine _engine;
     private readonly WebSocketClient _wsClient;
-    private readonly IApiClient _api;
+    private readonly CloudPan.Contract.IApiClient _api;
     private readonly ClientConfig _config;
     private readonly System.Collections.Concurrent.ConcurrentQueue<string> _conflictPaths = new();
     private readonly System.Threading.SynchronizationContext? _syncCtx; // UI 同步上下文（构造函数捕获，供具名事件处理器）
@@ -29,7 +29,7 @@ public partial class TrayAppContext : ApplicationContext
     /// <summary>重配引导已提示过（F-34/T-034）：防 HTTP 队列与 WebSocket 双重 401 同时弹两次；连接恢复/重配成功后重置。</summary>
     private volatile bool _reconfigPromptShown;
 
-    public TrayAppContext(SyncEngine engine, WebSocketClient wsClient, IApiClient api, ClientConfig config)
+    public TrayAppContext(SyncEngine engine, WebSocketClient wsClient, CloudPan.Contract.IApiClient api, ClientConfig config)
     {
         _engine = engine;
         _wsClient = wsClient;

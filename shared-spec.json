@@ -3,8 +3,8 @@
   "$id": "cloudpan-shared-spec",
   "title": "CloudPan 共享定义",
   "description": "所有枚举、实体、端点、字段名、错误码、配置值的唯一事实来源。所有代码和文档引用本文件，禁止各自重复定义。",
-  "version": "1.6.0",
-  "date": "2026-08-03",
+  "version": "1.7.0",
+  "date": "2026-08-04",
   "_changelog": [
     { "version": "1.0.0", "date": "2026-07-28", "changes": [
       "初始版本",
@@ -60,6 +60,9 @@
     ]},
     { "version": "1.6.0", "date": "2026-08-03", "changes": [
       "请求体契约化：entities 新增非持久化 API 请求 DTO（DeleteRequest/MoveRequest/MkdirRequest/CreateShareRequest/RestoreTrashRequest/RestoreRequest），字段名对齐 apiMapping；DtoGenerator 生成请求 record（DeleteRequestDto 等），服务端 Controller 删除文件内手写 record、客户端 ApiClient 删除匿名对象请求体，改引用生成类型（T-067）"
+    ]},
+    { "version": "1.7.0", "date": "2026-08-04", "changes": [
+      "api.endpoints 新增 clientMethod 结构化参数段（query/body/path/part 映射 + 方法名/返回类型）：C# IApiClient/ApiClient 与 Kotlin CloudPanApi Retrofit 接口改由 CodeGen 生成，纳入 --verify 强制两端签名一致（T-086）"
     ]}
   ],
 
@@ -471,30 +474,167 @@
     "deviceHeader": "X-Device-Id: {deviceId}",
     "description": "端点认证模式: token=需Bearer头, public=无需认证, localhost=仅回环地址, message=首条消息认证(WebSocket专用)",
     "endpoints": [
-      { "method": "GET",    "path": "/api/health",                          "auth": "public",    "description": "健康检查" },
+      { "method": "GET", "path": "/api/health", "auth": "public", "description": "健康检查",
+        "clientMethod": [
+          { "name": "HealthCheckAsync", "kotlinName": "healthCheck", "kind": "manual", "manual": "csharp",
+            "response": "HealthResponse", "returns": "bool", "kotlinReturns": "Response<HealthResponse>", "params": [] },
+          { "name": "EnsureHealthAsync", "kind": "manual", "manual": "csharp", "kotlin": false, "returns": "void", "params": [] }
+        ] },
       { "method": "GET",    "path": "/api/version",                         "auth": "public",    "description": "服务端版本信息" },
       { "method": "GET",    "path": "/api/cert-fingerprint",                "auth": "token",     "description": "自签证书 SHA-256 指纹" },
       { "method": "GET",    "path": "/pair",                                "auth": "localhost", "description": "设备配对页面（显示 Token，仅本地访问）" },
-      { "method": "GET",    "path": "/api/files/tree",                      "auth": "token",     "description": "文件树（支持 sinceVersion/limit/cursor 分页）" },
-      { "method": "POST",   "path": "/api/files/upload",                    "auth": "token",     "description": "上传文件（multipart）" },
-      { "method": "GET",    "path": "/api/files/download",                  "auth": "token",     "description": "下载文件（stream）" },
-      { "method": "POST",   "path": "/api/files/delete",                    "auth": "token",     "description": "删除文件/文件夹（递归）" },
-      { "method": "POST",   "path": "/api/files/move",                      "auth": "token",     "description": "移动/重命名" },
-      { "method": "POST",   "path": "/api/files/mkdir",                     "auth": "token",     "description": "创建文件夹" },
-      { "method": "POST",   "path": "/api/files/upload/chunk",              "auth": "token",     "description": "分块上传" },
-      { "method": "GET",    "path": "/api/files/upload/chunk/status",       "auth": "token",     "description": "查询分块上传进度" },
-      { "method": "GET",    "path": "/api/files/search",                    "auth": "token",     "description": "文件名搜索" },
+      { "method": "GET", "path": "/api/files/tree", "auth": "token", "description": "文件树（支持 sinceVersion/limit/cursor 分页）",
+        "clientMethod": [
+          { "name": "GetFileTreeAsync", "kotlinName": "getFileTree", "response": "FileTreeResponse", "nullable": true,
+            "params": [
+              { "name": "sinceVersion", "in": "query", "wireName": "sinceVersion", "type": "int" },
+              { "name": "limit", "in": "query", "wireName": "limit", "type": "int", "optional": true, "default": "5000" },
+              { "name": "subPath", "in": "query", "wireName": "path", "type": "string", "optional": true, "kotlin": false },
+              { "name": "cursor", "in": "query", "wireName": "cursor", "type": "string", "optional": true }
+            ] },
+          { "name": "GetFileTreeInFolder", "kotlinName": "getFileTreeInFolder", "csharp": false, "response": "FileTreeResponse", "nullable": true,
+            "params": [
+              { "name": "folderPath", "in": "query", "wireName": "path", "type": "string" },
+              { "name": "limit", "in": "query", "wireName": "limit", "type": "int", "optional": true, "default": "5000" },
+              { "name": "cursor", "in": "query", "wireName": "cursor", "type": "string", "optional": true }
+            ] }
+        ] },
+      { "method": "POST", "path": "/api/files/upload", "auth": "token", "description": "上传文件（multipart）",
+        "clientMethod": [
+          { "name": "UploadAsync", "kotlinName": "uploadFile", "kind": "multipart", "manual": "csharp", "progress": true,
+            "response": "UploadResponse", "nullable": true,
+            "params": [
+              { "name": "localPath", "kotlinName": "file", "in": "file", "wireName": "file", "type": "string", "kotlinType": "MultipartBody.Part" },
+              { "name": "remotePath", "kotlinName": "path", "in": "part", "wireName": "path", "type": "string", "kotlinType": "RequestBody" },
+              { "name": "baseVersion", "in": "part", "wireName": "baseVersion", "type": "int", "kotlinType": "RequestBody" },
+              { "name": "lastModified", "in": "part", "wireName": "lastModified", "type": "string", "kotlinType": "RequestBody" }
+            ] }
+        ] },
+      { "method": "GET", "path": "/api/files/download", "auth": "token", "description": "下载文件（stream）",
+        "clientMethod": [
+          { "name": "DownloadAsync", "kotlinName": "downloadFile", "kind": "manual", "manual": "csharp", "progress": true,
+            "returns": "DownloadResult", "nullable": true, "kotlinReturns": "Response<okhttp3.ResponseBody>",
+            "params": [
+              { "name": "remotePath", "kotlinName": "path", "in": "query", "wireName": "path", "type": "string" },
+              { "name": "localPath", "in": "local", "type": "string" }
+            ] }
+        ] },
+      { "method": "POST", "path": "/api/files/delete", "auth": "token", "description": "删除文件/文件夹（递归）",
+        "clientMethod": [
+          { "name": "DeleteAsync", "kotlinName": "deleteFile", "kind": "json-body",
+            "response": "DeleteResponse", "returns": "void",
+            "params": [
+              { "name": "path", "in": "body", "dto": "DeleteRequestDto", "type": "string" },
+              { "name": "baseVersion", "in": "body", "dto": "DeleteRequestDto", "type": "int" }
+            ] }
+        ] },
+      { "method": "POST", "path": "/api/files/move", "auth": "token", "description": "移动/重命名",
+        "clientMethod": [
+          { "name": "MoveAsync", "kotlinName": "moveFile", "kind": "json-body",
+            "response": "MoveResponse", "returns": "void",
+            "params": [
+              { "name": "oldPath", "in": "body", "dto": "MoveRequestDto", "type": "string" },
+              { "name": "newPath", "in": "body", "dto": "MoveRequestDto", "type": "string" },
+              { "name": "baseVersion", "in": "body", "dto": "MoveRequestDto", "type": "int" }
+            ] }
+        ] },
+      { "method": "POST", "path": "/api/files/mkdir", "auth": "token", "description": "创建文件夹",
+        "clientMethod": [
+          { "name": "MkdirAsync", "kotlinName": "createFolder", "kind": "json-body",
+            "response": "MkdirResponse", "returns": "void",
+            "params": [
+              { "name": "path", "in": "body", "dto": "MkdirRequestDto", "type": "string" }
+            ] }
+        ] },
+      { "method": "POST", "path": "/api/files/upload/chunk", "auth": "token", "description": "分块上传",
+        "clientMethod": [
+          { "name": "UploadChunkedAsync", "kind": "manual", "manual": "csharp", "kotlin": false, "progress": true,
+            "response": "UploadResponse", "nullable": true,
+            "params": [
+              { "name": "localPath", "in": "local", "type": "string" },
+              { "name": "remotePath", "in": "part", "wireName": "path", "type": "string" },
+              { "name": "baseVersion", "in": "part", "wireName": "baseVersion", "type": "int" },
+              { "name": "lastModified", "in": "part", "wireName": "lastModified", "type": "string" }
+            ] }
+        ] },
+      { "method": "GET", "path": "/api/files/upload/chunk/status", "auth": "token", "description": "查询分块上传进度",
+        "clientMethod": [
+          { "name": "GetChunkStatusAsync", "kind": "manual", "manual": "csharp", "kotlin": false,
+            "response": "ChunkStatusResponse", "nullable": true,
+            "params": [
+              { "name": "path", "in": "query", "wireName": "path", "type": "string" },
+              { "name": "fileHash", "in": "query", "wireName": "fileHash", "type": "string", "optional": true }
+            ] }
+        ] },
+      { "method": "GET", "path": "/api/files/search", "auth": "token", "description": "文件名搜索",
+        "clientMethod": [
+          { "name": "SearchFiles", "kotlinName": "searchFiles", "csharp": false, "response": "SearchResponse", "nullable": true,
+            "params": [
+              { "name": "query", "in": "query", "wireName": "q", "type": "string" },
+              { "name": "limit", "in": "query", "wireName": "limit", "type": "int", "optional": true, "default": "50" }
+            ] }
+        ] },
       { "method": "GET",    "path": "/api/thumbnails",                      "auth": "token",     "description": "图片缩略图" },
-      { "method": "GET",    "path": "/api/versions",                        "auth": "token",     "description": "版本历史列表" },
-      { "method": "POST",   "path": "/api/versions/restore",                "auth": "token",     "description": "回滚到历史版本" },
-      { "method": "GET",    "path": "/api/devices",                         "auth": "token",     "description": "设备列表" },
-      { "method": "POST",   "path": "/api/shares",                          "auth": "token",     "description": "创建分享链接" },
-      { "method": "DELETE", "path": "/api/shares/{shareId}",                "auth": "token",     "description": "撤销分享链接" },
+      { "method": "GET", "path": "/api/versions", "auth": "token", "description": "版本历史列表",
+        "clientMethod": [
+          { "name": "GetVersionsAsync", "kotlinName": "getVersions", "kotlin": false,
+            "response": "VersionListResponse", "returns": "List<VersionItem>", "unwraps": "Data",
+            "params": [
+              { "name": "path", "in": "query", "wireName": "path", "type": "string" },
+              { "name": "limit", "in": "query", "wireName": "limit", "type": "int", "optional": true, "default": "50" }
+            ] }
+        ] },
+      { "method": "POST", "path": "/api/versions/restore", "auth": "token", "description": "回滚到历史版本",
+        "clientMethod": [
+          { "name": "RestoreVersionAsync", "kotlinName": "restoreVersion", "kind": "json-body", "kotlin": false,
+            "response": "VersionRestoreResponse", "nullable": true,
+            "params": [
+              { "name": "filePath", "in": "body", "dto": "RestoreRequestDto", "type": "string" },
+              { "name": "version", "in": "body", "dto": "RestoreRequestDto", "type": "int" }
+            ] }
+        ] },
+      { "method": "GET", "path": "/api/devices", "auth": "token", "description": "设备列表",
+        "clientMethod": [
+          { "name": "GetDevices", "kotlinName": "getDevices", "csharp": false, "response": "DevicesResponse", "nullable": true, "params": [] }
+        ] },
+      { "method": "POST", "path": "/api/shares", "auth": "token", "description": "创建分享链接",
+        "clientMethod": [
+          { "name": "CreateShareAsync", "kotlinName": "createShare", "kind": "json-body",
+            "response": "ShareCreateResponse", "nullable": true,
+            "params": [
+              { "name": "filePath", "in": "body", "dto": "CreateShareRequestDto", "type": "string" },
+              { "name": "password", "in": "body", "dto": "CreateShareRequestDto", "type": "string", "optional": true },
+              { "name": "expiresAt", "in": "body", "dto": "CreateShareRequestDto", "type": "string", "optional": true },
+              { "name": "maxDownloads", "in": "body", "dto": "CreateShareRequestDto", "type": "int", "optional": true }
+            ] }
+        ] },
+      { "method": "DELETE", "path": "/api/shares/{shareId}", "auth": "token", "description": "撤销分享链接",
+        "clientMethod": [
+          { "name": "RevokeShareAsync", "kotlinName": "revokeShare", "kind": "delete", "kotlin": false,
+            "returns": "bool", "notFoundReturns": "false",
+            "params": [
+              { "name": "shareId", "in": "path", "wireName": "shareId", "type": "string" }
+            ] }
+        ] },
       { "method": "GET",    "path": "/share/{shareId}",                     "auth": "public",    "description": "访问分享页面（无需 Token）" },
       { "method": "GET",    "path": "/share/{shareId}/download",            "auth": "public",    "description": "下载分享文件（?password=xxx）" },
-      { "method": "GET",    "path": "/api/trash",                           "auth": "token",     "description": "回收站文件列表" },
-      { "method": "POST",   "path": "/api/trash/restore",                   "auth": "token",     "description": "恢复回收站文件" },
-      { "method": "DELETE", "path": "/api/trash/empty",                     "auth": "token",     "description": "清空回收站" },
+      { "method": "GET", "path": "/api/trash", "auth": "token", "description": "回收站文件列表",
+        "clientMethod": [
+          { "name": "GetTrashAsync", "kotlinName": "getTrash", "response": "TrashListResponse", "returns": "List<TrashItem>", "unwraps": "Data", "params": [] }
+        ] },
+      { "method": "POST", "path": "/api/trash/restore", "auth": "token", "description": "恢复回收站文件",
+        "clientMethod": [
+          { "name": "RestoreTrashAsync", "kotlinName": "restoreTrash", "kind": "json-body",
+            "response": "TrashRestoreResponse", "returns": "void",
+            "params": [
+              { "name": "metaFileName", "in": "body", "dto": "RestoreTrashRequestDto", "type": "string" }
+            ] }
+        ] },
+      { "method": "DELETE", "path": "/api/trash/empty", "auth": "token", "description": "清空回收站",
+        "clientMethod": [
+          { "name": "EmptyTrashAsync", "kotlinName": "emptyTrash", "kind": "delete",
+            "response": "TrashEmptyResponse", "returns": "void", "params": [] }
+        ] },
       { "method": "GET",    "path": "/admin",                               "auth": "localhost", "description": "管理面板首页" },
       { "method": "GET",    "path": "/admin/api/files",                     "auth": "localhost", "description": "管理面板——文件列表" },
       { "method": "GET",    "path": "/admin/api/devices",                   "auth": "localhost", "description": "管理面板——设备列表" },

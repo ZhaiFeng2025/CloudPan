@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using CloudPan.Client.Core.Models;
 using CloudPan.Client.Core.Services;
+using CloudPan.Contract;
 using CloudPan.Infrastructure.Persistence;
 using CloudPan.Infrastructure.Persistence.Client;
 using Microsoft.EntityFrameworkCore;

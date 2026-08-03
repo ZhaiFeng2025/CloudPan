@@ -136,7 +136,7 @@ class FileRepository(private val settings: SettingsStore) {
 
     suspend fun createFolder(path: String): Result<Unit> {
         return safeCall {
-            api().createFolder(mapOf("path" to path))
+            api().createFolder(MkdirRequestDto(path))
             Unit
         }
     }
@@ -148,7 +148,7 @@ class FileRepository(private val settings: SettingsStore) {
      */
     suspend fun deleteFile(path: String): Result<TrashItem?> {
         return safeCall {
-            val r = api().deleteFile(mapOf("path" to path, "baseVersion" to 0))
+            val r = api().deleteFile(DeleteRequestDto(path, 0))
             if (!r.isSuccessful) {
                 throw Exception("删除失败: ${r.code()} ${r.message()}")
             }
@@ -181,7 +181,7 @@ class FileRepository(private val settings: SettingsStore) {
      */
     suspend fun restoreTrash(trashFileName: String): Result<Unit> {
         return safeCall {
-            val r = api().restoreTrash(mapOf("metaFileName" to "$trashFileName.json"))
+            val r = api().restoreTrash(RestoreTrashRequestDto("$trashFileName.json"))
             if (!r.isSuccessful) {
                 throw Exception("恢复失败: ${r.code()} ${r.message()}")
             }
@@ -201,10 +201,8 @@ class FileRepository(private val settings: SettingsStore) {
     }
 
     suspend fun createShare(filePath: String, password: String? = null): Result<ShareCreateResponse> {
-        val body = mutableMapOf<String, Any>("filePath" to filePath)
-        if (password != null) body["password"] = password
         return safeCall {
-            val r = api().createShare(body)
+            val r = api().createShare(CreateShareRequestDto(filePath, password, null, null))
             if (!r.isSuccessful) throw Exception("创建分享失败: ${r.code()} ${r.message()}")
             r.body()!!
         }

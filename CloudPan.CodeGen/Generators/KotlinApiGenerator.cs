@@ -98,4 +98,142 @@ public static class KotlinApiGenerator
         }
         return sb.ToString();
     }
+
+    // ============================================================
+    // Retrofit 接口生成（T-086）
+    // ============================================================
+
+    /// <summary>
+    /// 生成 Android Retrofit 接口（CloudPan.Android/.../data/Generated/CloudPanApi.g.kt）。
+    /// 方法签名（@Query/@Body/@Path/@Part 绑定）由 shared-spec.json → api.endpoints[].clientMethod 驱动，
+    /// 与 C# ClientApi.g.cs 同源，纳入 --verify：spec 增/改端点后重跑即强制两端签名一致。
+    /// 路由注解引用 SpecRoutes 常量，返回类型引用 Dtos.g.kt（均由 shared-spec.json 生成）。
+    /// </summary>
+    public static string GenerateClientApi(SpecDocument spec)
+    {
+        StringBuilder sb = new StringBuilder();
+        sb.AppendLine("// AUTO-GENERATED from shared-spec.json")
+          .AppendLine($"// 版本: {spec.Version}  日期: {spec.Date}")
+          .AppendLine("// 源: shared-spec.json → api.endpoints[].clientMethod（Retrofit interface，与 C# ClientApi.g.cs 同源）")
+          .AppendLine("// 请勿手工编辑 — 重新生成: dotnet run --project CloudPan.CodeGen")
+          .AppendLine();
+        sb.AppendLine("package com.cloudpan.android.data");
+        sb.AppendLine();
+        sb.AppendLine("import okhttp3.MultipartBody");
+        sb.AppendLine("import okhttp3.RequestBody");
+        sb.AppendLine("import retrofit2.Response");
+        sb.AppendLine("import retrofit2.http.*");
+        sb.AppendLine();
+        sb.AppendLine("/**");
+        sb.AppendLine(" * Retrofit HTTP 接口——方法签名由 shared-spec.json → api.endpoints[].clientMethod 生成（T-086）。");
+        sb.AppendLine(" * 路由注解引用 SpecRoutes 常量，返回类型引用 Dtos.g.kt；");
+        sb.AppendLine(" * 改 spec 端点后重跑 CodeGen --verify 强制 C#/Kotlin 两端接口签名一致，禁止手工翻译回归。");
+        sb.AppendLine(" */");
+        sb.AppendLine("interface CloudPanApi {");
+        foreach (var ep in spec.Api.Endpoints)
+        {
+            if (ep.ClientMethod is null)
+            {
+                continue;
+            }
+
+            foreach (var m in ep.ClientMethod)
+            {
+                if (!(m.Kotlin ?? true))
+                {
+                    continue;
+                }
+
+                GenerateKotlinMethod(sb, ep, m);
+                sb.AppendLine();
+            }
+        }
+        sb.AppendLine("}");
+        return sb.ToString();
+    }
+
+    private static void GenerateKotlinMethod(StringBuilder sb, EndpointDef ep, ClientMethodDef m)
+    {
+        string route = ToConstantName(ep.Path);
+        string method = ep.Method.ToUpperInvariant();
+        string kotlinName = m.KotlinName ?? ToKotlinMethodName(m.Name);
+        string ret = m.KotlinReturns ?? (m.Response is not null ? $"Response<{m.Response}>" : "Response<Unit>");
+        sb.AppendLine("    /**");
+        sb.AppendLine($"     * {ep.Description}（{method} {ep.Path}）");
+        sb.AppendLine("     */");
+        if (m.Kind == "multipart")
+        {
+            sb.AppendLine("    @Multipart");
+        }
+        sb.AppendLine($"    @{method}(SpecRoutes.{route})");
+        sb.AppendLine($"    suspend fun {kotlinName}({KotlinParams(m)}): {ret}");
+    }
+
+    /// <summary>
+    /// Kotlin 参数表：query/path 逐参数注解；body 折叠为单个 @Body request: {dto}；local 跳过；
+    /// part/file 生成 @Part（字段名来自 wireName / MultipartBody.Part）。
+    /// </summary>
+    private static string KotlinParams(ClientMethodDef m)
+    {
+        List<string> parts = new List<string>();
+        foreach (var p in m.Params)
+        {
+            if (!(p.Kotlin ?? true) || p.In == "local" || p.In == "body")
+            {
+                continue; // body 统一折叠到末尾
+            }
+
+            string kname = p.KotlinName ?? p.Name;
+            string ktype = p.KotlinType ?? MapKotlinType(p.Type ?? "string");
+            string annot = p.In switch
+            {
+                "query" => $"@Query(\"{p.WireName}\")",
+                "path" => $"@Path(\"{p.WireName}\")",
+                "part" => p.WireName is not null ? $"@Part(\"{p.WireName}\")" : "@Part",
+                "file" => "@Part",
+                _ => ""
+            };
+            string def = "";
+            if (p.Optional == true)
+            {
+                if (ktype.EndsWith("?"))
+                {
+                    def = " = null";
+                }
+                else if (p.Default is not null)
+                {
+                    def = $" = {p.Default}";
+                }
+                else
+                {
+                    ktype += "?";
+                    def = " = null";
+                }
+            }
+            parts.Add($"{annot} {kname}: {ktype}{def}");
+        }
+
+        string? bodyDto = m.Params.FirstOrDefault(p => p.In == "body")?.Dto;
+        if (bodyDto is not null)
+        {
+            parts.Add($"@Body request: {bodyDto}");
+        }
+        return string.Join(", ", parts);
+    }
+
+    private static string MapKotlinType(string t) => t switch
+    {
+        "string" => "String",
+        "int" => "Int",
+        "long" => "Long",
+        "bool" => "Boolean",
+        _ => t
+    };
+
+    /// <summary>C# 方法名 → Kotlin 方法名：GetFileTreeAsync → getFileTree（小写首字母，去 Async 后缀）。</summary>
+    private static string ToKotlinMethodName(string csName)
+    {
+        string baseName = csName.EndsWith("Async") ? csName[..^"Async".Length] : csName;
+        return char.ToLowerInvariant(baseName[0]) + baseName[1..];
+    }
 }

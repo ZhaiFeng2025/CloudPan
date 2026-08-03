@@ -98,25 +98,6 @@ public partial class ApiClient : IApiClient, IDisposable
         response.EnsureSuccessStatusCode();
     }
 
-    /// <summary>获取文件树（增量）。</summary>
-    public async Task<FileTreeResponse?> GetFileTreeAsync(int sinceVersion, int limit = 5000, string? subPath = null, string? cursor = null, CancellationToken ct = default)
-    {
-        string url = $"{SpecRoutes.FilesTree}?sinceVersion={sinceVersion}&limit={limit}";
-        if (!string.IsNullOrEmpty(subPath))
-        {
-            url += $"&path={Uri.EscapeDataString(subPath)}";
-        }
-
-        if (!string.IsNullOrEmpty(cursor))
-        {
-            url += $"&cursor={Uri.EscapeDataString(cursor)}";
-        }
-
-        var response = await _http.GetAsync(url, ct);
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<FileTreeResponse>(JsonOptions, ct);
-    }
-
     /// <summary>上传文件。</summary>
     public async Task<UploadResponse?> UploadAsync(
         string localPath, string remotePath, int baseVersion, string lastModified,
@@ -205,30 +186,6 @@ public partial class ApiClient : IApiClient, IDisposable
         {
             _logger?.LogWarning(ex, "删除临时文件失败: {Path}", path);
         }
-    }
-
-    /// <summary>删除文件。</summary>
-    public async Task DeleteAsync(string path, int baseVersion, CancellationToken ct = default)
-    {
-        var response = await _http.PostAsJsonAsync(SpecRoutes.FilesDelete,
-            new DeleteRequestDto(path, baseVersion), JsonOptions, ct);
-        response.EnsureSuccessStatusCode();
-    }
-
-    /// <summary>移动/重命名文件。</summary>
-    public async Task MoveAsync(string oldPath, string newPath, int baseVersion, CancellationToken ct = default)
-    {
-        var response = await _http.PostAsJsonAsync(SpecRoutes.FilesMove,
-            new MoveRequestDto(oldPath, newPath, baseVersion), JsonOptions, ct);
-        response.EnsureSuccessStatusCode();
-    }
-
-    /// <summary>创建文件夹。</summary>
-    public async Task MkdirAsync(string path, CancellationToken ct = default)
-    {
-        var response = await _http.PostAsJsonAsync(SpecRoutes.FilesMkdir,
-            new MkdirRequestDto(path), JsonOptions, ct);
-        response.EnsureSuccessStatusCode();
     }
 
     public void Dispose() => _http.Dispose();

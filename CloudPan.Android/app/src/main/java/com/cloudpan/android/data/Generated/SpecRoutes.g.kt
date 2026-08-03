@@ -1,5 +1,5 @@
 // AUTO-GENERATED from shared-spec.json
-// 版本: 1.6.0  日期: 2026-08-03
+// 版本: 1.7.0  日期: 2026-08-04
 // 源: shared-spec.json → api.endpoints（Retrofit 路由常量，与 C# SpecRoutes.g.cs 同源）
 // 请勿手工编辑 — 重新生成: dotnet run --project CloudPan.CodeGen
 

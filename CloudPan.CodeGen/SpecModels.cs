@@ -150,7 +150,50 @@ public record EndpointDef(
     string Method,
     string Path,
     string Auth,    // v1.4.0: "token" | "public" | "localhost" | "message"（替代旧 bool）
-    string Description
+    string Description,
+    List<ClientMethodDef>? ClientMethod = null   // v1.7.0: 客户端接口方法签名（C#/Kotlin 由 CodeGen 生成，T-086）
+);
+
+// ---- 客户端接口方法（v1.7.0，T-086）----
+// api.endpoints[].clientMethod：供 C# IApiClient/ApiClient 与 Kotlin Retrofit 接口生成。
+// kind: query | json-body | delete | multipart | manual（manual 只生成接口签名，类体手工维护）
+// manual: null | "csharp" | "kotlin" | "both"（该端语言不生成类/接口方法体）
+// csharp/kotlin: 该方法是否参与对应语言生成（默认 true）
+// nullable: C# 返回 Task<returns?>；unwraps: 从响应 DTO 提取列表（如 "Data"）
+// notFoundReturns: DELETE 404 时返回字面量（如 "false"）
+public record ClientMethodDef(
+    string Name,
+    string? KotlinName,
+    string? Kind,
+    string? Response,
+    string? Returns,          // C# 裸返回类型；"void" = 无返回；缺省 = response
+    bool? Nullable,
+    string? Unwraps,          // "Data"：从响应 DTO 提取列表
+    string? NotFoundReturns,  // DELETE 404 时返回字面量
+    string? KotlinReturns,    // Kotlin 返回类型（缺省 "Response<{response}>"）
+    string? Manual,           // null | "csharp" | "kotlin" | "both"
+    bool? Csharp,
+    bool? Kotlin,
+    bool? Progress,           // C# 追加 IProgress<long>? progress = null
+    List<ClientParamDef> Params
+);
+
+// 方法参数（in: query | path | body | part | file | local）
+// wireName: query 键 / path 占位符 / part 字段名；body 与 local 可为空
+// dto: body 参数所属请求 DTO（Kotlin 折叠为单个 @Body request: {dto}）
+// kotlinType: Kotlin 类型覆盖（缺省按 type 映射 string→String 等）
+public record ClientParamDef(
+    string Name,
+    string? KotlinName,
+    string In,
+    string? WireName,
+    string? Type,
+    string? Dto,
+    string? KotlinType,
+    bool? Optional,
+    string? Default,
+    bool? Csharp,
+    bool? Kotlin
 );
 
 public record WebSocketDef(

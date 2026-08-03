@@ -22,6 +22,8 @@ public static class Program
     private const string ClientOutputDir = "CloudPan.Infrastructure/Generated";
     // Android Kotlin 契约产物 → CloudPan.Android/.../data/Generated（package com.cloudpan.android.data）
     private const string AndroidOutputDir = "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/Generated";
+    // C# 客户端 ApiClient 方法骨架（partial class，须与 Client.Core 手工 partial 同程序集合并）→ CloudPan.Client.Core/Generated（T-086）
+    private const string ClientApiOutputDir = "CloudPan.Client.Core/Generated";
 
     public static int Main(string[] args)
     {
@@ -64,9 +66,13 @@ public static class Program
                 ["API响应"]  = (SharedOutputDir, "ApiResponses.g.cs",      ApiResponseGenerator.Generate(spec)),
                 ["设置"]     = (SharedOutputDir, "Settings.g.cs",          SettingsGenerator.Generate(spec)),
                 ["路由常量"] = (SharedOutputDir, "SpecRoutes.g.cs",        ApiClientGenerator.Generate(spec)),
+                // 客户端 HTTP 接口签名契约（T-086）：C# IApiClient 接口 + ApiClient 方法骨架 + Kotlin Retrofit 接口，纳入 --verify
+                ["C#客户端接口"] = (SharedOutputDir, "ClientApi.g.cs",     ApiClientGenerator.GenerateClientInterface(spec)),
+                ["C#客户端骨架"] = (ClientApiOutputDir, "ApiClient.g.cs",  ApiClientGenerator.GenerateClientClass(spec)),
                 // Android Kotlin 契约产物（package com.cloudpan.android.data，纳入 --verify）
                 ["Kotlin DTO"] = (AndroidOutputDir, "Dtos.g.kt",           KotlinDtoGenerator.Generate(spec)),
                 ["Kotlin路由"] = (AndroidOutputDir, "SpecRoutes.g.kt",     KotlinApiGenerator.Generate(spec)),
+                ["Kotlin接口"] = (AndroidOutputDir, "CloudPanApi.g.kt",    KotlinApiGenerator.GenerateClientApi(spec)),
                 // Controller 骨架仅作参考，实际业务逻辑需手写，不再自动生成
             };
 

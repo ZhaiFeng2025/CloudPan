@@ -10,8 +10,9 @@ namespace CloudPan.CodeGen.Generators;
 /// SpecEndpoints 做交叉校验（DiffAgainstSpecEndpoints），保证两端注册表一致。
 /// 纳入 --verify：spec 改端点后生成内容变化即被检出，重跑 CodeGen 后 ApiClient 全链路生效。
 ///
-/// 渐进项：完整客户端方法骨架（从 endpoints 生成 IApiClient 方法签名）留待后续批次，
-/// 本生成器先落地「路由常量 + 交叉校验」最小闭环。
+/// T-086：本类扩展生成 C# 客户端接口签名（GenerateClientInterface → ClientApi.g.cs）与
+/// ApiClient 方法骨架（GenerateClientClass → ApiClient.g.cs），均从 api.endpoints[].clientMethod
+/// 驱动，纳入同一 --verify 管线。方法渲染细节委托 ClientApiRenderer（保持本类 ≤ 400 行）。
 /// </summary>
 public static class ApiClientGenerator
 {
@@ -137,4 +138,110 @@ public static class ApiClientGenerator
     }
 
     private static string EscapeString(string s) => s.Replace("\"", "\\\"");
+
+    // ============================================================
+    // 客户端接口签名生成（T-086）
+    // ============================================================
+
+    /// <summary>
+    /// 生成 C# 客户端接口签名（CloudPan.Contract/Generated/ClientApi.g.cs）。
+    /// 从 shared-spec.json → api.endpoints[].clientMethod 生成 IApiClient 接口（仅端点签名），
+    /// 与 Kotlin CloudPanApi.g.kt 同源，纳入 --verify：spec 增/改端点后重跑即强制两端签名一致。
+    /// 运行时配置方法（SetUploadLimit/SetDownloadLimit）为手工 partial（IApiClient.Config.cs），不属端点契约。
+    /// </summary>
+    public static string GenerateClientInterface(SpecDocument spec)
+    {
+        StringBuilder sb = new StringBuilder();
+        ClientApiRenderer.AppendGeneratedHeader(sb, spec, "api.endpoints[].clientMethod（C# 客户端接口签名，与 Kotlin CloudPanApi.g.kt 同源）");
+        sb.AppendLine("using System.Threading;");
+        sb.AppendLine("using System.Threading.Tasks;");
+        sb.AppendLine();
+        sb.AppendLine("namespace CloudPan.Contract;");
+        sb.AppendLine();
+        sb.AppendLine("/// <summary>");
+        sb.AppendLine("/// API 客户端接口（HTTP 端点签名契约）。由 ApiClientGenerator 从 shared-spec.json → api.endpoints[].clientMethod 生成。");
+        sb.AppendLine("/// 与 Kotlin Retrofit 接口（CloudPanApi.g.kt）同源：spec 增/改端点后重跑 CodeGen --verify 强制两端签名一致。");
+        sb.AppendLine("/// 仅含端点签名；客户端运行时配置方法（SetUploadLimit/SetDownloadLimit）为手工 partial，见 IApiClient.Config.cs。");
+        sb.AppendLine("/// </summary>");
+        sb.AppendLine("public partial interface IApiClient");
+        sb.AppendLine("{");
+        foreach (var ep in spec.Api.Endpoints)
+        {
+            if (ep.ClientMethod is null)
+            {
+                continue;
+            }
+
+            foreach (var m in ep.ClientMethod)
+            {
+                if (!(m.Csharp ?? true))
+                {
+                    continue;
+                }
+
+                sb.AppendLine("    /// <summary>");
+                sb.AppendLine($"    /// {EscapeString(ep.Description)}（{ep.Method.ToUpperInvariant()} {ep.Path}）");
+                sb.AppendLine("    /// </summary>");
+                sb.AppendLine($"    {ClientApiRenderer.CsMethodSignature(m)};");
+                sb.AppendLine();
+            }
+        }
+        sb.AppendLine("}");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// 生成 C# ApiClient 方法骨架（CloudPan.Client.Core/Generated/ApiClient.g.cs，partial class）。
+    /// 实现 IApiClient 的端点方法：HTTP 方法/路径/参数绑定由 spec 参数段驱动；
+    /// spec 标 manual 的复杂方法（上传限速/下载校验/分块编排/健康吞异常）保留手工实现。
+    /// </summary>
+    public static string GenerateClientClass(SpecDocument spec)
+    {
+        StringBuilder sb = new StringBuilder();
+        ClientApiRenderer.AppendGeneratedHeader(sb, spec, "api.endpoints[].clientMethod（C# 客户端方法骨架：HTTP 方法/路径/参数绑定）");
+        sb.AppendLine("using System.Linq;");
+        sb.AppendLine("using System.Net.Http.Json;");
+        sb.AppendLine("using CloudPan.Contract;");
+        sb.AppendLine();
+        sb.AppendLine("namespace CloudPan.Client.Core.Services;");
+        sb.AppendLine();
+        sb.AppendLine("/// <summary>");
+        sb.AppendLine("/// ApiClient 部分类：端点方法骨架。由 ApiClientGenerator 从 shared-spec.json → api.endpoints[].clientMethod 生成。");
+        sb.AppendLine("/// 复杂方法（上传限速/下载校验/分块编排/健康吞异常等）在 spec 标 manual 保留手工实现，签名由接口强约束。");
+        sb.AppendLine("/// </summary>");
+        sb.AppendLine("public partial class ApiClient");
+        sb.AppendLine("{");
+        foreach (var ep in spec.Api.Endpoints)
+        {
+            if (ep.ClientMethod is null)
+            {
+                continue;
+            }
+
+            foreach (var m in ep.ClientMethod)
+            {
+                if (!(m.Csharp ?? true) || ClientApiRenderer.IsManualFor(m, "csharp"))
+                {
+                    continue;
+                }
+
+                GenerateClassMethod(sb, ep, m);
+            }
+        }
+        sb.AppendLine("}");
+        return sb.ToString();
+    }
+
+    private static void GenerateClassMethod(StringBuilder sb, EndpointDef ep, ClientMethodDef m)
+    {
+        string route = ToConstantName(ep.Path);
+        sb.AppendLine("    /// <summary>");
+        sb.AppendLine($"    /// {EscapeString(ep.Description)}（{ep.Method.ToUpperInvariant()} {ep.Path}）。由 shared-spec.json → api.endpoints 生成。");
+        sb.AppendLine("    /// </summary>");
+        sb.AppendLine($"    public async {ClientApiRenderer.CsMethodSignature(m)}");
+        sb.AppendLine("    {");
+        ClientApiRenderer.AppendMethodBody(sb, m, route);
+        sb.AppendLine("    }");
+        sb.AppendLine();
+    }
 }
