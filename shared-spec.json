@@ -3,9 +3,14 @@
   "$id": "cloudpan-shared-spec",
   "title": "CloudPan 共享定义",
   "description": "所有枚举、实体、端点、字段名、错误码、配置值的唯一事实来源。所有代码和文档引用本文件，禁止各自重复定义。",
-  "version": "1.1.0",
-  "date": "2026-08-02",
+  "version": "1.2.0",
+  "date": "2026-08-03",
   "_changelog": [
+    { "version": "1.2.0", "date": "2026-08-03", "changes": [
+      "api.responses 补齐全端点响应 DTO：admin/files+devices+logs+stats、api/devices、health、version、cert-fingerprint、files delete/move/mkdir/search、trash restore/empty",
+      "服务端控制器匿名对象响应全部改用生成响应 DTO（T-040），响应体单一事实来源为 ApiResponses.g.cs",
+      "Server.Core 删除与生成 DTO 重复的响应记录（TrashItem/VersionRecordInfo/FileEntryInfo/DeviceInfo/SyncLogInfo/ServerStats），改为引用契约生成类型"
+    ]},
     { "version": "1.1.0", "date": "2026-08-02", "changes": [
       "新增顶层 settings 契约段：服务端设置目录（port/sync_root/token_hash），驱动 Settings.g.cs",
       "设置 UI：端口可配置（重启生效）、同步根目录可改（重启+数据迁移警告）、Token 轮换（立即生效）"
@@ -499,6 +504,94 @@
       "VersionRestoreData": {
         "description": "版本回滚响应 data",
         "fields": ["path: string", "version: int", "hash: string", "size: long", "restoredFromVersion: int?"]
+      },
+      "AdminFileItem": {
+        "description": "管理面板文件列表条目（仅 localhost 访问）",
+        "fields": ["path: string", "type: int", "currentHash: string?", "currentSize: long", "version: int", "state: int", "lastModified: string"]
+      },
+      "AdminFileResponse": {
+        "description": "GET /admin/api/files 响应包装",
+        "fields": ["data: AdminFileItem[]"]
+      },
+      "AdminDeviceItem": {
+        "description": "管理面板设备列表条目（仅 localhost 访问）",
+        "fields": ["id: string", "name: string", "person: string?", "lastSeen: string", "online: int", "registeredAt: string"]
+      },
+      "AdminDeviceResponse": {
+        "description": "GET /admin/api/devices 响应包装",
+        "fields": ["data: AdminDeviceItem[]"]
+      },
+      "AdminLogItem": {
+        "description": "管理面板同步日志条目（仅 localhost 访问）",
+        "fields": ["id: long", "filePath: string", "operation: int", "deviceId: string", "result: int", "details: string?", "createdAt: string"]
+      },
+      "AdminLogResponse": {
+        "description": "GET /admin/api/logs 响应包装",
+        "fields": ["data: AdminLogItem[]"]
+      },
+      "AdminStatsResponse": {
+        "description": "GET /admin/api/stats 响应（扁平对象，无 data 包装）",
+        "fields": ["fileCount: int", "deviceCount: int", "onlineDeviceCount: int", "logCount: int"]
+      },
+      "DeviceItem": {
+        "description": "GET /api/devices 列表条目",
+        "fields": ["deviceId: string", "name: string", "person: string?", "lastSeen: string", "online: int", "registeredAt: string"]
+      },
+      "DevicesResponse": {
+        "description": "GET /api/devices 响应包装",
+        "fields": ["data: DeviceItem[]"]
+      },
+      "HealthResponse": {
+        "description": "GET /api/health 响应（扁平对象，无 data 包装）",
+        "fields": ["status: string", "version: string", "maxVersion: int", "syncRoot: string", "disk: string", "memoryMb: long", "memoryStatus: string", "dbIntegrity: string", "uptime: string", "timestamp: string"]
+      },
+      "VersionResponse": {
+        "description": "GET /api/version 响应（扁平对象，无 data 包装）",
+        "fields": ["version: string", "minClientVersion: string", "releaseNotes: string", "downloadUrl: string"]
+      },
+      "CertFingerprintResponse": {
+        "description": "GET /api/cert-fingerprint 响应（扁平对象，无 data 包装）",
+        "fields": ["fingerprint: string"]
+      },
+      "DeleteResponse": {
+        "description": "POST /api/files/delete 响应包装",
+        "fields": ["data: DeleteData"]
+      },
+      "DeleteData": {
+        "description": "删除文件响应 data",
+        "fields": ["path: string", "deletedVersion: int?"]
+      },
+      "MoveResponse": {
+        "description": "POST /api/files/move 响应包装",
+        "fields": ["data: MoveData"]
+      },
+      "MoveData": {
+        "description": "移动/重命名响应 data",
+        "fields": ["oldPath: string", "newPath: string", "version: int?"]
+      },
+      "MkdirResponse": {
+        "description": "POST /api/files/mkdir 响应包装",
+        "fields": ["data: MkdirData"]
+      },
+      "MkdirData": {
+        "description": "创建文件夹响应 data",
+        "fields": ["path: string?"]
+      },
+      "SearchResponse": {
+        "description": "GET /api/files/search 响应包装",
+        "fields": ["data: FileEntryDto[]"]
+      },
+      "TrashRestoreResponse": {
+        "description": "POST /api/trash/restore 响应包装",
+        "fields": ["data: TrashRestoreData"]
+      },
+      "TrashRestoreData": {
+        "description": "恢复回收站条目响应 data",
+        "fields": ["restored: string?"]
+      },
+      "TrashEmptyResponse": {
+        "description": "DELETE /api/trash/empty 响应包装",
+        "fields": ["data: string"]
       }
     }
   },

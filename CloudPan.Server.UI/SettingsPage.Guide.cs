@@ -1,3 +1,4 @@
+using CloudPan.Contract;
 using CloudPan.Server.Core;
 
 namespace CloudPan.Server.UI;
@@ -13,7 +14,7 @@ public partial class SettingsPage
     {
         try
         {
-            List<DeviceInfo> devices = await _statusService.GetDevicesAsync();
+            List<AdminDeviceItem> devices = await _statusService.GetDevicesAsync();
             if (devices.Count == 0)
             {
                 return "暂无已配对的设备";

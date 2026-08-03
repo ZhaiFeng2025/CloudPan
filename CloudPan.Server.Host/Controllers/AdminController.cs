@@ -33,7 +33,7 @@ public class AdminController : ControllerBase
     public async Task<IActionResult> GetFiles([FromQuery] string? path = null, [FromQuery] int limit = 200)
     {
         var items = await _status.GetFilesAsync(path, limit);
-        return Ok(new { data = items });
+        return Ok(new AdminFileResponse(items.ToArray()));
     }
 
     /// <summary>GET /admin/api/devices — 设备列表数据。</summary>
@@ -41,7 +41,7 @@ public class AdminController : ControllerBase
     public async Task<IActionResult> GetDevices()
     {
         var items = await _status.GetDevicesAsync();
-        return Ok(new { data = items });
+        return Ok(new AdminDeviceResponse(items.ToArray()));
     }
 
     /// <summary>GET /admin/api/logs — 同步日志数据。</summary>
@@ -49,7 +49,7 @@ public class AdminController : ControllerBase
     public async Task<IActionResult> GetLogs([FromQuery] int limit = 100)
     {
         var items = await _status.GetLogsAsync(limit);
-        return Ok(new { data = items });
+        return Ok(new AdminLogResponse(items.ToArray()));
     }
 
     /// <summary>GET /admin/api/stats — 聚合统计（真实总数）。</summary>
@@ -57,7 +57,7 @@ public class AdminController : ControllerBase
     public async Task<IActionResult> GetStats()
     {
         var s = await _status.GetStatsAsync();
-        return Ok(new { fileCount = s.FileCount, deviceCount = s.DeviceCount, onlineDeviceCount = s.OnlineDeviceCount, logCount = s.LogCount });
+        return Ok(s);
     }
 
     // ============================================================

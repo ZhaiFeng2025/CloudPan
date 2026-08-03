@@ -48,32 +48,28 @@ public class HealthController : ControllerBase
         // DB 完整性（PRAGMA integrity_check，查询下沉到 IServerStatusService）
         string dbStatus = await _status.CheckDbIntegrityAsync();
 
-        return Ok(new
-        {
-            Status = "ok",
-            Version = "1.0.0",
-            MaxVersion = version,
-            SyncRoot = syncRoot,
-            Disk = diskStatus,
-            MemoryMb = memMb,
-            MemoryStatus = memStatus,
-            DbIntegrity = dbStatus,
-            Uptime = (DateTime.UtcNow - System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime()).ToString(@"d\.hh\:mm"),
-            Timestamp = DateTime.UtcNow.ToString("O")
-        });
+        return Ok(new HealthResponse(
+            "ok",
+            "1.0.0",
+            version,
+            syncRoot,
+            diskStatus,
+            memMb,
+            memStatus,
+            dbStatus,
+            (DateTime.UtcNow - System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime()).ToString(@"d\.hh\:mm"),
+            DateTime.UtcNow.ToString("O")));
     }
 
     /// <summary>GET /api/version — 服务端版本（客户端自动更新检测用）。</summary>
     [HttpGet("/api/version")]
     public IActionResult GetVersion()
     {
-        return Ok(new
-        {
-            version = "1.0.0",
-            minClientVersion = "1.0.0",
-            releaseNotes = "v1.0 正式发布——完整文件同步、版本历史、分享链接、回收站、管理面板",
-            downloadUrl = "https://github.com/cloudpan/releases/latest"
-        });
+        return Ok(new VersionResponse(
+            "1.0.0",
+            "1.0.0",
+            "v1.0 正式发布——完整文件同步、版本历史、分享链接、回收站、管理面板",
+            "https://github.com/cloudpan/releases/latest"));
     }
 
     /// <summary>GET /pair — 设备配对帮助页面（显示完整 Token，与安装器/托盘一致）。</summary>
@@ -216,6 +212,6 @@ public class HealthController : ControllerBase
     public async Task<IActionResult> GetCertFingerprint()
     {
         string? fp = await _status.GetCertFingerprintAsync();
-        return Ok(new { fingerprint = fp ?? "" });
+        return Ok(new CertFingerprintResponse(fp ?? ""));
     }
 }

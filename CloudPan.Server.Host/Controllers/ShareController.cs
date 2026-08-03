@@ -40,16 +40,8 @@ public class ShareController : ControllerBase
         }
 
         string baseUrl = $"{Request.Scheme}://{Request.Host}";
-        return Ok(new
-        {
-            data = new
-            {
-                shareId = result.ShareId,
-                url = $"{baseUrl}/share/{result.ShareId}",
-                expiresAt = result.ExpiresAt,
-                maxDownloads = result.MaxDownloads
-            }
-        });
+        return Ok(new ShareCreateResponse(
+            new ShareCreateData(result.ShareId!, $"{baseUrl}/share/{result.ShareId}", result.ExpiresAt, result.MaxDownloads)));
     }
 
     /// <summary>
@@ -64,7 +56,7 @@ public class ShareController : ControllerBase
             return this.Error(result.Error!.Code, result.Error.Message, result.Error.UserMessage);
         }
 
-        return Ok(new { data = new { revoked = result.ShareId } });
+        return Ok(new ShareRevokeResponse(new ShareRevokeData(result.ShareId!)));
     }
 
     /// <summary>

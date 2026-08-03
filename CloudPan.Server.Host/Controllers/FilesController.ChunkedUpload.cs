@@ -66,28 +66,10 @@ public partial class FilesController
 
         return outcome switch
         {
-            ChunkProgressOutcome p => Ok(new
-            {
-                data = new
-                {
-                    path = p.Path,
-                    chunkIndex = p.ChunkIndex,
-                    receivedCount = p.ReceivedCount,
-                    totalChunks = p.TotalChunks,
-                    isComplete = p.IsComplete
-                }
-            }),
-            ChunkCompletedOutcome c => Ok(new
-            {
-                data = new
-                {
-                    path = c.Path,
-                    version = c.Version,
-                    hash = c.Hash,
-                    size = c.Size,
-                    status = "complete"
-                }
-            }),
+            ChunkProgressOutcome p => Ok(new ChunkUploadResponse(
+                new ChunkUploadData(p.Path, p.ChunkIndex, p.ReceivedCount, p.TotalChunks, p.IsComplete, 0, null, 0, null))),
+            ChunkCompletedOutcome c => Ok(new ChunkUploadResponse(
+                new ChunkUploadData(c.Path, 0, 0, 0, true, c.Version, c.Hash, c.Size, "complete"))),
             ChunkConflictOutcome c => this.Error(HttpErrorCode.CONFLICT,
                 $"版本冲突：客户端基于 v{c.BaseVersion}，服务端当前 v{c.CurrentVersion}",
                 "文件已被其他设备修改，请刷新后重试",
@@ -117,29 +99,18 @@ public partial class FilesController
 
         if (!status.Found)
         {
-            return Ok(new
-            {
-                data = new
-                {
-                    path,
-                    receivedChunks = Array.Empty<int>(),
-                    totalChunks = 0,
-                    isComplete = false
-                }
-            });
+            return Ok(new ChunkStatusResponse(
+                new ChunkStatusData(null, path, Array.Empty<int>(), 0, false, null, null)));
         }
 
-        return Ok(new
-        {
-            data = new
-            {
+        return Ok(new ChunkStatusResponse(
+            new ChunkStatusData(
                 status.FilePath,
-                receivedChunks = status.ReceivedChunks,
+                null,
+                status.ReceivedChunks?.ToArray() ?? Array.Empty<int>(),
                 status.TotalChunks,
-                isComplete = status.IsComplete,
+                status.IsComplete,
                 status.DeviceId,
-                status.CreatedAt
-            }
-        });
+                status.CreatedAt)));
     }
 }

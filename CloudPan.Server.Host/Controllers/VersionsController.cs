@@ -34,7 +34,7 @@ public class VersionsController : ControllerBase
         }
 
         var versions = await _versions.GetVersionsAsync(path, limit);
-        return Ok(new { data = versions });
+        return Ok(new VersionListResponse(versions.ToArray()));
     }
 
     /// <summary>
@@ -59,17 +59,12 @@ public class VersionsController : ControllerBase
         // WebSocket 广播（通知其他设备文件已变更）
         await _wsHandler.BroadcastFileChangedAsync(request.FilePath, result.Version!.Value, deviceId);
 
-        return Ok(new
-        {
-            data = new
-            {
-                path = result.Path,
-                version = result.Version,
-                hash = result.Hash,
-                size = result.Size,
-                restoredFromVersion = result.RestoredFromVersion
-            }
-        });
+        return Ok(new VersionRestoreResponse(new VersionRestoreData(
+            result.Path!,
+            result.Version!.Value,
+            result.Hash!,
+            result.Size!.Value,
+            result.RestoredFromVersion)));
     }
 }
 

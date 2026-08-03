@@ -67,6 +67,35 @@ public class ContractSourceScanTests
     }
 
     /// <summary>
+    /// 验证 Controllers 无匿名对象响应（T-040）。
+    /// 服务端响应体必须使用 ApiResponses.g.cs 生成 DTO，禁止 return Ok(new { ... }) 手写匿名对象，
+    /// 保证响应形状单一事实来源为 shared-spec.json → api.responses。
+    /// </summary>
+    [Fact]
+    public void Controllers_无匿名对象响应()
+    {
+        string controllersDir = Path.Combine(FindSolutionDir()!, "CloudPan.Server.Host", "Controllers");
+        List<string> csFiles = Directory.GetFiles(controllersDir, "*.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains("obj") && !f.Contains("bin"))
+            .ToList();
+
+        // 匹配 return Ok(new { ... }（{ 可换行）——匿名对象响应违例
+        Regex pattern = new Regex(@"return\s+Ok\s*\(\s*new\s*\{", RegexOptions.Compiled);
+
+        List<string> violations = new List<string>();
+        foreach (string? file in csFiles)
+        {
+            string content = File.ReadAllText(file);
+            foreach (Match match in pattern.Matches(content))
+            {
+                violations.Add($"{Path.GetFileName(file)}: {match.Value.Trim()}");
+            }
+        }
+
+        Assert.Empty(violations);
+    }
+
+    /// <summary>
     /// 验证 Server 源码中不存在原始 JSON 错误体字符串（以 {"error": 开头的字符串字面量）。
     /// </summary>
     [Fact]

@@ -1,7 +1,6 @@
-namespace CloudPan.Server.Core;
+using CloudPan.Contract;
 
-/// <summary>历史版本记录信息（列表展示）。</summary>
-public sealed record VersionRecordInfo(int Version, string Hash, long Size, string Timestamp, string DeviceId, int? RestoredFromVersion);
+namespace CloudPan.Server.Core;
 
 /// <summary>版本回滚结果。</summary>
 public sealed record VersionRestoreResult(
@@ -20,7 +19,7 @@ public sealed record VersionRestoreResult(
 public interface IVersionHistoryService
 {
     /// <summary>获取文件的历史版本列表（按版本倒序，上限 limit，单次最多 50 条）。</summary>
-    Task<List<VersionRecordInfo>> GetVersionsAsync(string path, int limit);
+    Task<List<VersionItem>> GetVersionsAsync(string path, int limit);
 
     /// <summary>回滚文件到指定历史版本：先存档当前版本、再用历史文件原子覆盖目标、更新索引。</summary>
     Task<VersionRestoreResult> RestoreAsync(string filePath, int version, string deviceId);

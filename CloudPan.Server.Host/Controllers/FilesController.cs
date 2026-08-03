@@ -121,17 +121,7 @@ public partial class FilesController : ControllerBase
         // WebSocket 广播
         await _wsHandler.BroadcastFileChangedAsync(path, result.Version, uploadDeviceId);
 
-        return Ok(new
-        {
-            data = new
-            {
-                path = result.Path,
-                version = result.Version,
-                hash = result.Hash,
-                size = result.Size,
-                conflictResolved = false
-            }
-        });
+        return Ok(new UploadResponse(new UploadData(result.Path, result.Version, result.Hash, result.Size, false)));
     }
 
     /// <summary>

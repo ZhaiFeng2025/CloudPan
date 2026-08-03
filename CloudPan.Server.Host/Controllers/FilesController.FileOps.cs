@@ -32,10 +32,7 @@ public partial class FilesController
         // WebSocket 广播
         await _wsHandler.BroadcastFileDeletedAsync(request.Path, deviceId);
 
-        return Ok(new
-        {
-            data = new { path = request.Path, deletedVersion = result.DeletedVersion }
-        });
+        return Ok(new DeleteResponse(new DeleteData(request.Path, result.DeletedVersion)));
     }
 
     /// <summary>
@@ -59,10 +56,7 @@ public partial class FilesController
         // WebSocket 广播
         await _wsHandler.BroadcastFileRenamedAsync(request.OldPath, request.NewPath, deviceId);
 
-        return Ok(new
-        {
-            data = new { oldPath = request.OldPath, newPath = request.NewPath, version = result.Version }
-        });
+        return Ok(new MoveResponse(new MoveData(request.OldPath, request.NewPath, result.Version)));
     }
 
     /// <summary>
@@ -82,7 +76,7 @@ public partial class FilesController
             return this.Error(result.Error!.Code, result.Error.Message, result.Error.UserMessage);
         }
 
-        return Ok(new { data = new { path = result.Path } });
+        return Ok(new MkdirResponse(new MkdirData(result.Path)));
     }
 
     /// <summary>
@@ -97,6 +91,6 @@ public partial class FilesController
         }
 
         var results = await _index.SearchAsync(q, Math.Min(limit, 200));
-        return Ok(new { data = results });
+        return Ok(new SearchResponse(results.ToArray()));
     }
 }

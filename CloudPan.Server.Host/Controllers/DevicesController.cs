@@ -28,17 +28,7 @@ public class DevicesController : ControllerBase
     public async Task<IActionResult> GetDevices()
     {
         var devices = await _status.GetDevicesAsync();
-        return Ok(new
-        {
-            data = devices.Select(d => new
-            {
-                deviceId = d.Id,
-                name = d.Name,
-                person = d.Person,
-                lastSeen = d.LastSeen,
-                online = d.Online,
-                registeredAt = d.RegisteredAt
-            })
-        });
+        return Ok(new DevicesResponse(
+            devices.Select(d => new DeviceItem(d.Id, d.Name, d.Person, d.LastSeen, d.Online, d.RegisteredAt)).ToArray()));
     }
 }

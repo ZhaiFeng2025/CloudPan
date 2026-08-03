@@ -1,7 +1,6 @@
-namespace CloudPan.Server.Core;
+using CloudPan.Contract;
 
-/// <summary>回收站条目（列表展示用）。</summary>
-public sealed record TrashItem(string OriginalPath, string TrashFileName, long FileSize, bool IsDirectory, string DeletedAt, int AgeDays);
+namespace CloudPan.Server.Core;
 
 /// <summary>回收站恢复结果。</summary>
 public sealed record TrashRestoreResult(bool Success, string? OriginalPath, DomainError? Error = null);

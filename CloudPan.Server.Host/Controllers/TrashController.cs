@@ -26,7 +26,7 @@ public class TrashController : ControllerBase
     public async Task<IActionResult> ListTrash()
     {
         var items = await _trash.ListAsync();
-        return Ok(new { data = items });
+        return Ok(new TrashListResponse(items.ToArray()));
     }
 
     /// <summary>POST /api/trash/restore — 恢复文件。</summary>
@@ -44,7 +44,7 @@ public class TrashController : ControllerBase
             return this.Error(result.Error!.Code, result.Error.Message, result.Error.UserMessage);
         }
 
-        return Ok(new { data = new { restored = result.OriginalPath } });
+        return Ok(new TrashRestoreResponse(new TrashRestoreData(result.OriginalPath)));
     }
 
     /// <summary>DELETE /api/trash/empty — 清空回收站。</summary>
@@ -52,7 +52,7 @@ public class TrashController : ControllerBase
     public async Task<IActionResult> EmptyTrash()
     {
         await _trash.EmptyAsync();
-        return Ok(new { data = "trash emptied" });
+        return Ok(new TrashEmptyResponse("trash emptied"));
     }
 }
 

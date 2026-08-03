@@ -32,14 +32,14 @@ public class VersionHistoryService : IVersionHistoryService
     }
 
     /// <inheritdoc />
-    public async Task<List<VersionRecordInfo>> GetVersionsAsync(string path, int limit)
+    public async Task<List<VersionItem>> GetVersionsAsync(string path, int limit)
     {
         await using var db = await _dbFactory.CreateDbContextAsync();
         var versions = await db.VersionRecords
             .Where(v => v.FilePath == path)
             .OrderByDescending(v => v.Version)
             .Take(Math.Min(limit, 50))
-            .Select(v => new VersionRecordInfo(v.Version, v.Hash, v.Size, v.Timestamp, v.DeviceId, v.RestoredFromVersion))
+            .Select(v => new VersionItem(v.Version, v.Hash, v.Size, v.Timestamp, v.DeviceId, v.RestoredFromVersion))
             .ToListAsync();
         return versions;
     }

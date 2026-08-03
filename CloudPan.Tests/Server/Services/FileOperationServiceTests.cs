@@ -32,9 +32,9 @@ public class FileOperationServiceTests : Infrastructure.TestBase
     /// <summary>模拟移入回收站失败的 ITrashService（如 File.Move 抛 IOException——目标被占用/磁盘错误）。</summary>
     private sealed class ThrowingTrashService : ITrashService
     {
-        // 全限定 CloudPan.Server.Core.TrashItem：本测试文件同时 using CloudPan.Contract，避免与生成 DTO 二义
-        public Task<List<CloudPan.Server.Core.TrashItem>> ListAsync() =>
-            Task.FromResult(new List<CloudPan.Server.Core.TrashItem>());
+        // ITrashService.ListAsync 返回契约生成的 TrashItem（T-040：Server.Core 重复记录已删除，单一事实来源）
+        public Task<List<CloudPan.Contract.TrashItem>> ListAsync() =>
+            Task.FromResult(new List<CloudPan.Contract.TrashItem>());
         public Task<TrashRestoreResult> RestoreAsync(string metaFileName) =>
             Task.FromResult(new TrashRestoreResult(false, null,
                 new DomainError(HttpErrorCode.NOT_FOUND, "无条目", "无条目")));
