@@ -7,7 +7,6 @@ using CloudPan.Infrastructure.Persistence;
 using CloudPan.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace CloudPan.Server.Core;
@@ -27,7 +26,6 @@ public sealed class TokenService : ITokenService
     private readonly ISettingsService _settingsService;
     private readonly string _syncRoot;
     private readonly IMemoryCache _cache;
-    private readonly IServiceProvider _services;
     private readonly ILogger<TokenService> _logger;
 
     public TokenService(
@@ -35,16 +33,17 @@ public sealed class TokenService : ITokenService
         ISettingsService settingsService,
         string syncRoot,
         IMemoryCache cache,
-        IServiceProvider services,
         ILogger<TokenService> logger)
     {
         _dbFactory = dbFactory;
         _settingsService = settingsService;
         _syncRoot = syncRoot;
         _cache = cache;
-        _services = services;
         _logger = logger;
     }
+
+    /// <inheritdoc />
+    public event Func<string, Task>? TokenRotated;
 
     public async Task<string> RotateAsync(bool disconnectAllClients)
     {
@@ -68,13 +67,29 @@ public sealed class TokenService : ITokenService
         _cache.Remove(CacheKeys.TokenHash);
 
         // 4. 可选：断开所有已连接设备（Token 轮换默认不踢，家庭场景避免全员掉线）
-        //    经 IServiceProvider 延迟解析——WebSocketHandler 亦注入本服务，构造期直接注入会形成循环依赖（T-025）
+        //    经 TokenRotated 事件通知订阅者（TokenRotationDisconnector 启动时订阅执行 DisconnectAllAsync），
+        //    消除服务定位器延迟解析与 TokenService ⇄ WebSocketHandler 构造期循环依赖（T-072）
         if (disconnectAllClients)
         {
-            await _services.GetRequiredService<IWebSocketHandler>().DisconnectAllAsync("token rotated");
+            await RaiseTokenRotatedAsync("token rotated");
         }
 
         return newToken;
+    }
+
+    /// <summary>触发 TokenRotated 事件。multicast delegate 逐个 await 保证所有订阅者完成；任一失败向上抛出（与旧延迟解析语义一致）。</summary>
+    private async Task RaiseTokenRotatedAsync(string reason)
+    {
+        var handler = TokenRotated;
+        if (handler == null)
+        {
+            return;
+        }
+
+        foreach (Func<string, Task> subscriber in handler.GetInvocationList())
+        {
+            await subscriber(reason);
+        }
     }
 
     public Task<string?> GetCurrentTokenAsync()

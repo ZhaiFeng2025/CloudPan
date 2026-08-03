@@ -200,6 +200,11 @@ public class TokenAuthMiddlewareTests : Infrastructure.TestBase
         public Task<string> RotateAsync(bool disconnectAllClients) => Task.FromResult("");
 
         public Task<string?> GetCurrentTokenAsync() => Task.FromResult<string?>(null);
+
+        // T-072：TokenService 服务定位器消除后 ITokenService 新增 TokenRotated 事件，fake 提供空实现
+#pragma warning disable CS0067 // 事件从未使用：fake 仅为满足接口，测试不触发轮换事件
+        public event Func<string, Task>? TokenRotated;
+#pragma warning restore CS0067
     }
 
     /// <summary>构造带请求路径、可选认证头/设备 ID 的 HttpContext。</summary>

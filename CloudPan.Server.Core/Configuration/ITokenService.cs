@@ -45,4 +45,12 @@ public interface ITokenService
     /// 并发注册竞态（唯一约束冲突）安全收敛，返回 true。
     /// </summary>
     Task<bool> EnsureDeviceAsync(string deviceId, bool? online = null);
+
+    /// <summary>
+    /// Token 轮换事件（T-072）：TokenService 不再直接引用 IWebSocketHandler（消除服务定位器延迟解析与
+    /// TokenService ⇄ WebSocketHandler 构造期循环依赖），轮换需断开连接时经此事件通知订阅者。
+    /// 参数为断开原因；multicast delegate 逐个 await，订阅者异常向上抛出。
+    /// TokenRotationDisconnector（HostedService）启动时订阅并执行 DisconnectAllAsync。
+    /// </summary>
+    event Func<string, Task>? TokenRotated;
 }

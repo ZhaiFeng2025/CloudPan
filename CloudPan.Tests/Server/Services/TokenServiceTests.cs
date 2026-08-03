@@ -1,4 +1,3 @@
-using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
 using CloudPan.Infrastructure.Models;
@@ -7,7 +6,6 @@ using CloudPan.Infrastructure.Security;
 using CloudPan.Server.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -22,30 +20,22 @@ public class TokenServiceTests : Infrastructure.TestBase
 {
     private const string TestToken = "unit-test-token";
 
-    private sealed class FakeWebSocketHandler : IWebSocketHandler
-    {
-        public int DisconnectAllCalls;
+    // T-072：Token 轮换断开经 TokenRotated 事件解耦，测试用具名方法订阅（CP301：匿名 lambda 订阅无法退订）
+    private int _disconnectCalls;
 
-        public Task HandleConnectionAsync(WebSocket socket) => Task.CompletedTask;
-        public Task BroadcastFileChangedAsync(string path, int version, string? excludeDeviceId = null) => Task.CompletedTask;
-        public Task BroadcastFileDeletedAsync(string path, string? excludeDeviceId = null) => Task.CompletedTask;
-        public Task BroadcastFileRenamedAsync(string oldPath, string newPath, string? excludeDeviceId = null) => Task.CompletedTask;
-        public Task DisconnectAllAsync(string reason) { DisconnectAllCalls++; return Task.CompletedTask; }
-        public Task CheckHeartbeatsAsync() => Task.CompletedTask;
-        public int ActiveConnectionCount => 0;
+    private Task OnTokenRotated(string reason)
+    {
+        _disconnectCalls++;
+        return Task.CompletedTask;
     }
 
     private static TokenService CreateService(
-        IDbContextFactory<CloudPanDbContext> dbFactory, string syncRoot, IMemoryCache cache, FakeWebSocketHandler ws)
+        IDbContextFactory<CloudPanDbContext> dbFactory, string syncRoot, IMemoryCache cache)
     {
         // T-022：TokenService 的 token_hash 读写统一经 ISettingsService
         var settingsService = new SettingsService(dbFactory);
-        // T-025：IWebSocketHandler 经 IServiceProvider 延迟解析，打破 WebSocketHandler ↔ ITokenService 循环依赖。
-        // 测试用 provider 不 Dispose（TokenService 持引用，RotateAsync 轮换时需解析 IWebSocketHandler）。
-        var provider = new ServiceCollection()
-            .AddSingleton<IWebSocketHandler>(ws)
-            .BuildServiceProvider();
-        return new TokenService(dbFactory, settingsService, syncRoot, cache, provider, NullLogger<TokenService>.Instance);
+        // T-072：Token 轮换断开经 TokenRotated 事件解耦，测试直接订阅事件计数，无需构造 ServiceProvider/容器
+        return new TokenService(dbFactory, settingsService, syncRoot, cache, NullLogger<TokenService>.Instance);
     }
 
     /// <summary>将 token 的 SHA-256 哈希写入 AppConfig.token_hash（模拟服务端初始化/轮换后的状态）。</summary>
@@ -72,8 +62,9 @@ public class TokenServiceTests : Infrastructure.TestBase
     {
         var dbFactory = CreateServerDbFactory();
         var cache = new MemoryCache(new MemoryCacheOptions());
-        var ws = new FakeWebSocketHandler();
-        var service = CreateService(dbFactory, TempDir, cache, ws);
+        var service = CreateService(dbFactory, TempDir, cache);
+        _disconnectCalls = 0;
+        service.TokenRotated += OnTokenRotated;
 
         string token = await service.RotateAsync(disconnectAllClients: false);
 
@@ -92,7 +83,7 @@ public class TokenServiceTests : Infrastructure.TestBase
         Assert.Equal(token, SecretStore.ReadToken(TempDir));
 
         // 默认不踢连接
-        Assert.Equal(0, ws.DisconnectAllCalls);
+        Assert.Equal(0, _disconnectCalls);
     }
 
     [Fact]
@@ -100,14 +91,15 @@ public class TokenServiceTests : Infrastructure.TestBase
     {
         var dbFactory = CreateServerDbFactory();
         var cache = new MemoryCache(new MemoryCacheOptions());
-        var ws = new FakeWebSocketHandler();
-        var service = CreateService(dbFactory, TempDir, cache, ws);
+        var service = CreateService(dbFactory, TempDir, cache);
+        _disconnectCalls = 0;
+        service.TokenRotated += OnTokenRotated;
 
         await service.RotateAsync(disconnectAllClients: true);
-        Assert.Equal(1, ws.DisconnectAllCalls);
+        Assert.Equal(1, _disconnectCalls);
 
         await service.RotateAsync(disconnectAllClients: false);
-        Assert.Equal(1, ws.DisconnectAllCalls); // 第二次不踢
+        Assert.Equal(1, _disconnectCalls); // 第二次不踢
     }
 
     [Fact]
@@ -115,8 +107,7 @@ public class TokenServiceTests : Infrastructure.TestBase
     {
         var dbFactory = CreateServerDbFactory();
         var cache = new MemoryCache(new MemoryCacheOptions());
-        var ws = new FakeWebSocketHandler();
-        var service = CreateService(dbFactory, TempDir, cache, ws);
+        var service = CreateService(dbFactory, TempDir, cache);
 
         // 预置"旧"缓存值，模拟中间件已缓存旧哈希（5 分钟窗口）
         cache.Set(CacheKeys.TokenHash, "old-hash");
@@ -131,8 +122,7 @@ public class TokenServiceTests : Infrastructure.TestBase
     {
         var dbFactory = CreateServerDbFactory();
         var cache = new MemoryCache(new MemoryCacheOptions());
-        var ws = new FakeWebSocketHandler();
-        var service = CreateService(dbFactory, TempDir, cache, ws);
+        var service = CreateService(dbFactory, TempDir, cache);
 
         Assert.Null(await service.GetCurrentTokenAsync());
 
@@ -149,7 +139,7 @@ public class TokenServiceTests : Infrastructure.TestBase
     {
         var dbFactory = CreateServerDbFactory();
         await ConfigureTokenHashAsync(dbFactory, TestToken);
-        var service = CreateService(dbFactory, TempDir, new MemoryCache(new MemoryCacheOptions()), new FakeWebSocketHandler());
+        var service = CreateService(dbFactory, TempDir, new MemoryCache(new MemoryCacheOptions()));
 
         var result = await service.ValidateTokenAsync(TestToken);
 
@@ -161,7 +151,7 @@ public class TokenServiceTests : Infrastructure.TestBase
     {
         var dbFactory = CreateServerDbFactory();
         await ConfigureTokenHashAsync(dbFactory, TestToken);
-        var service = CreateService(dbFactory, TempDir, new MemoryCache(new MemoryCacheOptions()), new FakeWebSocketHandler());
+        var service = CreateService(dbFactory, TempDir, new MemoryCache(new MemoryCacheOptions()));
 
         var result = await service.ValidateTokenAsync("wrong-token");
 
@@ -173,7 +163,7 @@ public class TokenServiceTests : Infrastructure.TestBase
     {
         // 种子数据只有 global_version，未写入 token_hash → NotInitialized（中间件映射为 503）
         var dbFactory = CreateServerDbFactory();
-        var service = CreateService(dbFactory, TempDir, new MemoryCache(new MemoryCacheOptions()), new FakeWebSocketHandler());
+        var service = CreateService(dbFactory, TempDir, new MemoryCache(new MemoryCacheOptions()));
 
         var result = await service.ValidateTokenAsync(TestToken);
 
@@ -187,7 +177,7 @@ public class TokenServiceTests : Infrastructure.TestBase
         // 同一 token 无论经哪个路径校验，结果一致——认证行为不再分叉。
         var dbFactory = CreateServerDbFactory();
         await ConfigureTokenHashAsync(dbFactory, TestToken);
-        var service = CreateService(dbFactory, TempDir, new MemoryCache(new MemoryCacheOptions()), new FakeWebSocketHandler());
+        var service = CreateService(dbFactory, TempDir, new MemoryCache(new MemoryCacheOptions()));
 
         // 模拟 HTTP 中间件调用
         TokenValidationResult httpResult = await service.ValidateTokenAsync(TestToken);
@@ -206,7 +196,7 @@ public class TokenServiceTests : Infrastructure.TestBase
         // 5 分钟内存缓存收敛在服务内：首次查库后，绕过服务直接改 DB 哈希，缓存未过期仍按旧值校验
         var dbFactory = CreateServerDbFactory();
         await ConfigureTokenHashAsync(dbFactory, TestToken);
-        var service = CreateService(dbFactory, TempDir, new MemoryCache(new MemoryCacheOptions()), new FakeWebSocketHandler());
+        var service = CreateService(dbFactory, TempDir, new MemoryCache(new MemoryCacheOptions()));
 
         Assert.Equal(TokenValidationResult.Valid, await service.ValidateTokenAsync(TestToken));
 
@@ -229,7 +219,7 @@ public class TokenServiceTests : Infrastructure.TestBase
     public async Task EnsureDeviceAsync_新设备_自动注册并设置LastSeen()
     {
         var dbFactory = CreateServerDbFactory();
-        var service = CreateService(dbFactory, TempDir, new MemoryCache(new MemoryCacheOptions()), new FakeWebSocketHandler());
+        var service = CreateService(dbFactory, TempDir, new MemoryCache(new MemoryCacheOptions()));
 
         bool ok = await service.EnsureDeviceAsync("device-new-001");
 
@@ -247,7 +237,7 @@ public class TokenServiceTests : Infrastructure.TestBase
     public async Task EnsureDeviceAsync_已存在设备_更新LastSeen不重复注册()
     {
         var dbFactory = CreateServerDbFactory();
-        var service = CreateService(dbFactory, TempDir, new MemoryCache(new MemoryCacheOptions()), new FakeWebSocketHandler());
+        var service = CreateService(dbFactory, TempDir, new MemoryCache(new MemoryCacheOptions()));
 
         await service.EnsureDeviceAsync("device-abc");
         bool ok = await service.EnsureDeviceAsync("device-abc"); // 第二次调用应幂等
@@ -261,7 +251,7 @@ public class TokenServiceTests : Infrastructure.TestBase
     public async Task EnsureDeviceAsync_重复调用_幂等不抛异常()
     {
         var dbFactory = CreateServerDbFactory();
-        var service = CreateService(dbFactory, TempDir, new MemoryCache(new MemoryCacheOptions()), new FakeWebSocketHandler());
+        var service = CreateService(dbFactory, TempDir, new MemoryCache(new MemoryCacheOptions()));
 
         await service.EnsureDeviceAsync("device-idempotent");
         bool ok = await service.EnsureDeviceAsync("device-idempotent");
@@ -276,7 +266,7 @@ public class TokenServiceTests : Infrastructure.TestBase
     public async Task EnsureDeviceAsync_格式非法_返回false()
     {
         var dbFactory = CreateServerDbFactory();
-        var service = CreateService(dbFactory, TempDir, new MemoryCache(new MemoryCacheOptions()), new FakeWebSocketHandler());
+        var service = CreateService(dbFactory, TempDir, new MemoryCache(new MemoryCacheOptions()));
 
         Assert.False(await service.EnsureDeviceAsync(""));     // 空
         Assert.False(await service.EnsureDeviceAsync("bad device id!")); // 含空格
@@ -294,7 +284,7 @@ public class TokenServiceTests : Infrastructure.TestBase
     public async Task EnsureDeviceAsync_在线参数_更新Online状态()
     {
         var dbFactory = CreateServerDbFactory();
-        var service = CreateService(dbFactory, TempDir, new MemoryCache(new MemoryCacheOptions()), new FakeWebSocketHandler());
+        var service = CreateService(dbFactory, TempDir, new MemoryCache(new MemoryCacheOptions()));
 
         // WebSocket 连接：online=true
         await service.EnsureDeviceAsync("ws-device-001", online: true);

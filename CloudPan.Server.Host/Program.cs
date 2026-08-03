@@ -98,6 +98,8 @@ builder.Services.AddHostedService<BackgroundHostedService>();
 builder.Services.AddHostedService<UdpDiscoveryHostedService>();
 // WebSocket 心跳（T-057：间隔读 SpecConfig.PingIntervalSeconds，独立 IHostedService 统一托管）
 builder.Services.AddHostedService<WebSocketHeartbeatHostedService>();
+// Token 轮换断开接线（T-072：TokenService 经 TokenRotated 事件解耦，替代服务定位器延迟解析）
+builder.Services.AddHostedService<TokenRotationDisconnector>();
 
 var app = builder.Build();
 
