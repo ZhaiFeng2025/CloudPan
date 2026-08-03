@@ -2067,7 +2067,7 @@
       "title": "选择性同步选择集改排除集语义",
       "dimension": "function",
       "priority": "P2",
-      "status": "in-progress",
+      "status": "acceptance",
       "batch": 4,
       "findingId": "F-47",
       "dependsOn": [],
@@ -2093,7 +2093,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
+      "note": "执行者记录（T-047）：选择性同步由『选择集收集（root \"/\" 恒被收集→前缀恒匹配→取消勾选不生效）』改为『排除集语义』——取消勾选的目录真正不再同步。改动文件：CloudPan.Client.UI/UI/SelectiveSyncPanel.cs（SelectedPaths 属性改为排除集：getter 按树勾选态收集顶层未勾选子树，空树/全选返回 {\"/\"} 全选默认，root 未勾选返回空集合=显式全不同步（不再回退 {\"/\"} 全选）；setter/ApplySelections 按排除集回显：空集合=全部取消勾选，含 \"/\"=全选，其余=命中排除子树则取消勾选；移除原 CollectChecked，新增 IsFullyChecked/CollectUnchecked）+ CloudPan.Client.Core/Services/SyncEngine.FullScan.cs（IsPathSelected 改排除集：空集合=全不同步，含 \"/\"=全选（兼容 v1.0.0 旧选择集默认及恒含根节点配置），其余=命中任一排除子树（含深层路径）则不同步）+ CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 5 单测：IsPathSelected_取消勾选子树_该子树false其余路径true / 空集合_显式全不同步 / 全选默认值_全选 / 旧版选择集含根_兼容全选 / 嵌套排除子树_深层不同步且不误伤同级）。语义：空集合=全不同步（字面满足验收『空集合→全不同步』），含 \"/\"=全选（与 v1.0.0 默认配置一致、向后兼容），其余=排除子树（满足『取消勾选=排除该子树，SelectedPaths 只含未勾选排除路径』）。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过（278/278）；dotnet test --filter SyncEngine -c Release 通过（57/57，含新增 5 个 IsPathSelected 用例）。手动验收项：① 设置→选择性同步取消勾选子目录→保存→重启客户端→该目录远端文件不再下载（快照置 CloudOnly）、其余路径正常；② 取消全选→保存→重启→全部路径不同步；③ 全选/默认→保存→重启→全量同步恢复；④ 旧配置（v1.0.0 保存过设置、含 \"/\"）升级后仍为全选同步。已知边界（非本任务范围）：上传侧不经 IsPathSelected 过滤——排除子树内本地新建文件仍会上传（仅下载侧按排除集过滤）；目录快照仍创建（ApplyRemoteChanges 目录分支先于 IsPathSelected）。",
       "updatedAt": "2026-08-03"
     },
     {
