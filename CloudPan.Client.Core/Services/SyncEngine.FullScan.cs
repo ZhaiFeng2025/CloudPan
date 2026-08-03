@@ -240,20 +240,35 @@ public partial class SyncEngine
         return path;
     }
 
-    /// <summary>检查路径是否在已选择的同步范围内。</summary>
+    /// <summary>检查路径是否在已选择的同步范围内（排除集语义，T-047）。</summary>
+    /// <remarks>
+    /// SelectedPaths 语义（v2 排除集）：
+    /// - 空集合 → 显式全不同步（取消全选后不回退为 { "/" } 全选）。
+    /// - 含 "/"（全选默认值，含 v1.0.0 旧版选择集恒含根节点）→ 全选，不排除任何路径。
+    /// - 其余 → 排除子树列表：命中任一排除子树（含深层路径）→ 不同步。
+    /// </remarks>
     private bool IsPathSelected(string path)
     {
-        if (_selectedPaths.Count == 1 && _selectedPaths[0] == "/")
+        // 空集合 = 显式全不同步（不再回退为 { "/" } 全选）
+        if (_selectedPaths.Count == 0)
         {
-            return true; // 全选
+            return false;
         }
 
+        // 含 "/"（全选默认值 / v1.0.0 旧版选择集恒含根节点）→ 全选
+        if (_selectedPaths.Contains("/"))
+        {
+            return true;
+        }
+
+        // 排除集：命中任一排除子树 → 不同步
         string normalized = path.TrimEnd('/') + "/";
-        return _selectedPaths.Any(sp =>
+        bool excluded = _selectedPaths.Any(sp =>
         {
             string p = sp.TrimEnd('/') + "/";
             return normalized.StartsWith(p, StringComparison.OrdinalIgnoreCase)
                    || path.Equals(sp.TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
         });
+        return !excluded;
     }
 }

@@ -1333,6 +1333,82 @@ public class SyncEngineTests : IDisposable
         Assert.NotNull(moved);
         Assert.Equal((int)FileType.Directory, moved!.Type);
     }
+
+    // ============================================================
+    // 选择性同步排除集语义（T-047）
+    // ============================================================
+
+    /// <summary>反射设置 _selectedPaths（排除集）。</summary>
+    private void SetSelectedPaths(SyncEngine engine, List<string> paths)
+    {
+        var field = typeof(SyncEngine).GetField("_selectedPaths",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(field);
+        field!.SetValue(engine, paths);
+    }
+
+    /// <summary>反射调用 IsPathSelected。</summary>
+    private bool CallIsPathSelected(SyncEngine engine, string path)
+    {
+        var method = typeof(SyncEngine).GetMethod("IsPathSelected",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+        return (bool)method!.Invoke(engine, [path])!;
+    }
+
+    [Fact]
+    public void IsPathSelected_取消勾选子树_该子树false其余路径true()
+    {
+        // 排除集：取消勾选 /photos → 排除该子树
+        SetSelectedPaths(_engine, new List<string> { "/photos/" });
+
+        Assert.False(CallIsPathSelected(_engine, "/photos/summer.jpg"));     // 子树内文件
+        Assert.False(CallIsPathSelected(_engine, "/photos/sub/video.mp4"));  // 子树深层文件
+        Assert.True(CallIsPathSelected(_engine, "/docs/report.pdf"));        // 其余目录文件
+        Assert.True(CallIsPathSelected(_engine, "/readme.txt"));             // 根目录文件不受影响
+    }
+
+    [Fact]
+    public void IsPathSelected_空集合_显式全不同步()
+    {
+        // 空集合 = 显式全不同步（取消全选），不再回退为 { "/" } 全选
+        SetSelectedPaths(_engine, new List<string>());
+
+        Assert.False(CallIsPathSelected(_engine, "/readme.txt"));
+        Assert.False(CallIsPathSelected(_engine, "/photos/summer.jpg"));
+        Assert.False(CallIsPathSelected(_engine, "/docs/report.pdf"));
+    }
+
+    [Fact]
+    public void IsPathSelected_全选默认值_全选()
+    {
+        // ["/"] = 全选默认值（v1.0.0 既有默认，语义保持不变）
+        SetSelectedPaths(_engine, new List<string> { "/" });
+
+        Assert.True(CallIsPathSelected(_engine, "/readme.txt"));
+        Assert.True(CallIsPathSelected(_engine, "/photos/summer.jpg"));
+        Assert.True(CallIsPathSelected(_engine, "/docs/sub/x.txt"));
+    }
+
+    [Fact]
+    public void IsPathSelected_旧版选择集含根_兼容全选()
+    {
+        // v1.0.0 旧版选择集恒含根 "/"（bug 使选择性同步实际等于全量）→ 兼容为全选，不误伤
+        SetSelectedPaths(_engine, new List<string> { "/", "/photos/" });
+
+        Assert.True(CallIsPathSelected(_engine, "/docs/report.pdf"));
+        Assert.True(CallIsPathSelected(_engine, "/photos/summer.jpg"));
+    }
+
+    [Fact]
+    public void IsPathSelected_嵌套排除子树_深层不同步且不误伤同级()
+    {
+        SetSelectedPaths(_engine, new List<string> { "/docs/private/" });
+
+        Assert.False(CallIsPathSelected(_engine, "/docs/private/secret.txt"));
+        Assert.True(CallIsPathSelected(_engine, "/docs/public.txt"));     // 同级文件不受影响
+        Assert.True(CallIsPathSelected(_engine, "/docs/private2/x.txt")); // 前缀不误伤相似路径
+    }
 }
 
 /// <summary>测试用 ClientDbContext 工厂。</summary>

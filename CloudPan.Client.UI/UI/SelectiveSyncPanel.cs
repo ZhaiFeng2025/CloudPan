@@ -3,7 +3,7 @@ using CloudPan.Infrastructure.Design;
 namespace CloudPan.Client.UI;
 
 /// <summary>
-/// 选择性同步设置面板——显示远程文件夹树，用户勾选需要同步的子目录。
+/// 选择性同步设置面板——显示远程文件夹树，默认全选，取消勾选=排除该子树（排除集语义，T-047）。
 /// </summary>
 public class SelectiveSyncPanel : UserControl
 {
@@ -13,14 +13,32 @@ public class SelectiveSyncPanel : UserControl
     private readonly Label _hintLabel;
     private List<string> _selectedPaths = new() { "/" };
 
-    /// <summary>当前选中的路径列表（以 / 开头，目录以 / 结尾）。</summary>
+    /// <summary>
+    /// 当前排除路径列表（排除集语义，T-047，以 / 开头，目录以 / 结尾）。
+    /// 空集合 = 显式全不同步（取消全选后不再回退为 { "/" } 全选）；含 "/" = 全选（默认/旧版兼容）；其余 = 未勾选排除子树。
+    /// </summary>
     public List<string> SelectedPaths
     {
         get
         {
-            List<string> paths = new List<string>();
-            CollectChecked(_tree.Nodes, paths);
-            return paths.Count == 0 ? new List<string> { "/" } : paths;
+            List<string> excluded = new List<string>();
+            TreeNode? root = _tree.Nodes.Count > 0 ? _tree.Nodes[0] : null;
+            if (root == null || IsFullyChecked(root))
+            {
+                // 空树（未加载）或全选：返回 "/" 全选默认值（引擎识别为全选）
+                excluded.Add("/");
+            }
+            else if (!root.Checked)
+            {
+                // root 未勾选（子节点已跟随传播全部未勾选）= 全不同步：返回空集合
+                return excluded;
+            }
+            else
+            {
+                // 部分勾选：收集顶层未勾选子树（子节点被父前缀覆盖，无需逐个收集）
+                CollectUnchecked(_tree.Nodes, excluded);
+            }
+            return excluded;
         }
         set
         {
@@ -188,9 +206,24 @@ public class SelectiveSyncPanel : UserControl
         string? path = node.Tag as string;
         if (path != null)
         {
-            node.Checked = paths.Any(p =>
-                p.TrimEnd('/') == path.TrimEnd('/') ||
-                path.StartsWith(p.TrimEnd('/') + "/"));
+            if (paths.Count == 0)
+            {
+                // 空集合 = 显式全不同步：全部取消勾选
+                node.Checked = false;
+            }
+            else if (paths.Contains("/"))
+            {
+                // 含 "/"（全选默认 / v1.0.0 旧版选择集恒含根节点）→ 全选
+                node.Checked = true;
+            }
+            else
+            {
+                // 排除集：命中任一排除子树（含深层路径）→ 取消勾选
+                bool excluded = paths.Any(p =>
+                    path.TrimEnd('/') == p.TrimEnd('/')
+                    || path.StartsWith(p.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase));
+                node.Checked = !excluded;
+            }
         }
         foreach (TreeNode child in node.Nodes)
         {
@@ -198,16 +231,24 @@ public class SelectiveSyncPanel : UserControl
         }
     }
 
-    private static void CollectChecked(TreeNodeCollection nodes, List<string> paths)
+    /// <summary>节点及其全部子节点是否均已勾选（用于判定全选态）。</summary>
+    private static bool IsFullyChecked(TreeNode node) =>
+        node.Checked && node.Nodes.Cast<TreeNode>().All(IsFullyChecked);
+
+    /// <summary>收集顶层未勾选节点路径（排除子树）。子节点已随父未勾选传播全部取消，由父前缀覆盖，无需逐个收集。</summary>
+    private static void CollectUnchecked(TreeNodeCollection nodes, List<string> paths)
     {
         foreach (TreeNode node in nodes)
         {
-            if (node.Checked && node.Tag is string path)
+            if (node.Checked)
+            {
+                // 父勾选 → 深入收集未勾选子节点
+                CollectUnchecked(node.Nodes, paths);
+            }
+            else if (node.Tag is string path)
             {
                 paths.Add(path);
             }
-
-            CollectChecked(node.Nodes, paths);
         }
     }
 }

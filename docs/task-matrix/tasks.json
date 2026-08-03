@@ -2067,7 +2067,7 @@
       "title": "选择性同步选择集改排除集语义",
       "dimension": "function",
       "priority": "P2",
-      "status": "todo",
+      "status": "in-progress",
       "batch": 4,
       "findingId": "F-47",
       "dependsOn": [],
@@ -2094,7 +2094,7 @@
       "attempts": 0,
       "statusReason": null,
       "note": null,
-      "updatedAt": null
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-048",
