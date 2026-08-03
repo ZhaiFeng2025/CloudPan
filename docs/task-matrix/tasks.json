@@ -4125,7 +4125,7 @@
       "title": "Windows 文件列表多选批量删除 + 右键上下文菜单",
       "dimension": "ux",
       "priority": "P2",
-      "status": "in-progress",
+      "status": "acceptance",
       "batch": 7,
       "findingId": "F-125",
       "dependsOn": [],
@@ -4161,7 +4161,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
+      "note": "执行 2026-08-03（task-executor）：T-083 Windows 多选批量删除 + 右键上下文菜单。\n【多选与批量】ListView 开启 MultiSelect（FileBrowserView.cs）；DeleteRequested/DownloadRequested 事件签名改为 Action<IReadOnlyList<FileBrowseItem>>，工具栏/右键「删除」转发全部选中项逐项进回收站、「下载到本机」转发 CloudOnly 可下载子集；多选时删除按钮文本变「批量删除」；分享/版本/打开仅单选文件可用（多选禁用）；RestoreSelection 按 _selectedPaths 恢复全部选中项（5 秒周期刷新不丢多选）。\n【右键菜单】新增 FileBrowserView.ContextMenu.cs：打开/下载到本机/分享/版本历史/删除（重命名/移动/复制列 v1.1）；List_MouseDown 右键命中未选中项先切换选中；Opening 按当前选中刷新可用性。\n【宿主批量】MainWindow.Trash.cs FileBrowser_DeleteRequested 逐项 DeleteForTrashAsync 收集 _lastDeletedTrashItems（TrashItem?→List<TrashItem>），撤销逐项 RestoreTrashAsync 恢复，Snackbar 显示「已删除 N 个项目，可在 5 秒内撤销」；MainWindow.Browser.cs 批量下载逐个 StartDownload（各自捕获异常）。\n【行数门禁】FileBrowserView 聚合 995 超豁免上限 854 → 抽离纯渲染助手 FileBrowseRender.cs（internal static：Sort/BuildItems/FormatSize/GetTypeLabel/ResolveDefaultState/DrawFolderGlyph/DrawFileGlyph，行为不变），聚合降为 842 < 854。\n【验证】AC1 grep -n 'MultiSelect' CloudPan.Client.UI/UI/FileBrowserView.cs 有匹配（:309）；AC4 dotnet build CloudPan.sln -c Release 0 错误 0 警告；dotnet test CloudPan.Tests -c Release 335/335 通过（新增 FileBrowserViewTests 8 项：MultiSelect 开启/多选批量删除事件载荷/删除按钮文本/多选时分享版本禁用/批量下载仅 CloudOnly 子集/右键菜单条目与弹出可用性）。改动文件——CloudPan.Client.UI/UI/FileBrowserView.cs；FileBrowserView.List.cs；FileBrowserView.Events.cs；FileBrowserView.ContextMenu.cs（新增）；FileBrowseRender.cs（新增）；MainWindow.cs；MainWindow.Trash.cs；MainWindow.Browser.cs；CloudPan.Tests/Client/UI/FileBrowserViewTests.cs（新增）；tasks.json。\n【手动验收项】①多选多个文件 → 工具栏「批量删除」→ 确认 → 全部进回收站，5 秒内撤销恢复全部；②右键文件 → 菜单含下载/分享/删除/版本历史/打开；③多选后右键 → 删除可用，分享/版本/打开禁用；④右键落在未选中项上 → 菜单作用于该项（非上次选中）。",
       "updatedAt": "2026-08-03"
     },
     {
