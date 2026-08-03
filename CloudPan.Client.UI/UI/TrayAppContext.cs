@@ -35,7 +35,7 @@ public partial class TrayAppContext : ApplicationContext
         _wsClient = wsClient;
         _api = api;
         _config = config;
-        _mainWindow = new MainWindow(engine, config);
+        _mainWindow = new MainWindow(engine, config, api);
 
         // ===== 托盘图标 =====
         // 不设 ContextMenuStrip，避免拦截鼠标事件。

@@ -50,6 +50,13 @@ public partial class FileBrowserView : UserControl
     /// <summary>状态解析器（由宿主注入，叠加本地错误/冲突覆盖）。未注入时使用默认 FileState → 图标/颜色映射。</summary>
     public Func<FileBrowseItem, (string Icon, Color Color)>? StateResolver { get; set; }
 
+    /// <summary>缩略图获取器（宿主注入，T-087，指向 ApiClient.GetThumbnailAsync）：参数（path, width, ct）→ JPEG 字节，失败返回 null。</summary>
+    public Func<string, int, CancellationToken, Task<byte[]?>>? ThumbnailFetcher
+    {
+        get => _thumbs.Fetcher;
+        set => _thumbs.Fetcher = value;
+    }
+
     /// <summary>当前浏览的目录相对路径（"/" 为根）。</summary>
     public string CurrentPath { get; private set; } = "/";
 
@@ -77,7 +84,7 @@ public partial class FileBrowserView : UserControl
     private ComboBox _sortCombo = null!;
     private ListView _list = null!;
     private Label _emptyLabel = null!;
-    private ImageList _glyphImages = null!;
+    private ThumbnailLoader _thumbs = null!; // T-087：网格缩略图加载器（自持 ImageList）
 
     // ================================================================
     // 状态
@@ -296,11 +303,7 @@ public partial class FileBrowserView : UserControl
         _sortCombo.SelectedIndexChanged += SortCombo_SelectedIndexChanged;
         toolbar.Controls.Add(_sortCombo, 2, 0);
 
-        // ── 文件列表 ──
-        _glyphImages = new ImageList { ColorDepth = ColorDepth.Depth32Bit, ImageSize = new Size(40, 40) };
-        _glyphImages.Images.Add(FileBrowseRender.DrawFolderGlyph()); // 0 文件夹
-        _glyphImages.Images.Add(FileBrowseRender.DrawFileGlyph());   // 1 文件
-
+        // ── 文件列表（网格缩略图 ImageList 由 ThumbnailLoader 自持并绑定 LargeImageList，T-087）──
         _list = new ListView
         {
             Dock = DockStyle.Fill,
@@ -313,8 +316,8 @@ public partial class FileBrowserView : UserControl
             BackColor = CloudPanColors.BackgroundWhite,
             ForeColor = CloudPanColors.TextPrimary,
             Font = new Font(baseFont.FontFamily, CloudPanFonts.SizeBody),
-            LargeImageList = _glyphImages,
         };
+        _thumbs = new ThumbnailLoader(_list); // T-087：网格缩略图加载器（含文件夹/文件字形索引 0/1）
         _list.Columns.Add("状态", 70);
         _list.Columns.Add("名称", 320);
         _list.Columns.Add("大小", 90);

@@ -56,6 +56,10 @@ public class MockApiClient : IApiClient
         return Task.CompletedTask;
     }
 
+    /// <summary>获取缩略图（Mock：返回 null，模拟获取失败回退字体图标路径，T-087）。</summary>
+    public Task<byte[]?> GetThumbnailAsync(string path, int width, CancellationToken ct = default)
+        => Task.FromResult<byte[]?>(null);
+
     public Task<FileTreeResponse?> GetFileTreeAsync(int sinceVersion, int limit = 5000, string? subPath = null, string? cursor = null, CancellationToken ct = default)
     {
         List<FileEntryDto> items = Files

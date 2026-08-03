@@ -51,6 +51,7 @@ public partial class MainWindow : Form
 
     private readonly SyncEngine _engine;
     private readonly ClientConfig _config;
+    private readonly IApiClient _api; // T-087：缩略图获取（注入 FileBrowserView.ThumbnailFetcher）
     private bool _paused;
 
     // 日志列表容量上限
@@ -90,10 +91,11 @@ public partial class MainWindow : Form
     // 构造
     // ================================================================
 
-    public MainWindow(SyncEngine engine, ClientConfig config)
+    public MainWindow(SyncEngine engine, ClientConfig config, IApiClient api)
     {
         _engine = engine;
         _config = config;
+        _api = api;
 
         // ── 窗口属性 ──
         Text = "CloudPan — 文件同步";
@@ -142,6 +144,7 @@ public partial class MainWindow : Form
         _fileBrowser.UpRequested += FileBrowser_UpRequested;
         _fileBrowser.SearchTextChanged += FileBrowser_SearchTextChanged;
         _fileBrowser.StateResolver = ResolveBrowseState;
+        _fileBrowser.ThumbnailFetcher = _api.GetThumbnailAsync; // T-087：网格视图缩略图复用 /api/thumbnails
 
         // T-014：删除进回收站 + 最近删除入口
         _fileBrowser.DeleteRequested += FileBrowser_DeleteRequested;

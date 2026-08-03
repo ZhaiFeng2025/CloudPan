@@ -11,7 +11,7 @@ public partial class FileBrowserView
     // 渲染
     // ================================================================
 
-    /// <summary>按当前排序/视图模式渲染列表，保留选中项（列表项构造在 FileBrowseRender）。</summary>
+    /// <summary>按当前排序/视图模式渲染列表，保留选中项（列表项构造在 FileBrowseRender；网格缩略图交 ThumbnailLoader）。</summary>
     private void RenderList()
     {
         bool grid = _list.View == View.LargeIcon;
@@ -33,6 +33,8 @@ public partial class FileBrowserView
         {
             _list.EndUpdate();
         }
+
+        _thumbs.RenderGrid(items, grid); // T-087：网格视图为图片项异步加载缩略图（失败回退字形），列表视图不动
     }
 
     /// <summary>T-083：保留上次选中的全部项（周期刷新时不丢失多选）。</summary>

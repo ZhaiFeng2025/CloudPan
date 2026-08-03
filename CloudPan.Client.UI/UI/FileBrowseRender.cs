@@ -89,6 +89,18 @@ internal static class FileBrowseRender
         return idx >= 0 && idx < item.Name.Length - 1 ? item.Name[idx..] : "文件";
     }
 
+    /// <summary>是否为服务端支持生成缩略图的图片类型（对齐 ThumbnailService.SupportedExts：jpg/png/gif/bmp/webp）。</summary>
+    public static bool IsThumbnailImage(FileBrowseItem item)
+    {
+        if (item.IsDirectory)
+        {
+            return false;
+        }
+
+        string ext = Path.GetExtension(item.Name).ToLowerInvariant();
+        return ext is ".jpg" or ".jpeg" or ".png" or ".gif" or ".bmp" or ".webp";
+    }
+
     /// <summary>默认 FileState →（图标, 颜色）双通道映射（未注入 StateResolver 时使用）。</summary>
     public static (string Icon, Color Color) ResolveDefaultState(FileBrowseItem item)
     {
