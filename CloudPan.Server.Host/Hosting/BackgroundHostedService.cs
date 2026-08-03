@@ -1,3 +1,4 @@
+using CloudPan.Contract;
 using CloudPan.Infrastructure.Persistence;
 using CloudPan.Server.Core;
 using Microsoft.EntityFrameworkCore;
@@ -9,7 +10,7 @@ using Timer = System.Threading.Timer;
 namespace CloudPan.Server.Host.Hosting;
 
 /// <summary>
-/// 后台定时任务宿主：回收站 30 天清理、墓碑物理清理、超时分块清理、WAL checkpoint、内存监控。
+/// 后台定时任务宿主：回收站 30 天清理、墓碑物理清理、超时分块清理、WAL checkpoint、内存监控、统一存储回收。
 /// 替换 Program.cs 中的裸 Timer（R-A6：定时任务用 IHostedService）。Timer 回调使用 Task.Run 包裹并捕获全部异常（CLAUDE.md 7.2）。
 /// </summary>
 public sealed class BackgroundHostedService : IHostedService, IDisposable
@@ -21,12 +22,16 @@ public sealed class BackgroundHostedService : IHostedService, IDisposable
     private Timer? _chunkTimer;
     private Timer? _walTimer;
     private Timer? _memTimer;
+    private Timer? _reclaimTimer;
 
     /// <summary>墓碑保留窗口（天）。与回收站 30 天清理对齐，保证客户端有足够时间同步删除。</summary>
     private static readonly TimeSpan TombstoneRetention = TimeSpan.FromDays(30);
 
     /// <summary>回收站保留窗口（天）。清理策略归属 TrashService（T-026），组合根只传保留期。</summary>
     private static readonly TimeSpan TrashRetention = TimeSpan.FromDays(30);
+
+    /// <summary>缩略图缓存保留窗口（天）。过期缓存由统一存储回收任务清理（重建成本低）。保留期读 SpecConfig。</summary>
+    private static readonly TimeSpan ThumbnailCacheRetention = TimeSpan.FromDays(SpecConfig.ThumbnailCacheRetentionDays);
 
     public BackgroundHostedService(IServiceProvider services, ILogger<BackgroundHostedService> logger)
     {
@@ -41,7 +46,11 @@ public sealed class BackgroundHostedService : IHostedService, IDisposable
         _chunkTimer = new Timer(ChunkCleanup, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(30));
         _walTimer = new Timer(WalCheckpoint, null, TimeSpan.FromMinutes(60), TimeSpan.FromMinutes(60));
         _memTimer = new Timer(MemoryMonitor, null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(10));
-        _logger.LogInformation("后台定时任务已启动（回收站/墓碑/分块/WAL/内存监控）");
+        // 统一存储回收（T-088）：间隔读 SpecConfig.StorageReclaimIntervalMinutes，首次延迟与周期一致
+        _reclaimTimer = new Timer(StorageReclaim, null,
+            TimeSpan.FromMinutes(SpecConfig.StorageReclaimIntervalMinutes),
+            TimeSpan.FromMinutes(SpecConfig.StorageReclaimIntervalMinutes));
+        _logger.LogInformation("后台定时任务已启动（回收站/墓碑/分块/WAL/内存监控/存储回收）");
         return Task.CompletedTask;
     }
 
@@ -52,6 +61,7 @@ public sealed class BackgroundHostedService : IHostedService, IDisposable
         _chunkTimer?.Dispose();
         _walTimer?.Dispose();
         _memTimer?.Dispose();
+        _reclaimTimer?.Dispose();
         return Task.CompletedTask;
     }
 
@@ -62,6 +72,7 @@ public sealed class BackgroundHostedService : IHostedService, IDisposable
         _chunkTimer?.Dispose();
         _walTimer?.Dispose();
         _memTimer?.Dispose();
+        _reclaimTimer?.Dispose();
     }
 
     // ==================== 回收站 30 天自动清理（策略在 TrashService，本处仅调度） ====================
@@ -164,5 +175,35 @@ public sealed class BackgroundHostedService : IHostedService, IDisposable
         {
             _logger.LogWarning(ex, "内存监控定时检查异常");
         }
+    }
+
+    // ==================== 统一存储回收（T-088：.versions 孤儿存档 + .thumbnails 过期缓存） ====================
+
+    private void StorageReclaim(object? state)
+    {
+        Task.Run(async () =>
+        {
+            try
+            {
+                var index = _services.GetRequiredService<IFileIndexService>();
+                int orphans = await index.PurgeOrphanVersionArchivesAsync();
+                if (orphans > 0)
+                {
+                    _logger.LogInformation("清理孤儿版本存档: {Count} 个", orphans);
+                }
+            }
+            catch (Exception ex) { _logger.LogWarning(ex, "孤儿版本存档清理异常"); }
+
+            try
+            {
+                var thumbnails = _services.GetRequiredService<IThumbnailService>();
+                int reclaimed = await thumbnails.ReclaimExpiredThumbnailsAsync(DateTime.UtcNow - ThumbnailCacheRetention);
+                if (reclaimed > 0)
+                {
+                    _logger.LogInformation("清理过期缩略图缓存: {Count} 个", reclaimed);
+                }
+            }
+            catch (Exception ex) { _logger.LogWarning(ex, "缩略图缓存清理异常"); }
+        });
     }
 }

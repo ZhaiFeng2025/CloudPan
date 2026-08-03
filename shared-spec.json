@@ -3,7 +3,7 @@
   "$id": "cloudpan-shared-spec",
   "title": "CloudPan 共享定义",
   "description": "所有枚举、实体、端点、字段名、错误码、配置值的唯一事实来源。所有代码和文档引用本文件，禁止各自重复定义。",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "date": "2026-08-04",
   "_changelog": [
     { "version": "1.0.0", "date": "2026-07-28", "changes": [
@@ -63,6 +63,9 @@
     ]},
     { "version": "1.7.0", "date": "2026-08-04", "changes": [
       "api.endpoints 新增 clientMethod 结构化参数段（query/body/path/part 映射 + 方法名/返回类型）：C# IApiClient/ApiClient 与 Kotlin CloudPanApi Retrofit 接口改由 CodeGen 生成，纳入 --verify 强制两端签名一致（T-086）"
+    ]},
+    { "version": "1.8.0", "date": "2026-08-04", "changes": [
+      "config: 新增 storageReclaimIntervalMinutes（统一存储回收任务间隔，分钟）与 thumbnailCacheRetentionDays（缩略图缓存保留天数），驱动 SpecConfig.StorageReclaimIntervalMinutes / ThumbnailCacheRetentionDays，消费：BackgroundHostedService 统一回收任务（T-088）"
     ]}
   ],
 
@@ -841,6 +844,8 @@
     "queuePriorityThreshold": 1048576,
     "maxVersionsDefault": 5,
     "scanIntervalMinutes": 5,
+    "storageReclaimIntervalMinutes": 60,
+    "thumbnailCacheRetentionDays": 30,
     "androidPollIntervalMinutes": 15,
     "tokenEntropy": 256,
     "tokenLength": 64,
@@ -860,6 +865,8 @@
       "retryBackoffMs": "HTTP API 请求失败指数退避序列（独立于 WebSocket 重连退避）。达到 maxRetryCount 次后放弃并通知用户",
       "rateLimitPerMinute": "每设备每分钟 API 调用上限（文件上传/下载不计入）。限流键: 已认证→context.Items[DeviceId]，未认证→RemoteIpAddress",
       "conflictSuffixPattern": "冲突副本命名模式。占位符：yyyyMMdd=日期, HHmmss=时间。示例：report_冲突_20260728_143000.docx",
+      "storageReclaimIntervalMinutes": "统一存储回收任务间隔（分钟）。消费者：BackgroundHostedService（.versions 孤儿存档 + .thumbnails 过期缓存）",
+      "thumbnailCacheRetentionDays": "缩略图缓存保留天数。过期缓存由统一回收任务清理（重建成本低，重建时自动按内容指纹重新生成）",
       "syncignoreFormat": ".syncignore 语法：每行一个 glob 模式。支持 *（单层通配）和 **（递归通配）。以 # 开头的行为注释。示例：*.tmp、**/node_modules/、# 这是注释"
     }
   },

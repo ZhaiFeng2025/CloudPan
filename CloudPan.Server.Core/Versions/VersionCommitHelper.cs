@@ -4,7 +4,6 @@ using CloudPan.Infrastructure.Persistence;
 using CloudPan.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using IOFile = System.IO.File;
 
 namespace CloudPan.Server.Core;
 
@@ -63,6 +62,8 @@ public sealed class VersionCommitHelper
         CancellationToken ct = default)
     {
         await using var tx = await db.Database.BeginTransactionAsync(ct);
+        // 被裁剪版本对应的存档物理文件，事务提交成功后统一删除（FS 副作用，CLAUDE.md 7.3）
+        List<string> prunedArchivePaths = new();
         try
         {
             if (archiveStoragePath != null && archivedEntry != null)
@@ -88,6 +89,8 @@ public sealed class VersionCommitHelper
                         .Skip(SpecConfig.MaxVersionsDefault)
                         .ToListAsync(ct);
                     db.VersionRecords.RemoveRange(oldVersions);
+                    // 记录被裁剪版本的存档物理文件（提交成功后删除——回滚时其版本记录仍在引用）
+                    prunedArchivePaths.AddRange(oldVersions.Select(v => v.StoragePath));
                 }
             }
 
@@ -126,6 +129,13 @@ public sealed class VersionCommitHelper
             await tx.RollbackAsync();
             DeleteOrphanArchive(archiveStoragePath);
             throw;
+        }
+
+        // 事务提交成功后清理被裁剪版本的存档物理文件（DB 已提交、记录已删，文件不再被引用）。
+        // 失败的文件成为孤儿存档，由统一存储回收任务（PurgeOrphanVersionArchivesAsync）兜底。
+        foreach (string prunedPath in prunedArchivePaths)
+        {
+            DeleteOrphanArchive(prunedPath);
         }
     }
 
@@ -199,18 +209,10 @@ public sealed class VersionCommitHelper
     /// <summary>回滚/失败后清理孤儿存档文件（FS 副作用，CLAUDE.md 7.3）。尽力而为，幂等。</summary>
     public void DeleteOrphanArchive(string? archiveStoragePath)
     {
-        if (archiveStoragePath == null)
-        {
-            return;
-        }
         try
         {
-            string archiveFile = Path.Combine(
-                _storage.GetAbsolutePath("/"), ".cloudpan", ".versions", archiveStoragePath);
-            if (IOFile.Exists(archiveFile))
-            {
-                IOFile.Delete(archiveFile);
-            }
+            // 孤儿存档清理单点收敛于 IFileStorageService.DeleteVersionArchive（持有 .versions 目录）
+            _storage.DeleteVersionArchive(archiveStoragePath);
         }
         catch (Exception ex)
         {

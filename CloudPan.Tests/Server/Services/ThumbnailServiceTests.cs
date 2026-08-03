@@ -117,6 +117,30 @@ public class ThumbnailServiceTests : Infrastructure.TestBase
     }
 
     [Fact]
+    public async Task ReclaimExpiredThumbnails_删除过期缓存_保留新缓存()
+    {
+        // T-088：缩略图缓存按创建时间/LRU 定期回收——过期（LastWriteTime 早于 cutoff）的缓存被删除，
+        // 新缓存保留（重建成本低，下次请求按内容指纹重新生成）
+        await WriteTestImageAsync("photo.png");
+        await WriteTestImageAsync("photo2.png");
+        var svc = new ThumbnailService(new FileStorageService(TempDir));
+
+        Assert.True((await svc.GetThumbnailAsync("/photo.png", 200)).Success);
+        Assert.True((await svc.GetThumbnailAsync("/photo2.png", 200)).Success);
+
+        string thumbsDir = Path.Combine(TempDir, ".cloudpan", ".thumbnails");
+        var files = Directory.GetFiles(thumbsDir, "*.jpg");
+        Assert.Equal(2, files.Length);
+
+        // 把其中一个缓存文件时间拨老（模拟长期未使用），另一个保持新
+        File.SetLastWriteTimeUtc(files[0], DateTime.UtcNow.AddDays(-40));
+
+        int reclaimed = await svc.ReclaimExpiredThumbnailsAsync(DateTime.UtcNow.AddDays(-30));
+        Assert.Equal(1, reclaimed);
+        Assert.Single(Directory.GetFiles(thumbsDir, "*.jpg"));
+    }
+
+    [Fact]
     public async Task GetThumbnail_同一图片并发请求_共享同一缓存()
     {
         // 并发门内双检：同一缩略图并发请求只产生一个缓存文件

@@ -130,6 +130,87 @@ public class ThumbnailService : IThumbnailService
     }
 
     /// <summary>
+    /// 回收过期缩略图缓存：删除最后写入早于 cutoff 的 .thumbnails 缓存文件。
+    /// 缓存是派生数据（内容指纹 key，重建成本低），按创建时间/LRU 定期清理即可控制长期增长的磁盘占用。
+    /// 尽力而为：单文件/单目录失败不影响其余清理。返回清理文件数。
+    /// </summary>
+    public Task<int> ReclaimExpiredThumbnailsAsync(DateTime cutoff)
+    {
+        int reclaimed = 0;
+        try
+        {
+            string syncRoot = _storage.GetAbsolutePath("/");
+            foreach (string thumbDir in EnumerateThumbnailCacheDirs(syncRoot))
+            {
+                try
+                {
+                    foreach (string cacheFile in Directory.EnumerateFiles(thumbDir, "*.jpg"))
+                    {
+                        try
+                        {
+                            // 缓存文件写入后不再改动：LastWriteTime 即创建/最后使用时间（LRU 语义）
+                            if (new FileInfo(cacheFile).LastWriteTimeUtc < cutoff)
+                            {
+                                File.Delete(cacheFile);
+                                reclaimed++;
+                            }
+                        }
+                        catch
+                        {
+                            // 竞态：缓存文件可能刚被删除或占用（重建成本低，下轮回收再试）
+                        }
+                    }
+                }
+                catch
+                {
+                    // 单目录枚举失败不影响其它目录
+                }
+            }
+        }
+        catch
+        {
+            // 同步根遍历失败：尽力而为，返回已回收数，外层定时任务记录
+        }
+        return Task.FromResult(reclaimed);
+    }
+
+    /// <summary>
+    /// 递归收集同步根下所有 .cloudpan/.thumbnails 缓存目录（缓存按源文件所在目录就近存储）。
+    /// 不深入 .cloudpan 内部下钻，避免遍历 .versions/数据库等元数据。
+    /// </summary>
+    private static IEnumerable<string> EnumerateThumbnailCacheDirs(string syncRoot)
+    {
+        Stack<string> pending = new();
+        pending.Push(syncRoot);
+        while (pending.Count > 0)
+        {
+            string dir = pending.Pop();
+            string thumbs = Path.Combine(dir, ".cloudpan", ".thumbnails");
+            if (Directory.Exists(thumbs))
+            {
+                yield return thumbs;
+            }
+
+            try
+            {
+                foreach (string sub in Directory.EnumerateDirectories(dir))
+                {
+                    string name = Path.GetFileName(sub);
+                    if (name == ".cloudpan" || name == ".thumbnails")
+                    {
+                        continue; // 不深入元数据目录
+                    }
+                    pending.Push(sub);
+                }
+            }
+            catch
+            {
+                // 目录权限/竞态：跳过该目录
+            }
+        }
+    }
+
+    /// <summary>
     /// 计算缩略图缓存路径。缓存 key = SHA-256(路径|宽度|索引版本|索引hash|磁盘长度|最后写入刻度) 前 16 hex。
     /// 文件更新（索引版本/hash 变化或磁盘内容变化）后 key 变化，旧缩略图自动失效。
     /// </summary>

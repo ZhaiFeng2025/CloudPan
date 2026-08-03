@@ -199,6 +199,20 @@ public static class ManifestGenerator
             maxVersionsDefault = mvd.GetInt32();
         }
 
+        // 统一存储回收任务间隔（消费者：BackgroundHostedService）
+        int storageReclaimIntervalMinutes = 60;
+        if (spec.Config.TryGetValue("storageReclaimIntervalMinutes", out var sri) && sri.ValueKind == JsonValueKind.Number)
+        {
+            storageReclaimIntervalMinutes = sri.GetInt32();
+        }
+
+        // 缩略图缓存保留天数（消费者：BackgroundHostedService）
+        int thumbnailCacheRetentionDays = 30;
+        if (spec.Config.TryGetValue("thumbnailCacheRetentionDays", out var tcr) && tcr.ValueKind == JsonValueKind.Number)
+        {
+            thumbnailCacheRetentionDays = tcr.GetInt32();
+        }
+
         // 家庭 Token 熵（位）（消费者：TokenGenerator 生成字节数 = 熵 / 8）
         int tokenEntropy = 256;
         if (spec.Config.TryGetValue("tokenEntropy", out var te) && te.ValueKind == JsonValueKind.Number)
@@ -252,6 +266,12 @@ public static class ManifestGenerator
         sb.AppendLine();
         sb.AppendLine($"    /// <summary>文件版本历史默认保留数</summary>");
         sb.AppendLine($"    public const int MaxVersionsDefault = {maxVersionsDefault};");
+        sb.AppendLine();
+        sb.AppendLine($"    /// <summary>统一存储回收任务间隔（分钟）。消费者：BackgroundHostedService（.versions 孤儿存档 + .thumbnails 过期缓存）</summary>");
+        sb.AppendLine($"    public const int StorageReclaimIntervalMinutes = {storageReclaimIntervalMinutes};");
+        sb.AppendLine();
+        sb.AppendLine($"    /// <summary>缩略图缓存保留天数。过期缓存由统一回收任务清理（重建成本低）。消费者：BackgroundHostedService</summary>");
+        sb.AppendLine($"    public const int ThumbnailCacheRetentionDays = {thumbnailCacheRetentionDays};");
         sb.AppendLine();
         sb.AppendLine($"    /// <summary>家庭 Token 熵（位）。生成字节数 = 熵 / 8</summary>");
         sb.AppendLine($"    public const int TokenEntropy = {tokenEntropy};");

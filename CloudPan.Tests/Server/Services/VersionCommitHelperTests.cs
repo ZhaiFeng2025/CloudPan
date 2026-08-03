@@ -97,7 +97,7 @@ public class VersionCommitHelperTests : Infrastructure.TestBase
     [Fact]
     public async Task CommitNewVersion_裁剪超MaxVersionsDefault_只保留最近N个()
     {
-        var (helper, _, dbFactory, version) = CreateServices();
+        var (helper, storage, dbFactory, version) = CreateServices();
         string path = "/prune.bin";
         string targetPath = Path.Combine(TempDir, "prune.bin");
 
@@ -132,6 +132,13 @@ public class VersionCommitHelperTests : Infrastructure.TestBase
             // 最旧版本 v1 已被裁剪（8 次提交产生 7 条存档，仅最旧的 1 条超限被移除）
             Assert.DoesNotContain(records, r => r.Version == 1);
         }
+
+        // T-088：被裁剪版本（v1）对应的存档物理文件应同步删除（孤儿存档清理单点），
+        // 保留版本对应的存档仍在 .versions/ 中
+        string versionsDir = Path.Combine(storage.GetAbsolutePath("/"), ".cloudpan", ".versions");
+        string[] archiveFiles = Directory.GetFiles(versionsDir);
+        Assert.DoesNotContain(archiveFiles, f => Path.GetFileName(f).StartsWith("prune_v1_", StringComparison.Ordinal));
+        Assert.NotEmpty(archiveFiles); // 保留版本的存档未被误删
     }
 
     [Fact]

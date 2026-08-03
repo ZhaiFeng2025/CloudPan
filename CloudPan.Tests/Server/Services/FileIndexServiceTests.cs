@@ -1,4 +1,5 @@
 using CloudPan.Contract;
+using CloudPan.Infrastructure.Storage;
 using CloudPan.Server.Core;
 using Xunit;
 
@@ -153,6 +154,106 @@ public class FileIndexServiceTests : Infrastructure.TestBase
         int purged = await index.PurgeExpiredTombstonesAsync(DateTime.UtcNow.AddDays(-1));
         Assert.Equal(0, purged);
         Assert.NotNull(await index.GetByPathAsync("/fresh.txt")); // 未到期墓碑保留
+    }
+
+    [Fact]
+    public async Task PurgeExpiredTombstones_超过保留窗口_同步删除版本存档物理文件()
+    {
+        // T-088：墓碑物理清理时，其关联 VersionRecord 的 .versions 存档物理文件应同步删除
+        var dbFactory = CreateServerDbFactory();
+        var storage = new FileStorageService(TempDir);
+        FileIndexService index = new FileIndexService(dbFactory, storage);
+
+        string archiveName = "old-tomb_v1_20260804.txt";
+        string versionsDir = Path.Combine(storage.GetAbsolutePath("/"), ".cloudpan", ".versions");
+        Directory.CreateDirectory(versionsDir);
+        File.WriteAllText(Path.Combine(versionsDir, archiveName), "archived content");
+
+        string oldTs = DateTime.UtcNow.AddDays(-40).ToString("O");
+        using (var db = dbFactory.CreateDbContext())
+        {
+            db.FileEntries.Add(new CloudPan.Infrastructure.Models.FileEntry
+            {
+                Path = "/old-tomb.txt",
+                Type = (int)FileType.File,
+                CurrentHash = "hash",
+                CurrentSize = 1,
+                Version = 2,
+                LastModified = oldTs,
+                State = (int)FileState.Deleting,
+                CreatedAt = oldTs
+            });
+            db.VersionRecords.Add(new CloudPan.Infrastructure.Models.VersionRecord
+            {
+                FilePath = "/old-tomb.txt",
+                Version = 1,
+                Hash = "h",
+                Size = 10,
+                StoragePath = archiveName,
+                Timestamp = oldTs,
+                DeviceId = "server"
+            });
+            await db.SaveChangesAsync();
+        }
+
+        int purged = await index.PurgeExpiredTombstonesAsync(DateTime.UtcNow.AddDays(-30));
+        Assert.Equal(1, purged);
+        Assert.Null(await index.GetByPathAsync("/old-tomb.txt"));
+        Assert.False(File.Exists(Path.Combine(versionsDir, archiveName))); // 存档物理文件同步删除
+    }
+
+    [Fact]
+    public async Task PurgeOrphanVersionArchives_删除未被引用的存档_保留被引用的()
+    {
+        // T-088：统一存储回收兜底——.versions 中未被任何 VersionRecord 引用的孤儿存档被清理
+        var dbFactory = CreateServerDbFactory();
+        var storage = new FileStorageService(TempDir);
+        FileIndexService index = new FileIndexService(dbFactory, storage);
+
+        string versionsDir = Path.Combine(storage.GetAbsolutePath("/"), ".cloudpan", ".versions");
+        Directory.CreateDirectory(versionsDir);
+
+        // 两个孤儿存档（无 VersionRecord 引用）+ 一个被引用的存档
+        string orphanA = "orphan_a_v1_20260804.bin";
+        string orphanB = "orphan_b_v2_20260804.bin";
+        string referenced = "kept_v1_20260804.bin";
+        foreach (string name in new[] { orphanA, orphanB, referenced })
+        {
+            File.WriteAllText(Path.Combine(versionsDir, name), "x");
+            File.SetLastWriteTimeUtc(Path.Combine(versionsDir, name), DateTime.UtcNow.AddHours(-1)); // 越过 10 分钟在途保护窗
+        }
+
+        using (var db = dbFactory.CreateDbContext())
+        {
+            db.FileEntries.Add(new CloudPan.Infrastructure.Models.FileEntry
+            {
+                Path = "/kept.txt",
+                Type = (int)FileType.File,
+                CurrentHash = "h",
+                CurrentSize = 1,
+                Version = 1,
+                LastModified = DateTime.UtcNow.ToString("O"),
+                State = (int)FileState.Synced,
+                CreatedAt = DateTime.UtcNow.ToString("O")
+            });
+            db.VersionRecords.Add(new CloudPan.Infrastructure.Models.VersionRecord
+            {
+                FilePath = "/kept.txt",
+                Version = 1,
+                Hash = "h",
+                Size = 1,
+                StoragePath = referenced,
+                Timestamp = DateTime.UtcNow.ToString("O"),
+                DeviceId = "server"
+            });
+            await db.SaveChangesAsync();
+        }
+
+        int purged = await index.PurgeOrphanVersionArchivesAsync();
+        Assert.Equal(2, purged);
+        Assert.False(File.Exists(Path.Combine(versionsDir, orphanA)));
+        Assert.False(File.Exists(Path.Combine(versionsDir, orphanB)));
+        Assert.True(File.Exists(Path.Combine(versionsDir, referenced))); // 被引用存档保留
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 using CloudPan.Contract;
 using CloudPan.Infrastructure.Models;
 using CloudPan.Infrastructure.Persistence;
+using CloudPan.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
 
 namespace CloudPan.Server.Core;
@@ -12,10 +13,16 @@ namespace CloudPan.Server.Core;
 public class FileIndexService : IFileIndexService
 {
     private readonly IDbContextFactory<CloudPanDbContext> _dbFactory;
+    private readonly IFileStorageService? _storage;
 
-    public FileIndexService(IDbContextFactory<CloudPanDbContext> dbFactory)
+    /// <summary>
+    /// storage 可为空（测试/未注入存储的场景）：为空时仅跳过存档物理文件删除，索引/版本记录语义不受影响。
+    /// 生产 DI 注入 IFileStorageService，墓碑清理与孤儿存档清理即生效。
+    /// </summary>
+    public FileIndexService(IDbContextFactory<CloudPanDbContext> dbFactory, IFileStorageService? storage = null)
     {
         _dbFactory = dbFactory;
+        _storage = storage;
     }
 
     /// <summary>
@@ -161,7 +168,8 @@ public class FileIndexService : IFileIndexService
 
     /// <summary>
     /// 物理清理超过保留窗口的墓碑：删除 FileState.Deleting 且 LastModified 早于 cutoff 的
-    /// FileEntry 行及其关联 VersionRecord（FK 约束要求先删版本记录）。
+    /// FileEntry 行及其关联 VersionRecord（FK 约束要求先删版本记录），
+    /// 并同步删除对应 .versions 存档物理文件（孤儿存档清理单点 IFileStorageService.DeleteVersionArchive，CLAUDE.md 7.3）。
     /// </summary>
     public async Task<int> PurgeExpiredTombstonesAsync(DateTime cutoff)
     {
@@ -181,10 +189,78 @@ public class FileIndexService : IFileIndexService
         var versions = await db.VersionRecords
             .Where(v => paths.Contains(v.FilePath))
             .ToListAsync();
+        // 记录待删版本记录对应的存档物理文件（DB 提交后同步删除——回滚时其记录仍在引用）
+        List<string> archivePaths = versions.Select(v => v.StoragePath).ToList();
         db.VersionRecords.RemoveRange(versions);
         db.FileEntries.RemoveRange(tombstones);
         await db.SaveChangesAsync();
+
+        // DB 提交后删除对应 .versions 存档物理文件（FS 副作用）。失败的文件成为孤儿存档，
+        // 由统一存储回收任务（PurgeOrphanVersionArchivesAsync）兜底。
+        foreach (string archivePath in archivePaths)
+        {
+            try
+            {
+                _storage?.DeleteVersionArchive(archivePath);
+            }
+            catch (Exception)
+            {
+                // 尽力而为：单文件删除失败不影响其余清理
+            }
+        }
         return tombstones.Count;
+    }
+
+    /// <summary>
+    /// 清理 .versions 目录中未被任何 VersionRecord 引用的孤儿存档物理文件（统一存储回收兜底）。
+    /// 跳过最近 10 分钟写入的文件：StoreVersionAsync 先写文件、后开事务入 VersionRecord，
+    /// 避免删除『即将被事务引用』的在途存档（CLAUDE.md 7.4 并发竞态）。返回清理文件数。
+    /// </summary>
+    public async Task<int> PurgeOrphanVersionArchivesAsync()
+    {
+        if (_storage == null)
+        {
+            return 0;
+        }
+
+        string versionsDir = Path.Combine(_storage.GetAbsolutePath("/"), ".cloudpan", ".versions");
+        if (!Directory.Exists(versionsDir))
+        {
+            return 0;
+        }
+
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        HashSet<string> referenced = (await db.VersionRecords
+            .Select(v => v.StoragePath)
+            .ToListAsync())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // 防在途竞态：刚写入的存档可能正处于『文件已落盘、事务未提交』窗口，留待下轮
+        DateTime graceCutoff = DateTime.UtcNow.AddMinutes(-10);
+
+        int purged = 0;
+        foreach (string file in Directory.EnumerateFiles(versionsDir))
+        {
+            string name = Path.GetFileName(file);
+            if (referenced.Contains(name))
+            {
+                continue;
+            }
+            try
+            {
+                if (File.GetLastWriteTimeUtc(file) >= graceCutoff)
+                {
+                    continue;
+                }
+                _storage.DeleteVersionArchive(name);
+                purged++;
+            }
+            catch (Exception)
+            {
+                // 尽力而为：删除失败留待下轮（定时任务外层记录总体异常）
+            }
+        }
+        return purged;
     }
 
     /// <summary>

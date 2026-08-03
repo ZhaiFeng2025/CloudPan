@@ -260,6 +260,24 @@ public class FileStorageService : IFileStorageService
     }
 
     /// <summary>
+    /// 删除 .versions 存档物理文件（孤儿存档清理单点）。幂等：storagePath 为空或文件不存在则无操作；
+    /// IO 异常向上抛，由调用方记录（FileStorageService 不依赖日志设施）。
+    /// </summary>
+    public void DeleteVersionArchive(string? archiveStoragePath)
+    {
+        if (string.IsNullOrEmpty(archiveStoragePath))
+        {
+            return;
+        }
+
+        string archiveFile = Path.Combine(_versionsDir, archiveStoragePath);
+        if (File.Exists(archiveFile))
+        {
+            File.Delete(archiveFile);
+        }
+    }
+
+    /// <summary>
     /// 检查同步根目录是否存在。
     /// </summary>
     public void EnsureSyncRootExists()

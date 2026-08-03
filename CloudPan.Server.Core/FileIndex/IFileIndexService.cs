@@ -18,6 +18,9 @@ public interface IFileIndexService
     /// <summary>物理清理超过保留窗口的墓碑（FileState.Deleting 且 LastModified 早于 cutoff）。返回清理条数。</summary>
     Task<int> PurgeExpiredTombstonesAsync(DateTime cutoff);
 
+    /// <summary>清理 .versions 目录中未被任何 VersionRecord 引用的孤儿存档物理文件（统一存储回收兜底）。返回清理文件数。</summary>
+    Task<int> PurgeOrphanVersionArchivesAsync();
+
     Task MoveAsync(string oldPath, string newPath, int newVersion, bool isDirectory);
     Task CreateDirectoryAsync(string path, int version);
     Task<List<FileEntryDto>> SearchAsync(string query, int limit = 50);
