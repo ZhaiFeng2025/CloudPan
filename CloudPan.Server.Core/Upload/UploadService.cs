@@ -17,6 +17,7 @@ public sealed class UploadStorageException : Exception
 public class UploadService : IUploadService
 {
     private readonly IFileStorageService _storage;
+    private readonly IFileOperationService _fileOps;
     private readonly IVersionService _version;
     private readonly IDbContextFactory<CloudPanDbContext> _dbFactory;
     private readonly ILogger<UploadService> _logger;
@@ -24,12 +25,14 @@ public class UploadService : IUploadService
 
     public UploadService(
         IFileStorageService storage,
+        IFileOperationService fileOps,
         IVersionService version,
         IDbContextFactory<CloudPanDbContext> dbFactory,
         ILogger<UploadService> logger,
         VersionCommitHelper versionCommit)
     {
         _storage = storage;
+        _fileOps = fileOps;
         _version = version;
         _dbFactory = dbFactory;
         _logger = logger;
@@ -37,17 +40,26 @@ public class UploadService : IUploadService
     }
 
     /// <inheritdoc />
-    public async Task<UploadResult> UploadAsync(
-        string path, Stream content, long contentLength,
+    public async Task<UploadOutcome> UploadAsync(
+        string path, Stream content, long contentLength, int baseVersion,
         string? lastModified, string deviceId, CancellationToken ct = default)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var existing = await db.FileEntries.FindAsync(new object?[] { path }, ct);
+
+        // 0. 冲突检测：baseVersion > 0 且服务端当前版本 > baseVersion → 保存冲突副本并返回冲突，
+        //    不推进主文件版本（语义与分块上传 ChunkedUploadService.FinalizeAsync 一致，F-56/T-056 下沉载体）。
+        if (baseVersion > 0 && existing != null && existing.Version > baseVersion)
+        {
+            var conflict = await _fileOps.HandleUploadConflictAsync(
+                path, content, contentLength, lastModified, baseVersion, existing.Version, deviceId);
+            return new UploadConflictOutcome(path, conflict.CurrentVersion, conflict.BaseVersion, conflict.ConflictPath);
+        }
+
         // 1. 先分配版本号，避免孤儿文件
         int newVersion = await _version.NextVersionAsync();
 
-        await using var db = await _dbFactory.CreateDbContextAsync();
-
         // 2. 先存档旧版本（FS）——必须在原子覆盖前读取旧内容，否则存档读到的是新内容（F-01 缺陷根因）
-        var existing = await db.FileEntries.FindAsync(new object?[] { path }, ct);
         string? archiveStoragePath = await _versionCommit.ArchiveOldVersionAsync(path, existing, ct);
 
         bool targetWritten = false;
@@ -79,7 +91,7 @@ public class UploadService : IUploadService
                     CreatedAt = DateTime.UtcNow.ToString("O")
                 }), ct);
 
-            return new UploadResult(path, newVersion, hash, contentLength);
+            return new UploadSuccessOutcome(path, newVersion, hash, contentLength);
         }
         catch
         {

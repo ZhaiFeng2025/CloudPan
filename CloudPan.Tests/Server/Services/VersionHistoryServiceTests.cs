@@ -16,11 +16,15 @@ public class VersionHistoryServiceTests : Infrastructure.TestBase
     {
         var dbFactory = CreateServerDbFactory();
         var storage = new FileStorageService(TempDir);
+        var index = new FileIndexService(dbFactory);
         var version = new VersionService(dbFactory);
-        var helper = new VersionCommitHelper(storage, NullLogger<VersionCommitHelper>.Instance);
-        var upload = new UploadService(storage, version, dbFactory, NullLogger<UploadService>.Instance, helper);
         var syncLog = new SyncLogService(dbFactory, NullLogger<SyncLogService>.Instance);
-        var versions = new VersionHistoryService(dbFactory, storage, new FileIndexService(dbFactory), version, syncLog, helper);
+        var helper = new VersionCommitHelper(storage, NullLogger<VersionCommitHelper>.Instance);
+        var fileOps = new FileOperationService(storage, index, version,
+            new TrashService(storage, index, version, NullLogger<TrashService>.Instance),
+            syncLog, NullLogger<FileOperationService>.Instance);
+        var upload = new UploadService(storage, fileOps, version, dbFactory, NullLogger<UploadService>.Instance, helper);
+        var versions = new VersionHistoryService(dbFactory, storage, index, version, syncLog, helper);
         return Task.FromResult((versions, storage, upload));
     }
 
@@ -31,9 +35,9 @@ public class VersionHistoryServiceTests : Infrastructure.TestBase
     {
         var (versions, _, upload) = await CreateServiceAsync();
         await using var s1 = ToStream("version 1");
-        await upload.UploadAsync("/file.txt", s1, 9, DateTime.UtcNow.ToString("O"), "server");
+        await upload.UploadAsync("/file.txt", s1, 9, 0, DateTime.UtcNow.ToString("O"), "server");
         await using var s2 = ToStream("version 2 longer");
-        await upload.UploadAsync("/file.txt", s2, 16, DateTime.UtcNow.ToString("O"), "server");
+        await upload.UploadAsync("/file.txt", s2, 16, 0, DateTime.UtcNow.ToString("O"), "server");
 
         var list = await versions.GetVersionsAsync("/file.txt", 10);
 
@@ -47,9 +51,9 @@ public class VersionHistoryServiceTests : Infrastructure.TestBase
     {
         var (versions, storage, upload) = await CreateServiceAsync();
         await using var s1 = ToStream("original");
-        await upload.UploadAsync("/file.txt", s1, 8, DateTime.UtcNow.ToString("O"), "server");
+        await upload.UploadAsync("/file.txt", s1, 8, 0, DateTime.UtcNow.ToString("O"), "server");
         await using var s2 = ToStream("newer content");
-        await upload.UploadAsync("/file.txt", s2, 13, DateTime.UtcNow.ToString("O"), "server");
+        await upload.UploadAsync("/file.txt", s2, 13, 0, DateTime.UtcNow.ToString("O"), "server");
 
         // 当前内容为 v2
         Assert.Equal("newer content", await File.ReadAllTextAsync(Path.Combine(TempDir, "file.txt")));
@@ -70,7 +74,7 @@ public class VersionHistoryServiceTests : Infrastructure.TestBase
     {
         var (versions, _, upload) = await CreateServiceAsync();
         await using var s1 = ToStream("only");
-        await upload.UploadAsync("/file.txt", s1, 4, DateTime.UtcNow.ToString("O"), "server");
+        await upload.UploadAsync("/file.txt", s1, 4, 0, DateTime.UtcNow.ToString("O"), "server");
 
         var result = await versions.RestoreAsync("/file.txt", 999, "server");
 

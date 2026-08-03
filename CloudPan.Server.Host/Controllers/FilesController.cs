@@ -56,7 +56,8 @@ public partial class FilesController : ControllerBase
 
     /// <summary>
     /// POST /api/files/upload — 上传文件（multipart）。
-    /// 冲突检测在 Controller（读索引），上传编排（先存档旧版本→再原子覆盖→后更新索引）由 Server.Core UploadService 保证顺序。
+    /// 冲突判定与冲突副本保存在 Server.Core UploadService（与分块上传路径策略一致，F-56/T-056），
+    /// 本层只透传 baseVersion 并映射 CONFLICT 错误体；上传编排（先存档旧版本→再原子覆盖→后更新索引）同样由 UploadService 保证顺序。
     /// </summary>
     [HttpPost("upload")]
     [RequestSizeLimit(50_000_000)]
@@ -89,39 +90,32 @@ public partial class FilesController : ControllerBase
 
         string uploadDeviceId = HttpContext.Items["DeviceId"] as string ?? "unknown";
 
-        // 冲突检测：baseVersion > 0 且当前版本 > baseVersion → 冲突（冲突副本保存由 IFileOperationService 负责）
-        if (baseVersion > 0)
-        {
-            var existing = await _index.GetByPathAsync(path);
-            if (existing != null && existing.Version > baseVersion)
-            {
-                await using var conflictStream = file.OpenReadStream();
-                var conflict = await _fileOps.HandleUploadConflictAsync(
-                    path, conflictStream, file.Length, lastModified, baseVersion, existing.Version, uploadDeviceId);
-
-                return this.Error(HttpErrorCode.CONFLICT,
-                    $"版本冲突：客户端基于 v{baseVersion}，服务端当前 v{conflict.CurrentVersion}",
-                    "文件已被其他设备修改，请刷新后重试",
-                    detail: $"currentVersion={conflict.CurrentVersion}, baseVersion={baseVersion}, conflictPath={conflict.ConflictPath}");
-            }
-        }
-
         await using var stream = file.OpenReadStream();
 
-        UploadResult result;
+        UploadOutcome outcome;
         try
         {
-            result = await _upload.UploadAsync(path, stream, file.Length, lastModified, uploadDeviceId);
+            outcome = await _upload.UploadAsync(path, stream, file.Length, baseVersion, lastModified, uploadDeviceId);
         }
         catch (UploadStorageException storageEx)
         {
             return this.Error(HttpErrorCode.INTERNAL_ERROR, storageEx.Message, "服务暂时不可用，请稍后重试");
         }
 
-        // WebSocket 广播
-        await _wsHandler.BroadcastFileChangedAsync(path, result.Version, uploadDeviceId);
-
-        return Ok(new UploadResponse(new UploadData(result.Path, result.Version, result.Hash, result.Size, false)));
+        switch (outcome)
+        {
+            case UploadSuccessOutcome s:
+                // WebSocket 广播
+                await _wsHandler.BroadcastFileChangedAsync(s.Path, s.Version, uploadDeviceId);
+                return Ok(new UploadResponse(new UploadData(s.Path, s.Version, s.Hash, s.Size, false)));
+            case UploadConflictOutcome c:
+                return this.Error(HttpErrorCode.CONFLICT,
+                    $"版本冲突：客户端基于 v{c.BaseVersion}，服务端当前 v{c.CurrentVersion}",
+                    "文件已被其他设备修改，请刷新后重试",
+                    detail: $"currentVersion={c.CurrentVersion}, baseVersion={c.BaseVersion}, conflictPath={c.ConflictPath}");
+            default:
+                return this.Error(HttpErrorCode.INTERNAL_ERROR, "未知上传结果", "上传过程中出现未知错误");
+        }
     }
 
     /// <summary>
