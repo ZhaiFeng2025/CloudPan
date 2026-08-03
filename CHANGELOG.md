@@ -1,6 +1,51 @@
 # Changelog
 
-本文件记录 CloudPan 各版本的变更。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/) 约定。
+本文件记录 CloudPan 各版本的变更。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/) 约定。版本号与 `shared-spec.json` 顶层 `version` 对齐（契约唯一事实来源）。
+
+## [1.6.0] - 2026-08-03
+
+请求体契约化（T-067）——entities 新增非持久化 API 请求 DTO（DeleteRequest/MoveRequest/MkdirRequest/CreateShareRequest/RestoreTrashRequest/RestoreRequest），字段名对齐 apiMapping；DtoGenerator 生成请求 record，服务端 Controller 删除文件内手写 record、客户端 ApiClient 删除匿名对象请求体，统一引用生成类型。
+
+## [1.5.0] - 2026-08-03
+
+断点续传健壮性（T-064）：
+
+- `api.responses.ChunkStatusData` 新增 `version: int`（服务端当前版本号），断点续传恢复路径不再兜底 version=0
+- `entities.ChunkedUpload` 新增 `Finalized` 布尔列：Finalize 完成标记，崩溃窗口（位图已收全块但未落盘）会话重启时清除并允许客户端重传
+
+## [1.4.0] - 2026-07-31
+
+认证模型与端点完备化：
+
+- `endpoints[].auth` 从 boolean 升级为字符串枚举 `token|public|localhost|message`
+- 补齐 11 个未注册端点：/admin×5 + /api/trash×3 + /api/version + /api/cert-fingerprint + /pair
+- `HttpErrorCode` 新增 `INVALID_DEVICE_ID` (400)
+- 新增 `api.errorResponse` 统一错误体格式（消除控制器 2 字段 vs 中间件 3 字段不一致）
+- 新增 `api.responses` 段：定义 5 个 API 响应包装类型
+- `api.websocket` 新增 `authMode: message`（明确 /ws 认证在首条消息，非 HTTP 头）
+- config 新增 `httpPort: 8443`、`udpDiscoveryPort: 8450`
+- `entities.SyncQueue.fields` 新增 `TargetPath`（TEXT nullable，客户端重命名目标）
+
+## [1.3.0] - 2026-07-28
+
+路径安全与 WebSocket 端点契约化：
+
+- 所有文件大小字段 `csharpType: long`，防止 >2GB 截断
+- `api.endpoints` 注册 WebSocket 端点 /ws（GET, auth=message）；SpecRoutes 生成 WebSocket 常量，Program.cs 与 WebSocketClient 改引用，删除手拼 /ws
+- 服务端 Controller 全部路由字面量改引用 SpecRoutes 生成常量，类级 [Route] 前缀移除，路由单一事实来源为契约（T-058）
+
+## [1.2.0] - 2026-07-28
+
+响应 DTO 契约化与 Android 备份字段：
+
+- `api.responses` 补齐全端点响应 DTO：admin/files+devices+logs+stats、api/devices、health、version、cert-fingerprint、files delete/move/mkdir/search、trash restore/empty
+- 服务端控制器匿名对象响应全部改用生成响应 DTO（T-040），响应体单一事实来源为 ApiResponses.g.cs
+- Server.Core 删除与生成 DTO 重复的响应记录，改为引用契约生成类型
+- 新增 `BackupStatus` 枚举（Android 照片备份状态）；`BackupLog.Status` 引用枚举替代内联值
+- `ChunkedUpload` 新增 `DeviceId` 字段 + `idx_chunk_device` 索引
+- `api.rateLimit` 添加 `_ref` 指向 config.rateLimitPerMinute，消除重复定义
+- config 新增 `websocketReconnectMaxBackoffSeconds`；`_comments` 标注 retryBackoffMs 仅用于 HTTP API
+- `api.websocket` 心跳字段重命名为 `pingIntervalSeconds`/`pongTimeoutSeconds`；新增 `_note` 说明 Android
 
 ## [1.1.0] - 2026-08-02
 

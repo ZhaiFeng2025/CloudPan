@@ -72,6 +72,22 @@ public static class Program
 
             bool hasChanges = false;
 
+            // 2.5. 版本治理断言（T-082）：changelog 严格单调递增 + 顶层版本对齐最新 changelog。
+            // verify 模式强制执行，破坏即 CI 失败（hasChanges → 返回 1）。
+            if (verifyMode)
+            {
+                var (versionOk, versionMessage) = ValidateChangelogVersioning(spec);
+                if (!versionOk)
+                {
+                    Console.WriteLine($"❌ 版本治理: {versionMessage}");
+                    hasChanges = true;
+                }
+                else
+                {
+                    Console.WriteLine($"✅ 版本治理: {versionMessage}");
+                }
+            }
+
             foreach (var (label, (dir, filename, content)) in generators)
             {
                 string outputDir = Path.Combine(solutionRoot, dir);
@@ -169,6 +185,59 @@ public static class Program
             Console.Error.WriteLine(ex.StackTrace);
             return 1;
         }
+    }
+
+    /// <summary>
+    /// 版本治理校验（T-082）：
+    /// 1) changelog 版本号严格单调递增（旧→新，无重复）；
+    /// 2) 顶层 version == 最新 changelog 版本（对齐锚点）。
+    /// 返回 (是否通过, 通过/失败消息)。
+    /// </summary>
+    private static (bool Ok, string Message) ValidateChangelogVersioning(SpecDocument spec)
+    {
+        if (spec.Changelog is null || spec.Changelog.Count == 0)
+        {
+            return (false, "shared-spec.json 缺少 _changelog，版本治理无法校验（应至少包含一条版本记录）");
+        }
+
+        for (int i = 1; i < spec.Changelog.Count; i++)
+        {
+            string prev = spec.Changelog[i - 1].Version;
+            string curr = spec.Changelog[i].Version;
+            if (CompareVersion(curr, prev) <= 0)
+            {
+                return (false, $"changelog 版本未严格单调递增：{prev} → {curr}（要求新版本 > 旧版本）");
+            }
+        }
+
+        string latest = spec.Changelog[^1].Version;
+        if (!string.Equals(spec.Version, latest, StringComparison.Ordinal))
+        {
+            return (false, $"顶层 version={spec.Version} 与最新 changelog 版本={latest} 不一致，应同步");
+        }
+
+        return (true, $"changelog {spec.Changelog.Count} 条严格单调递增，顶层 version={spec.Version} 与最新条目一致");
+    }
+
+    /// <summary>
+    /// 语义化版本 x.y.z 比较：a &gt; b 返回正数，相等返回 0，a &lt; b 返回负数。
+    /// 段数不足按 0 补齐（如 1.0 == 1.0.0）。
+    /// </summary>
+    private static int CompareVersion(string a, string b)
+    {
+        int[] pa = a.Split('.').Select(s => int.TryParse(s, out var v) ? v : 0).ToArray();
+        int[] pb = b.Split('.').Select(s => int.TryParse(s, out var v) ? v : 0).ToArray();
+        int n = Math.Max(pa.Length, pb.Length);
+        for (int i = 0; i < n; i++)
+        {
+            int x = i < pa.Length ? pa[i] : 0;
+            int y = i < pb.Length ? pb[i] : 0;
+            if (x != y)
+            {
+                return x.CompareTo(y);
+            }
+        }
+        return 0;
     }
 
     /// <summary>

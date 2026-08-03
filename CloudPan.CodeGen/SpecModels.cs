@@ -16,7 +16,20 @@ public record SpecDocument(
     Dictionary<string, EntityDef> Entities,
     ApiDef Api,
     Dictionary<string, JsonElement> Config,
-    SettingsDef? Settings = null   // v1.1.0: 服务端设置目录
+    SettingsDef? Settings = null,   // v1.1.0: 服务端设置目录
+    [property: JsonPropertyName("_changelog")] List<ChangelogEntry>? Changelog = null  // v1.2.0+: 版本变更日志
+);
+
+// ---- 版本日志 ----
+
+/// <summary>
+/// spec 变更日志条目（shared-spec.json → _changelog）。
+/// 版本治理：同版本号禁止重复，列表必须按版本严格单调递增（旧→新），最新条目版本 == 顶层 version。
+/// </summary>
+public record ChangelogEntry(
+    string Version,
+    string Date,
+    List<string> Changes
 );
 
 // ---- 枚举 ----
