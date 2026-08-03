@@ -15,19 +15,35 @@ public partial class MainWindow
     // 删除进回收站 + 撤销 + 最近删除入口（T-014）
     // ================================================================
 
-    /// <summary>T-014：文件浏览「删除」→ 默认进回收站（服务端软删墓碑+移入回收站），本地副本即时删除，显示撤销 Snackbar（5 秒）。</summary>
-    private async void FileBrowser_DeleteRequested(FileBrowseItem item)
+    /// <summary>从回收站条目原始路径取显示名（最后一段）。</summary>
+    private static string TrashDisplayName(TrashItem t)
+    {
+        string p = t.OriginalPath.TrimEnd('/');
+        return p[(p.LastIndexOf('/') + 1)..];
+    }
+
+    /// <summary>T-014/T-083：文件浏览「删除」/「批量删除」→ 全部进回收站（服务端软删墓碑+移入回收站），本地副本即时删除，显示撤销 Snackbar（5 秒）。</summary>
+    private async void FileBrowser_DeleteRequested(IReadOnlyList<FileBrowseItem> items)
     {
         try
         {
-            TrashItem? trashItem = await _engine.DeleteForTrashAsync(item.Path);
-            string name = item.Name;
-            AddLog(trashItem != null ? $"已删除（可撤销）: {name}" : $"已删除: {name}");
-
-            if (trashItem != null)
+            var trashed = new List<TrashItem>();
+            foreach (FileBrowseItem item in items)
             {
-                _lastDeletedTrashItem = trashItem;
-                _undoLabel.Text = $"已删除 “{name}”，可在 5 秒内撤销";
+                TrashItem? trashItem = await _engine.DeleteForTrashAsync(item.Path);
+                AddLog(trashItem != null ? $"已删除（可撤销）: {item.Name}" : $"已删除: {item.Name}");
+                if (trashItem != null)
+                {
+                    trashed.Add(trashItem);
+                }
+            }
+
+            if (trashed.Count > 0)
+            {
+                _lastDeletedTrashItems = trashed;
+                _undoLabel.Text = trashed.Count == 1
+                    ? $"已删除 “{TrashDisplayName(trashed[0])}”，可在 5 秒内撤销"
+                    : $"已删除 {trashed.Count} 个项目，可在 5 秒内撤销";
                 _undoBar.Visible = true;
                 _undoBar.BringToFront();
                 _undoTimer.Stop();
@@ -42,7 +58,7 @@ public partial class MainWindow
         }
         catch (Exception ex)
         {
-            AddLog($"删除失败: {item.Path} — {ex.Message}");
+            AddLog($"批量删除失败: {ex.Message}");
         }
     }
 
@@ -60,30 +76,35 @@ public partial class MainWindow
         }
     }
 
-    /// <summary>T-014：点击撤销 → 恢复最近删除的回收站条目（5 秒窗口内有效）。</summary>
+    /// <summary>T-014/T-083：点击撤销 → 恢复最近删除的全部回收站条目（5 秒窗口内有效）。</summary>
     private async void UndoButton_Click(object? sender, EventArgs e)
     {
         _undoTimer.Stop();
         _undoBar.Visible = false;
-        var item = _lastDeletedTrashItem;
-        _lastDeletedTrashItem = null;
-        if (item == null)
+        List<TrashItem> items = _lastDeletedTrashItems;
+        _lastDeletedTrashItems = new();
+        if (items.Count == 0)
         {
             return;
         }
 
         try
         {
-            bool ok = await _engine.RestoreTrashAsync(item);
-            AddLog(ok ? $"已撤销删除，恢复文件: {item.OriginalPath}" : $"撤销失败: {item.OriginalPath}");
-            if (ok)
+            bool allOk = true;
+            foreach (TrashItem item in items)
+            {
+                bool ok = await _engine.RestoreTrashAsync(item);
+                AddLog(ok ? $"已撤销删除，恢复文件: {item.OriginalPath}" : $"撤销失败: {item.OriginalPath}");
+                allOk &= ok;
+            }
+            if (allOk)
             {
                 await LoadBrowserAsync();
             }
         }
         catch (Exception ex)
         {
-            AddLog($"撤销失败: {item.OriginalPath} — {ex.Message}");
+            AddLog($"撤销失败: {ex.Message}");
         }
     }
 
@@ -92,7 +113,7 @@ public partial class MainWindow
     {
         _undoTimer.Stop();
         _undoBar.Visible = false;
-        _lastDeletedTrashItem = null;
+        _lastDeletedTrashItems = new();
     }
 
     /// <summary>最近删除对话框：列出回收站条目，支持恢复选中 / 清空回收站（复用 /api/trash 三端点）。</summary>

@@ -4047,7 +4047,7 @@
       "title": "行数门禁豁免表设持续下降约束（拆除永久豁免 + 巨型类拆分里程碑）",
       "dimension": "architecture",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 7,
       "findingId": "F-123",
       "dependsOn": [],
@@ -4078,7 +4078,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "执行 2026-08-03（task-executor）：T-081 行数门禁豁免表持续下降约束。\n【约束机制】CloudPan.Tests/Architecture/CodeQualityTests.cs：DocumentedTypeCeilings（Dictionary<string,int> 永久上限）改为过渡期登记 TypeExemption[]（TypeKey/Ceiling/TargetCeiling/Deadline/Reason），每个豁免必须 TargetCeiling &lt; Ceiling（下降计划）+ Deadline（达 ≤400 截止任务/批次）+ Reason（理由，新增登记必填）。新增 豁免表_持续下降约束 断言：①豁免总数 ≤ 基线 11（只减不增，新类型须拆到 ≤400 不得豁免）；②每项 TargetCeiling &lt; Ceiling；③SyncEngine/MainWindow 聚合行数必须低于 T-070 基线（2223/2548）。聚合门禁改从 Exemptions 查上限，无登记类型一律 MaxLines=400。\n【拆类（纯结构移动不改行为）】SyncEngine：进度/速率跟踪拆出 SyncProgressTracker（internal 类，Queue.cs 的 EmitProgress/RecalcQueueTotals + SyncEngine.cs 的队列/字节计数、速率估算、阶段与上次同步时间字段全部迁入），SyncEngine 保留公开事件 QueueProgressChanged 并经具名方法 OnProgressChanged 转发（Dispose 退订，行为不变），聚合 2227→2158，上限 2300→2200。MainWindow：GlowDot/ProgressBarWithText 从 private 嵌套类提升为顶层 internal 类（新增 MainWindowCustomControls.cs，删除 MainWindow.Controls.cs），聚合 2548→2380，上限 2600→2500。\n【持续下降路线图】9 个 T-070 范围外类型（SetupForm/FileBrowserView/SettingsForm/TrayAppContext/ApiClient/ServerInstaller/SettingsPage/ServerWindow/WebSocketHandler）记录现状上限（不变）并登记下降计划（TargetCeiling &lt; Ceiling + 批次 9 截止），随批次逐步下调直至 ≤400，规则 8 对最大类型重新获得约束力。\n【验证】dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test CloudPan.Tests -c Release --filter Architecture 14/14 通过（13 原 + 1 新增 豁免表_持续下降约束）；dotnet test CloudPan.Tests -c Release 全量 327/327 通过（原 326 + 1 新增，SyncEngine 进度拆类无回归）。改动文件——CloudPan.Tests/Architecture/CodeQualityTests.cs；CloudPan.Client.Core/Services/SyncProgressTracker.cs（新增）；SyncEngine.cs / SyncEngine.Queue.cs / SyncEngine.Transfers.cs；CloudPan.Client.UI/UI/MainWindowCustomControls.cs（新增）/ MainWindow.Controls.cs（删除）；tasks.json。",
+      "note": "执行 2026-08-03（task-executor）：T-081 行数门禁豁免表持续下降约束。\n【约束机制】CloudPan.Tests/Architecture/CodeQualityTests.cs：DocumentedTypeCeilings（Dictionary<string,int> 永久上限）改为过渡期登记 TypeExemption[]（TypeKey/Ceiling/TargetCeiling/Deadline/Reason），每个豁免必须 TargetCeiling &lt; Ceiling（下降计划）+ Deadline（达 ≤400 截止任务/批次）+ Reason（理由，新增登记必填）。新增 豁免表_持续下降约束 断言：①豁免总数 ≤ 基线 11（只减不增，新类型须拆到 ≤400 不得豁免）；②每项 TargetCeiling &lt; Ceiling；③SyncEngine/MainWindow 聚合行数必须低于 T-070 基线（2223/2548）。聚合门禁改从 Exemptions 查上限，无登记类型一律 MaxLines=400。\n【拆类（纯结构移动不改行为）】SyncEngine：进度/速率跟踪拆出 SyncProgressTracker（internal 类，Queue.cs 的 EmitProgress/RecalcQueueTotals + SyncEngine.cs 的队列/字节计数、速率估算、阶段与上次同步时间字段全部迁入），SyncEngine 保留公开事件 QueueProgressChanged 并经具名方法 OnProgressChanged 转发（Dispose 退订，行为不变），聚合 2227→2158，上限 2300→2200。MainWindow：GlowDot/ProgressBarWithText 从 private 嵌套类提升为顶层 internal 类（新增 MainWindowCustomControls.cs，删除 MainWindow.Controls.cs），聚合 2548→2380，上限 2600→2500。\n【持续下降路线图】9 个 T-070 范围外类型（SetupForm/FileBrowserView/SettingsForm/TrayAppContext/ApiClient/ServerInstaller/SettingsPage/ServerWindow/WebSocketHandler）记录现状上限（不变）并登记下降计划（TargetCeiling &lt; Ceiling + 批次 9 截止），随批次逐步下调直至 ≤400，规则 8 对最大类型重新获得约束力。\n【验证】dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test CloudPan.Tests -c Release --filter Architecture 14/14 通过（13 原 + 1 新增 豁免表_持续下降约束）；dotnet test CloudPan.Tests -c Release 全量 327/327 通过（原 326 + 1 新增，SyncEngine 进度拆类无回归）。改动文件——CloudPan.Tests/Architecture/CodeQualityTests.cs；CloudPan.Client.Core/Services/SyncProgressTracker.cs（新增）；SyncEngine.cs / SyncEngine.Queue.cs / SyncEngine.Transfers.cs；CloudPan.Client.UI/UI/MainWindowCustomControls.cs（新增）/ MainWindow.Controls.cs（删除）；tasks.json。验收 2026-08-03（task-verifier）：独立复核 3 条 AC 全过——AC1+AC2 实际执行 dotnet test CloudPan.Tests -c Release --filter Architecture 得 14/14 通过 0 失败（13 原 + 1 新增『豁免表_持续下降约束』）；AC3 实际执行 dotnet build CloudPan.sln -c Release Build succeeded 0 警告 0 错误。机制存在性：grep『TargetCeiling|TypeExemption』CodeQualityTests.cs 有匹配（82/85/88/97/131/145/159/174-179 行），实读 TypeExemption record（Ceiling>400 + TargetCeiling<Ceiling + Deadline + Reason）与『豁免表_持续下降约束』断言（豁免总数≤基线 11、每项必有下降计划、SyncEngine/MainWindow 聚合较 T-070 基线下降）确认约束机制真实且非桩。拆类产物实读：SyncProgressTracker.cs（internal 类，队列/字节计数、速率估算、阶段/上次同步时间迁入）、MainWindowCustomControls.cs（GlowDot 顶层 internal 类），MainWindow.Controls.cs 已删除，SyncEngine.Queue/Transfers.cs 于拆类时间点更新。独立核证聚合行数：SyncEngine 声明文件 2162 行 < 基线 2223；MainWindow 声明文件（不含新控件文件）2380 行 < 基线 2548，与 note 一致。无手动项，结论：通过 → done。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -4086,7 +4086,7 @@
       "title": "spec changelog 版本治理（去重 + 严格单调 + CHANGELOG.md 对齐 + --verify 断言）",
       "dimension": "architecture",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 7,
       "findingId": "F-124",
       "dependsOn": [],
@@ -4117,7 +4117,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "执行 2026-08-03（task-executor）：T-082 spec changelog 版本治理。\n【数据治理】shared-spec.json _changelog 原 11 条：1.0.0/1.1.0/1.2.0/1.3.0 各两条重复（版本号越界：1.4.0 排于 1.0.0 后），重写为 7 条——重复版本合并（date 取最早，changes 按时间先后并序），列表严格版本升序 1.0.0→1.6.0，与顶层 version=1.6.0 对齐。仅改动 _changelog 块（括号配对精确替换，其余字节不动）。\n【CHANGELOG.md 对齐】补 1.2.0-1.6.0 条目至现有 1.1.0 之前，内容/日期与 spec changelog 对齐（新增与契约一致声明）。\n【CodeGen 断言】SpecModels.cs 增加 Changelog 反序列化（JsonPropertyName(\"_changelog\")）+ ChangelogEntry record；Program.cs --verify 模式新增 ValidateChangelogVersioning：①changelog 版本严格单调递增（CompareVersion 语义化 x.y.z 比较）②顶层 version == 最新 changelog 版本，违规置 hasChanges → 返回 1（CI 失败）。\n【验证】AC1 python 脚本 changelog 7 条无重复且严格单调、顶层 version=1.6.0 与最新条目一致；AC2 grep CHANGELOG.md 含 ## [1.6.0] - 2026-08-03、spec 顶层 version=1.6.0 一致；AC3 dotnet run --project CloudPan.CodeGen -- --verify 版本治理断言通过、11 个生成物一致、校验通过。负向测试：临时制造 1.4.0 重复版本 → 断言捕获『版本未严格单调递增』、verify 返回失败，恢复后通过。dotnet build CloudPan.sln -c Release 0 错误 0 警告；dotnet test CloudPan.Tests -c Release 327/327 通过。改动文件——shared-spec.json；CHANGELOG.md；CloudPan.CodeGen/SpecModels.cs；CloudPan.CodeGen/Program.cs；tasks.json。",
+      "note": "执行 2026-08-03（task-executor）：T-082 spec changelog 版本治理。\n【数据治理】shared-spec.json _changelog 原 11 条：1.0.0/1.1.0/1.2.0/1.3.0 各两条重复（版本号越界：1.4.0 排于 1.0.0 后），重写为 7 条——重复版本合并（date 取最早，changes 按时间先后并序），列表严格版本升序 1.0.0→1.6.0，与顶层 version=1.6.0 对齐。仅改动 _changelog 块（括号配对精确替换，其余字节不动）。\n【CHANGELOG.md 对齐】补 1.2.0-1.6.0 条目至现有 1.1.0 之前，内容/日期与 spec changelog 对齐（新增与契约一致声明）。\n【CodeGen 断言】SpecModels.cs 增加 Changelog 反序列化（JsonPropertyName(\"_changelog\")）+ ChangelogEntry record；Program.cs --verify 模式新增 ValidateChangelogVersioning：①changelog 版本严格单调递增（CompareVersion 语义化 x.y.z 比较）②顶层 version == 最新 changelog 版本，违规置 hasChanges → 返回 1（CI 失败）。\n【验证】AC1 python 脚本 changelog 7 条无重复且严格单调、顶层 version=1.6.0 与最新条目一致；AC2 grep CHANGELOG.md 含 ## [1.6.0] - 2026-08-03、spec 顶层 version=1.6.0 一致；AC3 dotnet run --project CloudPan.CodeGen -- --verify 版本治理断言通过、11 个生成物一致、校验通过。负向测试：临时制造 1.4.0 重复版本 → 断言捕获『版本未严格单调递增』、verify 返回失败，恢复后通过。dotnet build CloudPan.sln -c Release 0 错误 0 警告；dotnet test CloudPan.Tests -c Release 327/327 通过。改动文件——shared-spec.json；CHANGELOG.md；CloudPan.CodeGen/SpecModels.cs；CloudPan.CodeGen/Program.cs；tasks.json。\n验收 2026-08-03（task-verifier）：独立复核 3 条 AC 全过，无手动项——AC1 实读 shared-spec.json _changelog 7 条（1.0.0→1.6.0，2026-07-28→2026-08-03）版本号无重复且严格升序，与 note 声称一致；AC2 grep CHANGELOG.md 第 5 行『## [1.6.0] - 2026-08-03』有匹配，spec 顶层 version=1.6.0 一致；AC3 实际执行 dotnet run --project CloudPan.CodeGen -- --verify，退出码 0，输出『✅ 版本治理: changelog 7 条严格单调递增，顶层 version=1.6.0 与最新条目一致』+ 11 个生成物全部一致 + 『✅ 校验通过』。断言实现实读确认非桩：Program.cs ValidateChangelogVersioning（ChangelogEntry Version 经 CompareVersion 语义化 x.y.z 比较要求严格 >0，且顶层 version==最新条目）+ SpecModels.cs ChangelogEntry record + _changelog 反序列化。附加检查 dotnet build CloudPan.sln -c Release Build succeeded 0 错误 0 警告。结论：通过 → done。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -4125,7 +4125,7 @@
       "title": "Windows 文件列表多选批量删除 + 右键上下文菜单",
       "dimension": "ux",
       "priority": "P2",
-      "status": "todo",
+      "status": "in-progress",
       "batch": 7,
       "findingId": "F-125",
       "dependsOn": [],
@@ -4162,7 +4162,7 @@
       "attempts": 0,
       "statusReason": null,
       "note": null,
-      "updatedAt": null
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-084",

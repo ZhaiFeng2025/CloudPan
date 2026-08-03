@@ -175,8 +175,14 @@ public partial class MainWindow
     /// <summary>T-033：拖拽文件到浏览视图 → 复制到当前浏览目录并入队上传。</summary>
     private async void FileBrowser_FilesDropped(string[] files) => await ImportFilesAsync(files);
 
-    /// <summary>T-033：「下载到本机」→ CloudOnly 文件入队下载（复用 SyncEngine.DownloadPathAsync）。</summary>
-    private void FileBrowser_DownloadRequested(FileBrowseItem item) => StartDownload(item.Path);
+    /// <summary>T-033/T-083：「下载到本机」/右键菜单 → 批量 CloudOnly 文件入队下载（每个 StartDownload 内部捕获异常，互不影响）。</summary>
+    private void FileBrowser_DownloadRequested(IReadOnlyList<FileBrowseItem> items)
+    {
+        foreach (FileBrowseItem item in items)
+        {
+            StartDownload(item.Path);
+        }
+    }
 
     /// <summary>T-033：CloudOnly 按需下载：入队高优先级下载并立即刷新（文件显示 ↻ 下载中）。</summary>
     private async void StartDownload(string relativePath)

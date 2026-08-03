@@ -23,8 +23,8 @@ public partial class FileBrowserView : UserControl
     /// <summary>点击「上传」（多选文件）→ 参数为选中的本地文件路径数组（T-033，宿主复制入同步根并入队上传）。</summary>
     public event Action<string[]>? UploadRequested;
 
-    /// <summary>点击「下载到本机」（选中 CloudOnly 文件）→ 参数为选中的文件（T-033，宿主调用 DownloadPathAsync）。</summary>
-    public event Action<FileBrowseItem>? DownloadRequested;
+    /// <summary>点击「下载到本机」（选中 CloudOnly 文件）→ 参数为可下载的选中文件列表（T-083 多选批量，宿主逐个 DownloadPathAsync）。</summary>
+    public event Action<IReadOnlyList<FileBrowseItem>>? DownloadRequested;
 
     /// <summary>拖拽文件到浏览视图 → 参数为拖入的本地文件路径数组（T-033，宿主复制入同步根并入队上传）。</summary>
     public event Action<string[]>? FilesDropped;
@@ -35,8 +35,8 @@ public partial class FileBrowserView : UserControl
     /// <summary>搜索框内容变化 → 参数为当前搜索文本（可能为空串）。</summary>
     public event Action<string>? SearchTextChanged;
 
-    /// <summary>点击「删除」（有选中项）→ 参数为选中的文件/目录（T-014，宿主负责进回收站）。</summary>
-    public event Action<FileBrowseItem>? DeleteRequested;
+    /// <summary>点击「删除」/右键「删除」（有选中项）→ 参数为选中的文件/目录列表（T-083 多选批量，宿主逐项进回收站）。</summary>
+    public event Action<IReadOnlyList<FileBrowseItem>>? DeleteRequested;
 
     /// <summary>点击「回收站」→ 打开最近删除入口（T-014）。</summary>
     public event Action? TrashRequested;
@@ -53,7 +53,7 @@ public partial class FileBrowserView : UserControl
     /// <summary>当前浏览的目录相对路径（"/" 为根）。</summary>
     public string CurrentPath { get; private set; } = "/";
 
-    /// <summary>当前选中的文件/目录项（无选中为 null，T-014 删除操作依据）。</summary>
+    /// <summary>当前选中的文件/目录项（无选中为 null；多选时为首个选中项，T-083 批量动作走事件列表参数）。</summary>
     public FileBrowseItem? SelectedItem { get; private set; }
 
     /// <summary>当前是否处于搜索模式（搜索框非空）。</summary>
@@ -87,7 +87,7 @@ public partial class FileBrowserView : UserControl
     private bool _isSearchActive;
     private string _sortMode = "名称";
     private bool _sortAscending = true;
-    private string? _selectedPath;
+    private List<string> _selectedPaths = new(); // T-083：多选路径集合（刷新后恢复全部选中项）
     private bool _syncingSortCombo; // 列点击同步排序下拉时抑制其事件
 
     // ================================================================
@@ -214,11 +214,11 @@ public partial class FileBrowserView : UserControl
         _uploadButton.Click += UploadButton_Click;
         viewPanel.Controls.Add(_uploadButton);
 
-        // T-014：删除（进回收站，无选中项禁用）+ 回收站入口
+        // T-014：删除（进回收站，无选中项禁用；T-083 多选时文本变「批量删除」）+ 回收站入口
         _deleteButton = new Button
         {
             Text = "删除",
-            Width = 64,
+            Width = 88,
             Height = CloudPanSpacing.MinTouchSize,
             FlatStyle = FlatStyle.Flat,
             Margin = new Padding(4, 0, 0, 0),
@@ -298,14 +298,15 @@ public partial class FileBrowserView : UserControl
 
         // ── 文件列表 ──
         _glyphImages = new ImageList { ColorDepth = ColorDepth.Depth32Bit, ImageSize = new Size(40, 40) };
-        _glyphImages.Images.Add(DrawFolderGlyph()); // 0 文件夹
-        _glyphImages.Images.Add(DrawFileGlyph());   // 1 文件
+        _glyphImages.Images.Add(FileBrowseRender.DrawFolderGlyph()); // 0 文件夹
+        _glyphImages.Images.Add(FileBrowseRender.DrawFileGlyph());   // 1 文件
 
         _list = new ListView
         {
             Dock = DockStyle.Fill,
             View = View.Details,
             FullRowSelect = true,
+            MultiSelect = true, // T-083：Ctrl/Shift 多选 → 批量删除/下载
             HideSelection = false,
             HeaderStyle = ColumnHeaderStyle.Clickable,
             BorderStyle = BorderStyle.None,
@@ -321,6 +322,7 @@ public partial class FileBrowserView : UserControl
         _list.ColumnClick += List_ColumnClick;
         _list.ItemActivate += List_ItemActivate;
         _list.SelectedIndexChanged += List_SelectedIndexChanged;
+        BuildListMenu(); // T-083：右键上下文菜单（下载/分享/删除/版本历史/打开）
 
         _emptyLabel = new Label
         {

@@ -89,18 +89,16 @@ public partial class FileBrowserView
 
     private void List_SelectedIndexChanged(object? sender, EventArgs e)
     {
-        FileBrowseItem? selected = _list.SelectedItems.Count > 0 && _list.SelectedItems[0].Tag is FileBrowseItem item
-            ? item
-            : null;
-        UpdateSelection(selected);
+        UpdateSelection(); // T-083：从 ListView 选中项整体同步（多选/单选/空）
     }
 
-    /// <summary>T-014：点击「删除」→ 转发选中项给宿主（进回收站）。</summary>
+    /// <summary>T-014/T-083：点击「删除」/「批量删除」→ 转发全部选中项给宿主（逐项进回收站）。</summary>
     private void DeleteButton_Click(object? sender, EventArgs e)
     {
-        if (SelectedItem != null)
+        List<FileBrowseItem> items = GetSelectedItems();
+        if (items.Count > 0)
         {
-            DeleteRequested?.Invoke(SelectedItem);
+            DeleteRequested?.Invoke(items);
         }
     }
 
@@ -132,7 +130,6 @@ public partial class FileBrowserView
             return;
         }
 
-        _selectedPath = item.Path;
         if (item.IsDirectory)
         {
             DirectoryActivated?.Invoke(item.Path);
@@ -158,12 +155,13 @@ public partial class FileBrowserView
         }
     }
 
-    /// <summary>T-033：点击「下载到本机」→ 转发选中的 CloudOnly 文件给宿主（按需下载）。</summary>
+    /// <summary>T-033/T-083：点击「下载到本机」→ 转发可下载的选中 CloudOnly 文件列表给宿主（按需下载）。</summary>
     private void DownloadButton_Click(object? sender, EventArgs e)
     {
-        if (SelectedItem != null && !SelectedItem.IsDirectory)
+        List<FileBrowseItem> items = GetDownloadableSelection();
+        if (items.Count > 0)
         {
-            DownloadRequested?.Invoke(SelectedItem);
+            DownloadRequested?.Invoke(items);
         }
     }
 

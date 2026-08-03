@@ -43,7 +43,7 @@ public partial class MainWindow : Form
     private Label _undoLabel = null!;
     private Button _undoButton = null!;
     private System.Windows.Forms.Timer _undoTimer = null!;
-    private TrashItem? _lastDeletedTrashItem;
+    private List<TrashItem> _lastDeletedTrashItems = new(); // T-083：批量删除时收集全部可撤销条目（撤销逐项恢复）
 
     // 文件浏览导航状态（T-013）
     private string _currentPath = "/";
