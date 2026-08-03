@@ -51,6 +51,15 @@ internal sealed class SyncManageService
             await _api.RestoreTrashAsync(item.TrashFileName + ".json", ct);
             return true;
         }
+        catch (System.Net.Http.HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Conflict)
+        {
+            // T-078/F-120：恢复目标已存在（服务端 409 CONFLICT，如删除后同路径重建/其他设备占用）——
+            // 不再吞成裸 false 显示泛化『恢复失败』，抛白话可操作归因（对齐服务端 friendlyMessage），
+            // UI 现有 catch 直接展示：目标位置已有文件，请先处理或改名（覆盖/改名/取消由用户据此决策）。
+            _logger.LogWarning(ex, "恢复回收站失败——目标位置已有文件: {Path}", item.OriginalPath);
+            throw new System.Net.Http.HttpRequestException("目标位置已有文件，请先处理或改名",
+                ex, System.Net.HttpStatusCode.Conflict);
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "恢复回收站失败: {Path}", item.OriginalPath);

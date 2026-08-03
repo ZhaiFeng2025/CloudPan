@@ -113,6 +113,18 @@ public class TrashService : ITrashService
 
         // 恢复：移动回原位
         string targetPath = _storage.GetAbsolutePath(entry.OriginalPath);
+
+        // T-078/F-120：恢复前检测目标是否已被占用（删除后同路径重建/其他设备同步回同路径）。
+        // 原实现直接 File.Move/Directory.Move，目标已存在时抛 IOException → 兜底 INTERNAL_ERROR，
+        // 无归因且恢复永久不可行（用户无法覆盖/改名）。此处提前返回 409 CONFLICT（对齐 T-077
+        // 重命名撞名语义），用户可先处理目标文件或改名后再恢复，不消耗版本号。
+        if (File.Exists(targetPath) || Directory.Exists(targetPath))
+        {
+            return new TrashRestoreResult(false, null,
+                new DomainError(HttpErrorCode.CONFLICT, $"目标位置已有文件: {entry.OriginalPath}",
+                    "目标位置已有文件，请先处理或改名"));
+        }
+
         string? dir = Path.GetDirectoryName(targetPath);
         if (dir != null)
         {

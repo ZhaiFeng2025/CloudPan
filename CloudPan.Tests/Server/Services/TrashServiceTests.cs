@@ -95,6 +95,55 @@ public class TrashServiceTests : Infrastructure.TestBase
         Assert.Equal(HttpErrorCode.NOT_FOUND.Code, result.Error!.Code.Code);
     }
 
+    /// <summary>
+    /// T-078/F-120：删除后同路径重建文件 → 恢复目标已存在 → 返回 CONFLICT（而非 IOException 兜底 INTERNAL_ERROR），
+    /// 白话原因含『目标位置已有文件，请先处理或改名』，回收站条目保留可重试。
+    /// </summary>
+    [Fact]
+    public async Task Restore_目标文件已存在_返回CONFLICT而非INTERNAL_ERROR()
+    {
+        var svc = await CreateServiceAsync("a.txt", "original content");
+        await svc.MoveToTrashAsync("/a.txt", isDirectory: false);
+        string metaName = Path.GetFileName(Directory.GetFiles(TrashDir, "*.json").Single());
+
+        // 删除后同路径重建（目标位置已有文件）
+        await File.WriteAllTextAsync(Path.Combine(SyncRoot, "a.txt"), "recreated content");
+
+        var result = await svc.RestoreAsync(metaName);
+
+        Assert.False(result.Success);
+        Assert.Equal(HttpErrorCode.CONFLICT.Code, result.Error!.Code.Code);
+        Assert.Contains("目标位置已有文件", result.Error.UserMessage);
+        // 回收站条目未被删除（可先处理目标再重试恢复）；重建文件保持原样未被覆盖
+        Assert.Single(Directory.GetFiles(TrashDir, "*.json"));
+        Assert.Equal("recreated content", await File.ReadAllTextAsync(Path.Combine(SyncRoot, "a.txt")));
+    }
+
+    /// <summary>T-078：目录恢复目标已存在同样收敛为 CONFLICT（目录分支 Directory.Move 前置检测）。</summary>
+    [Fact]
+    public async Task Restore_目标目录已存在_返回CONFLICT()
+    {
+        var dbFactory = CreateServerDbFactory();
+        var storage = new FileStorageService(SyncRoot);
+        var index = new FileIndexService(dbFactory);
+        var version = new VersionService(dbFactory);
+        var svc = new TrashService(storage, index, version, NullLogger<TrashService>.Instance);
+
+        Directory.CreateDirectory(Path.Combine(SyncRoot, "folder"));
+        await index.UpsertFileAsync("/folder", FileType.Directory, null, 0, DateTime.UtcNow.ToString("O"), 1);
+        await svc.MoveToTrashAsync("/folder", isDirectory: true);
+        string metaName = Path.GetFileName(Directory.GetFiles(TrashDir, "*.json").Single());
+
+        // 删除后同路径重建目录（目标位置已有目录）
+        Directory.CreateDirectory(Path.Combine(SyncRoot, "folder"));
+
+        var result = await svc.RestoreAsync(metaName);
+
+        Assert.False(result.Success);
+        Assert.Equal(HttpErrorCode.CONFLICT.Code, result.Error!.Code.Code);
+        Assert.Contains("目标位置已有文件", result.Error.UserMessage);
+    }
+
     [Fact]
     public async Task Empty_清空回收站()
     {
