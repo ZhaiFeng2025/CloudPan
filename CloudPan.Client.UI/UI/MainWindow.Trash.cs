@@ -22,11 +22,19 @@ public partial class MainWindow
         return p[(p.LastIndexOf('/') + 1)..];
     }
 
-    /// <summary>T-014/T-083：文件浏览「删除」/「批量删除」→ 全部进回收站（服务端软删墓碑+移入回收站），本地副本即时删除，显示撤销 Snackbar（5 秒）。</summary>
+    /// <summary>T-014/T-083/T-092：文件浏览「删除」/「批量删除」→ 全部进回收站（服务端软删墓碑+移入回收站），本地副本即时删除，显示撤销 Snackbar（5 秒）。批量删除（多选）前弹确认对话框（对齐 Android AlertDialog），单个删除不弹。</summary>
     private async void FileBrowser_DeleteRequested(IReadOnlyList<FileBrowseItem> items)
     {
         try
         {
+            // T-092：批量删除（多选）前弹确认，防止误触全选；单个删除不弹（对齐 Android AlertDialog 行为）
+            if (items.Count > 1 &&
+                MessageBox.Show(this, $"将删除 {items.Count} 项，移入回收站可恢复。", "删除确认",
+                    MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK)
+            {
+                return;
+            }
+
             var trashed = new List<TrashItem>();
             foreach (FileBrowseItem item in items)
             {
@@ -41,9 +49,10 @@ public partial class MainWindow
             if (trashed.Count > 0)
             {
                 _lastDeletedTrashItems = trashed;
+                // T-092：提示可到回收站恢复，避免用户误以为删除不可撤销
                 _undoLabel.Text = trashed.Count == 1
-                    ? $"已删除 “{TrashDisplayName(trashed[0])}”，可在 5 秒内撤销"
-                    : $"已删除 {trashed.Count} 个项目，可在 5 秒内撤销";
+                    ? $"已删除 “{TrashDisplayName(trashed[0])}”，可在 5 秒内撤销，也可到回收站恢复"
+                    : $"已删除 {trashed.Count} 个项目，可在 5 秒内撤销，也可到回收站恢复";
                 _undoBar.Visible = true;
                 _undoBar.BringToFront();
                 _undoTimer.Stop();

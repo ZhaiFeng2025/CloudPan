@@ -4596,7 +4596,7 @@
       "title": "Windows 批量删除增加确认对话框（对齐 Android）",
       "dimension": "ux",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 8,
       "findingId": "F-134",
       "dependsOn": [],
@@ -4626,8 +4626,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "改动文件：CloudPan.Client.UI/UI/MainWindow.Trash.cs（FileBrowser_DeleteRequested 批量删除 items.Count>1 前弹 MessageBox 确认『将删除 N 项，移入回收站可恢复。』，取消则返回不执行；撤销 Snackbar 文案追加『，也可到回收站恢复』）。验证：dotnet build CloudPan.sln -c Release 全绿（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release --no-build 343 通过 0 失败；grep MessageBox/确认 命中批量删除路径。",
+      "updatedAt": "2026-08-04"
     },
     {
       "id": "T-093",
