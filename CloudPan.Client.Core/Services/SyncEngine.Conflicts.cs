@@ -38,7 +38,7 @@ public partial class SyncEngine
                         fileSize = new FileInfo(localPath).Length;
                     }
 
-                    db.SyncQueue.Add(new SyncQueueItem
+                    db.SyncQueue.Add(new SyncQueue
                 {
                     FilePath = relativePath,
                     Operation = (int)SyncOperation.Upload,
@@ -50,7 +50,7 @@ public partial class SyncEngine
             }
             case ConflictResolution.KeepRemote:
             {
-                db.SyncQueue.Add(new SyncQueueItem
+                db.SyncQueue.Add(new SyncQueue
                 {
                     FilePath = relativePath,
                     Operation = (int)SyncOperation.Download,
@@ -77,7 +77,7 @@ public partial class SyncEngine
                         _logger.LogError(ex, "保留两者时重命名本地文件失败: {Path}", localPath);
                         // F-31：不再透出原始异常字符串
                         ErrorOccurred?.Invoke(relativePath, new ErrorAttribution("本地文件备份失败，无法保留两者", "请关闭可能占用该文件的程序后重试"), SyncOperation.Download);
-                        db.SyncQueue.Add(new SyncQueueItem
+                        db.SyncQueue.Add(new SyncQueue
                         {
                             FilePath = relativePath,
                             Operation = (int)SyncOperation.Download,
@@ -88,7 +88,7 @@ public partial class SyncEngine
                     }
                 }
 
-                db.SyncQueue.Add(new SyncQueueItem
+                db.SyncQueue.Add(new SyncQueue
                 {
                     FilePath = relativePath,
                     Operation = (int)SyncOperation.Download,

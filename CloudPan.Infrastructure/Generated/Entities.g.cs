@@ -56,7 +56,7 @@ public class FileEntry
 /// 文件版本历史。保留最近 N 个版本（默认 5）。
 /// </summary>
 [Table("VersionRecord")]
-    [Index(nameof(FilePath), nameof(Version), Name = "idx_version_file")]
+    [Index(nameof(FilePath), nameof(Version), IsDescending = new[] { false, true }, Name = "idx_version_file")]
     [Index(nameof(DeviceId))]
     [Index(nameof(Timestamp))]
 public class VersionRecord
@@ -174,7 +174,7 @@ public class Share
 /// 同步操作审计日志。P2 阶段新增。
 /// </summary>
 [Table("SyncLog")]
-    [Index(nameof(CreatedAt))]
+    [Index(nameof(CreatedAt), IsDescending = new[] { true }, Name = "idx_log_time")]
     [Index(nameof(FilePath))]
 public class SyncLog
 {

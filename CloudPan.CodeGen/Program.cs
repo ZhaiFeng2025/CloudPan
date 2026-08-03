@@ -18,6 +18,8 @@ public static class Program
     private const string SharedOutputDir = "CloudPan.Contract/Generated";
     // 持久化实体依赖 EF Core 特性（[Index]），归属基础设施层 → CloudPan.Infrastructure/Generated
     private const string ServerOutputDir = "CloudPan.Infrastructure/Generated";
+    // 客户端本地 EF 实体（SyncQueue/RemoteSnapshot/SyncCursor）→ CloudPan.Client.Core/Generated
+    private const string ClientOutputDir = "CloudPan.Client.Core/Generated";
     // Android Kotlin 契约产物 → CloudPan.Android/.../data/Generated（package com.cloudpan.android.data）
     private const string AndroidOutputDir = "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/Generated";
 
@@ -56,6 +58,7 @@ public static class Program
                 ["枚举"]     = (SharedOutputDir, "Enums.g.cs",             EnumGenerator.Generate(spec)),
                 ["DTO"]      = (SharedOutputDir, "Dtos.g.cs",              DtoGenerator.Generate(spec)),
                 ["实体"]     = (ServerOutputDir, "Entities.g.cs",          EntityGenerator.Generate(spec)),
+                ["客户端实体"] = (ClientOutputDir, "ClientEntities.g.cs",   EntityGenerator.GenerateClient(spec)),
                 ["清单"]     = (SharedOutputDir, "ContractManifest.g.cs",  ManifestGenerator.Generate(spec)),
                 ["错误响应"] = (SharedOutputDir, "ErrorResponse.g.cs",     ErrorResponseGenerator.Generate(spec)),
                 ["API响应"]  = (SharedOutputDir, "ApiResponses.g.cs",      ApiResponseGenerator.Generate(spec)),
@@ -114,7 +117,28 @@ public static class Program
                 }
             }
 
-            // 3. 如果基础设施项目还不存在，提示实体输出位置（依赖 EF Core 的实体归属 Infrastructure）
+            // 3. 规则 0：客户端实体必须从契约生成，禁止手工翻译回归（T-062）
+            if (verifyMode)
+            {
+                string clientModelsDir = Path.Combine(solutionRoot, "CloudPan.Client.Core", "Models");
+                string[] manualEntityPatterns = { "public class SyncQueueItem", "public class RemoteSnapshot", "public class SyncCursorState" };
+                string modelsContent = Directory.Exists(clientModelsDir)
+                    ? string.Concat(Directory.EnumerateFiles(clientModelsDir, "*.cs", SearchOption.AllDirectories)
+                        .Select(f => File.ReadAllText(f)))
+                    : "";
+                string? matched = manualEntityPatterns.FirstOrDefault(p => modelsContent.Contains(p, StringComparison.Ordinal));
+                if (matched != null)
+                {
+                    Console.WriteLine($"❌ 客户端实体: Client.Core/Models 含手工实体类定义 '{matched}'，应引用 Generated 类型（规则 0）");
+                    hasChanges = true;
+                }
+                else
+                {
+                    Console.WriteLine("✅ 客户端实体: Client.Core/Models 无手工实体类定义");
+                }
+            }
+
+            // 4. 如果基础设施项目还不存在，提示实体输出位置（依赖 EF Core 的实体归属 Infrastructure）
             string infraDir = Path.Combine(solutionRoot, "CloudPan.Infrastructure");
             if (!Directory.Exists(infraDir))
             {

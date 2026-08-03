@@ -261,7 +261,7 @@ public class SyncEngineTests : IDisposable
                 Path = "/redownload.txt", Type = (int)FileType.File, Size = 100,
                 Version = 2, State = (int)FileState.Synced, Hash = "hash", IsDownloaded = true
             });
-            setupDb.SyncQueue.Add(new SyncQueueItem
+            setupDb.SyncQueue.Add(new SyncQueue
             {
                 FilePath = "/redownload.txt", Operation = (int)SyncOperation.Download,
                 Priority = (int)QueuePriority.Normal, BaseVersion = 2
@@ -442,7 +442,7 @@ public class SyncEngineTests : IDisposable
                 Path = "/ws-del.txt", Type = 0, Size = 27,
                 Version = 2, State = 0, Hash = "hash"
             });
-            setupDb.SyncQueue.Add(new SyncQueueItem
+            setupDb.SyncQueue.Add(new SyncQueue
             {
                 FilePath = "/ws-del.txt", Operation = (int)SyncOperation.Upload,
                 Priority = (int)QueuePriority.High
@@ -573,7 +573,7 @@ public class SyncEngineTests : IDisposable
         {
             foreach (string p in conflictPaths)
             {
-                setupDb.SyncQueue.Add(new SyncQueueItem
+                setupDb.SyncQueue.Add(new SyncQueue
                 {
                     FilePath = p,
                     Operation = (int)SyncOperation.Upload,
@@ -836,7 +836,7 @@ public class SyncEngineTests : IDisposable
         await File.WriteAllTextAsync(filePath, "pending");
         await using (var setupDb = await _dbFactory.CreateDbContextAsync())
         {
-            setupDb.SyncQueue.Add(new SyncQueueItem
+            setupDb.SyncQueue.Add(new SyncQueue
             {
                 FilePath = "/pending-upload.txt",
                 Operation = (int)SyncOperation.Upload,

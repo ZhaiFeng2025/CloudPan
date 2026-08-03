@@ -10,7 +10,7 @@ namespace CloudPan.Client.Core.Services;
 public partial class SyncEngine
 {
     /// <returns>true = 成功，应从队列移除</returns>
-    private async Task<bool> ProcessUploadAsync(SyncQueueItem item, CancellationToken ct)
+    private async Task<bool> ProcessUploadAsync(SyncQueue item, CancellationToken ct)
     {
         string localPath = ToLocalPath(item.FilePath);
 
@@ -132,7 +132,7 @@ public partial class SyncEngine
     }
 
     /// <returns>true = 成功，应从队列移除</returns>
-    private async Task<bool> ProcessDownloadAsync(SyncQueueItem item, CancellationToken ct)
+    private async Task<bool> ProcessDownloadAsync(SyncQueue item, CancellationToken ct)
     {
         string localPath = ToLocalPath(item.FilePath);
 
@@ -278,7 +278,7 @@ public partial class SyncEngine
             return; // 已在队列中
         }
 
-        db.SyncQueue.Add(new SyncQueueItem
+        db.SyncQueue.Add(new SyncQueue
         {
             FilePath = filePath,
             Operation = (int)SyncOperation.Download,
@@ -289,7 +289,7 @@ public partial class SyncEngine
     }
 
     /// <returns>true = 成功，应从队列移除</returns>
-    private async Task<bool> ProcessDeleteAsync(SyncQueueItem item, CancellationToken ct)
+    private async Task<bool> ProcessDeleteAsync(SyncQueue item, CancellationToken ct)
     {
         // 先调 API 删除服务端，成功后再删本地
         // 如果服务端返回 404（已删除），视为成功继续删本地
@@ -321,7 +321,7 @@ public partial class SyncEngine
     }
 
     /// <returns>true = 成功</returns>
-    private async Task<bool> ProcessRenameAsync(SyncQueueItem item, CancellationToken ct)
+    private async Task<bool> ProcessRenameAsync(SyncQueue item, CancellationToken ct)
     {
         if (string.IsNullOrEmpty(item.TargetPath))
         {
@@ -357,7 +357,7 @@ public partial class SyncEngine
     public async Task DownloadPathAsync(string path, CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync();
-        db.SyncQueue.Add(new SyncQueueItem
+        db.SyncQueue.Add(new SyncQueue
         {
             FilePath = path,
             Operation = (int)SyncOperation.Download,

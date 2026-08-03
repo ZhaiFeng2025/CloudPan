@@ -285,7 +285,7 @@
         { "name": "TargetPath",  "type": "TEXT",    "nullable": true,  "role": "",    "description": "重命名操作的目标路径。Upload/Download/Delete 为 NULL" },
         { "name": "RetryCount",  "type": "INTEGER", "nullable": false, "role": "",    "description": "默认 0" },
         { "name": "LastError",   "type": "TEXT",    "nullable": true,  "role": "" },
-        { "name": "CreatedAt",   "type": "TEXT",    "nullable": false, "role": "IDX", "description": "FIFO 排序依据" }
+        { "name": "CreatedAt",   "type": "TEXT",    "nullable": false, "role": "IDX", "description": "FIFO 排序依据", "default": "DateTime.UtcNow.ToString(\"O\")" }
       ],
       "indexes": [
         "idx_queue_sort ON SyncQueue(Priority DESC, CreatedAt ASC)"
@@ -298,10 +298,12 @@
       "fields": [
         { "name": "Path",    "type": "TEXT",    "nullable": false, "role": "PK" },
         { "name": "Type",    "type": "INTEGER", "nullable": false, "role": "",   "description": "FileType 枚举" },
-        { "name": "Hash",    "type": "TEXT",    "nullable": true  },
+        { "name": "Hash",    "type": "TEXT",    "nullable": true,  "role": "" },
         { "name": "Size",    "type": "INTEGER", "nullable": false, "role": "",   "csharpType": "long", "description": "默认 0" },
         { "name": "Version", "type": "INTEGER", "nullable": false, "role": "",   "description": "默认 0" },
-        { "name": "State",   "type": "INTEGER", "nullable": false, "role": "",   "description": "FileState 枚举。默认 0" }
+        { "name": "State",   "type": "INTEGER", "nullable": false, "role": "",   "description": "FileState 枚举。默认 0" },
+        { "name": "LastModified", "type": "TEXT",    "nullable": true,  "role": "",   "description": "服务端最后修改时间（ISO 8601，来自 /api/tree 的 lastModified；供冲突展示远程版本真实时间）" },
+        { "name": "IsDownloaded", "type": "INTEGER", "nullable": false, "role": "",   "csharpType": "bool", "description": "本地是否已成功落盘（下载完成/本地上传已同步）。false = 快照已建但文件从未下载到本地（T-037）" }
       ]
     },
 

@@ -16,7 +16,7 @@ public partial class SyncEngine
     /// 目录 mkdir 同步：调服务端 MkdirAsync 建立目录条目并记录/更新目录快照（非文件上传）。
     /// 独立 partial 文件承载，避免 Transfers.cs 单文件超行数上限。
     /// </summary>
-    private async Task<bool> ProcessMkdirAsync(SyncQueueItem item, CancellationToken ct)
+    private async Task<bool> ProcessMkdirAsync(SyncQueue item, CancellationToken ct)
     {
         await _api.MkdirAsync(item.FilePath, ct);
 

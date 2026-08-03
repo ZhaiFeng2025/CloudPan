@@ -115,7 +115,8 @@ public record FieldDef(
     bool Nullable,
     string Role,
     string? Description,
-    string? CsharpType = null  // 可选：覆盖 C# 类型映射（如 "long" 替代 "int"）
+    string? CsharpType = null,  // 可选：覆盖 C# 类型映射（如 "long" 替代 "int"）
+    string? Default = null       // 可选：C# 属性默认值表达式（如 SyncQueue.CreatedAt = DateTime.UtcNow.ToString("O")）
 );
 
 // ---- API ----

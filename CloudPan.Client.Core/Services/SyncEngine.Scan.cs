@@ -60,7 +60,7 @@ public partial class SyncEngine
         // 更新游标（使用拉取开始前的版本号，确保正确性）
         if (cursor == null)
         {
-            db.SyncCursor.Add(new SyncCursorState { Id = 1, LastMaxVersion = maxVersion, LastSyncAt = DateTime.UtcNow.ToString("O") });
+            db.SyncCursor.Add(new SyncCursor { Id = 1, LastMaxVersion = maxVersion, LastSyncAt = DateTime.UtcNow.ToString("O") });
         }
         else
         {
@@ -108,7 +108,7 @@ public partial class SyncEngine
         else
         {
             // 游标不存在则创建（FullSyncAsync 失败后的恢复路径）
-            db.SyncCursor.Add(new SyncCursorState { Id = 1, LastMaxVersion = maxVersion, LastSyncAt = DateTime.UtcNow.ToString("O") });
+            db.SyncCursor.Add(new SyncCursor { Id = 1, LastMaxVersion = maxVersion, LastSyncAt = DateTime.UtcNow.ToString("O") });
         }
 
         await db.SaveChangesAsync();
@@ -215,7 +215,7 @@ public partial class SyncEngine
                             && q.Operation == (int)SyncOperation.Download);
                     if (existingDl == null)
                     {
-                        db.SyncQueue.Add(new SyncQueueItem
+                        db.SyncQueue.Add(new SyncQueue
                         {
                             FilePath = item.Path,
                             Operation = (int)SyncOperation.Download,
@@ -248,7 +248,7 @@ public partial class SyncEngine
                             && q.Operation == (int)SyncOperation.Download);
                     if (existingDl == null)
                     {
-                        db.SyncQueue.Add(new SyncQueueItem
+                        db.SyncQueue.Add(new SyncQueue
                         {
                             FilePath = item.Path,
                             Operation = (int)SyncOperation.Download,

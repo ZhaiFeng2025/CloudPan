@@ -113,15 +113,15 @@ public class MigrationsTests : IDisposable
         Assert.Contains(applied, m => m.Contains("AddRemoteSnapshotIsDownloaded"));
         List<string> tables = TableNames(db);
         Assert.Contains("__EFMigrationsHistory", tables);
-        foreach (string t in new[] { "SyncQueue", "RemoteSnapshots", "SyncCursor" })
+        foreach (string t in new[] { "SyncQueue", "RemoteSnapshot", "SyncCursor" })
             Assert.Contains(t, tables);
         // T-036：RemoteSnapshots 已补 LastModified 列
         Assert.True(db.Database.SqlQueryRaw<int>(
-                "SELECT COUNT(*) FROM pragma_table_info('RemoteSnapshots') WHERE name='LastModified';")
+                "SELECT COUNT(*) FROM pragma_table_info('RemoteSnapshot') WHERE name='LastModified';")
             .ToList().First() > 0);
         // T-037：RemoteSnapshots 已补 IsDownloaded 列（下载窗口保护标记）
         Assert.True(db.Database.SqlQueryRaw<int>(
-                "SELECT COUNT(*) FROM pragma_table_info('RemoteSnapshots') WHERE name='IsDownloaded';")
+                "SELECT COUNT(*) FROM pragma_table_info('RemoteSnapshot') WHERE name='IsDownloaded';")
             .ToList().First() > 0);
     }
 
@@ -186,9 +186,9 @@ public class MigrationsTests : IDisposable
             Assert.Contains(applied, m => m.Contains("AddRemoteSnapshotIsDownloaded"));
             // T-037：旧库升级后 RemoteSnapshots 补 IsDownloaded 列
             Assert.True(db.Database.SqlQueryRaw<int>(
-                    "SELECT COUNT(*) FROM pragma_table_info('RemoteSnapshots') WHERE name='IsDownloaded';")
+                    "SELECT COUNT(*) FROM pragma_table_info('RemoteSnapshot') WHERE name='IsDownloaded';")
                 .ToList().First() > 0);
-            SyncQueueItem row = db.SyncQueue.Single();
+            SyncQueue row = db.SyncQueue.Single();
             Assert.Equal("/old.txt", row.FilePath);
             Assert.Equal(0, row.RetryCount);
             Assert.Null(row.TargetPath);

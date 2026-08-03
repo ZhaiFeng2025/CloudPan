@@ -117,7 +117,7 @@ public partial class SyncEngine
             .FirstOrDefaultAsync(q => q.FilePath == oldPath && q.Operation == (int)SyncOperation.Rename);
         if (existing != null) { existing.TargetPath = newPath; await db.SaveChangesAsync(); return; }
 
-        db.SyncQueue.Add(new SyncQueueItem
+        db.SyncQueue.Add(new SyncQueue
         {
             FilePath = oldPath,
             Operation = (int)SyncOperation.Rename,
@@ -186,7 +186,7 @@ public partial class SyncEngine
                     return;
                 }
 
-                db.SyncQueue.Add(new SyncQueueItem
+                db.SyncQueue.Add(new SyncQueue
                 {
                     FilePath = relativePath,
                     Operation = (int)operation,
@@ -229,7 +229,7 @@ public partial class SyncEngine
             fileSize = localSize;
         }
 
-        db.SyncQueue.Add(new SyncQueueItem
+        db.SyncQueue.Add(new SyncQueue
         {
             FilePath = relativePath,
             Operation = (int)operation,
