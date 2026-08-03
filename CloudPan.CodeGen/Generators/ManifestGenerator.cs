@@ -80,14 +80,7 @@ public static class ManifestGenerator
             sb.AppendLine($"        new(\"{ep.Method}\", \"{ep.Path}\", AuthMode.{authMode}, \"{EscapeString(ep.Description)}\"),");
         }
 
-        // WebSocket 端点（从 ws://{host}:8443/ws 提取路径 /ws）
-        string wsAuthMode = spec.Api.Websocket.AuthMode ?? "message";
-        string wsEndpoint = spec.Api.Websocket.Endpoint;
-        string wsPath = "/ws"; // 默认
-        Uri wsUri = new Uri(wsEndpoint.Replace("{host}", "localhost"));
-        wsPath = wsUri.AbsolutePath;
-        sb.AppendLine($"        new(\"GET\", \"{wsPath}\", AuthMode.{MapAuthMode(wsAuthMode)}, \"WebSocket 实时推送\"),");
-
+        // /ws 已注册于 api.endpoints（T-058），由上方 endpoints 循环生成，无需再单独提取
         sb.AppendLine("    };");
         sb.AppendLine();
 

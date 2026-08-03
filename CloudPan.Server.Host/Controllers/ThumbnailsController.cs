@@ -9,7 +9,6 @@ namespace CloudPan.Server.Host.Controllers;
 /// 图片缩略图 API——只做参数绑定与状态码适配，领域逻辑（校验/解码/缩放/缓存写盘）在 Server.Core IThumbnailService。
 /// </summary>
 [ApiController]
-[Route("api/thumbnails")]
 [EndpointAuth(AuthMode.Token)]
 public class ThumbnailsController : ControllerBase
 {
@@ -24,7 +23,7 @@ public class ThumbnailsController : ControllerBase
     /// GET /api/thumbnails?path=...&width=200
     /// 返回缩略图（JPEG），首次生成后缓存到 .thumbnails/ 目录。
     /// </summary>
-    [HttpGet]
+    [HttpGet(SpecRoutes.Thumbnails)]
     public async Task<IActionResult> GetThumbnail([FromQuery] string path, [FromQuery] int width = 200)
     {
         if (string.IsNullOrWhiteSpace(path))

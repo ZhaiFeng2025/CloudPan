@@ -14,7 +14,7 @@ public partial class FilesController
     /// <summary>
     /// POST /api/files/delete — 删除文件或文件夹（递归）。
     /// </summary>
-    [HttpPost("delete")]
+    [HttpPost(SpecRoutes.FilesDelete)]
     public async Task<IActionResult> Delete([FromBody] DeleteRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Path))
@@ -38,7 +38,7 @@ public partial class FilesController
     /// <summary>
     /// POST /api/files/move — 移动或重命名文件/文件夹。
     /// </summary>
-    [HttpPost("move")]
+    [HttpPost(SpecRoutes.FilesMove)]
     public async Task<IActionResult> Move([FromBody] MoveRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.OldPath) || string.IsNullOrWhiteSpace(request.NewPath))
@@ -62,7 +62,7 @@ public partial class FilesController
     /// <summary>
     /// POST /api/files/mkdir — 创建文件夹。
     /// </summary>
-    [HttpPost("mkdir")]
+    [HttpPost(SpecRoutes.FilesMkdir)]
     public async Task<IActionResult> Mkdir([FromBody] MkdirRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Path))
@@ -82,7 +82,7 @@ public partial class FilesController
     /// <summary>
     /// GET /api/files/search?q=... — 按文件名搜索。
     /// </summary>
-    [HttpGet("search")]
+    [HttpGet(SpecRoutes.FilesSearch)]
     public async Task<IActionResult> Search([FromQuery] string q, [FromQuery] int limit = 50)
     {
         if (string.IsNullOrWhiteSpace(q) || q.Length < 2)

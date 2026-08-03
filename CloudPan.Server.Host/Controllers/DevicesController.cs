@@ -10,7 +10,6 @@ namespace CloudPan.Server.Host.Controllers;
 /// 数据查询在 Server.Core IServerStatusService，本类只做 HTTP 适配。
 /// </summary>
 [ApiController]
-[Route("api/devices")]
 [EndpointAuth(AuthMode.Token)]
 public class DevicesController : ControllerBase
 {
@@ -24,7 +23,7 @@ public class DevicesController : ControllerBase
     /// <summary>
     /// GET /api/devices — 返回所有已注册设备。
     /// </summary>
-    [HttpGet]
+    [HttpGet(SpecRoutes.Devices)]
     public async Task<IActionResult> GetDevices()
     {
         var devices = await _status.GetDevicesAsync();

@@ -9,7 +9,6 @@ namespace CloudPan.Server.Host.Controllers;
 /// 版本历史 API——只做参数绑定与状态码适配，领域逻辑（列表/回滚事务）在 Server.Core IVersionHistoryService。
 /// </summary>
 [ApiController]
-[Route("api/versions")]
 [EndpointAuth(AuthMode.Token)]
 public class VersionsController : ControllerBase
 {
@@ -25,7 +24,7 @@ public class VersionsController : ControllerBase
     /// <summary>
     /// GET /api/versions?path=... — 获取文件的所有历史版本。
     /// </summary>
-    [HttpGet]
+    [HttpGet(SpecRoutes.Versions)]
     public async Task<IActionResult> GetVersions([FromQuery] string path, [FromQuery] int limit = 10)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -41,7 +40,7 @@ public class VersionsController : ControllerBase
     /// POST /api/versions/restore — 回滚到指定历史版本。
     /// 回滚本身会先存档当前版本，再用历史文件覆盖。
     /// </summary>
-    [HttpPost("restore")]
+    [HttpPost(SpecRoutes.VersionsRestore)]
     public async Task<IActionResult> Restore([FromBody] RestoreRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.FilePath))

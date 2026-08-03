@@ -2,6 +2,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using CloudPan.Client.Core.Models;
+using CloudPan.Contract;
 using Microsoft.Extensions.Logging;
 
 namespace CloudPan.Client.Core.Services;
@@ -44,11 +45,11 @@ public class WebSocketClient : IDisposable
 
     public WebSocketClient(SyncConfig config, ILogger<WebSocketClient> logger)
     {
-        // ws:// 替换 http://（开发环境）
+        // ws:// 替换 http://（开发环境）；路径取契约 SpecRoutes.WebSocket，禁止手拼
         _wsUrl = config.ServerUrl
             .Replace("https://", "wss://")
             .Replace("http://", "ws://")
-            .TrimEnd('/') + "/ws";
+            .TrimEnd('/') + SpecRoutes.WebSocket;
         _token = config.Token;
         _deviceId = config.DeviceId;
         _logger = logger;

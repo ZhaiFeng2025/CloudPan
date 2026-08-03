@@ -28,9 +28,10 @@ public static class ApiClientGenerator
         sb.AppendLine("namespace CloudPan.Contract;");
         sb.AppendLine();
         sb.AppendLine("/// <summary>");
-        sb.AppendLine("/// 客户端 API 路由常量。由 ApiClientGenerator 从 shared-spec.json → api.endpoints 生成。");
-        sb.AppendLine("/// 与 SpecEndpoints（ContractManifest.g.cs）同源：业务层（ApiClient）只写参数绑定，");
-        sb.AppendLine("/// 禁止硬编码 \"/api/...\" 路由字面量——改 spec 端点后重跑 CodeGen 即全链路生效。");
+        sb.AppendLine("/// API 路由常量。由 ApiClientGenerator 从 shared-spec.json → api.endpoints 生成。");
+        sb.AppendLine("/// 与 SpecEndpoints（ContractManifest.g.cs）同源：客户端 ApiClient 与服务端");
+        sb.AppendLine("/// Controller/Program 共用，禁止硬编码 \"/api/...\" 或 \"/ws\" 路由字面量");
+        sb.AppendLine("/// ——改 spec 端点后重跑 CodeGen 即全链路生效。");
         sb.AppendLine("/// </summary>");
         sb.AppendLine("public static class SpecRoutes");
         sb.AppendLine("{");
@@ -88,6 +89,12 @@ public static class ApiClientGenerator
     /// </summary>
     private static string ToConstantName(string path)
     {
+        // /ws 特例：WebSocket 端点缩写，映射为 WebSocket（避免生成含义模糊的 Ws）
+        if (string.Equals(path, "/ws", StringComparison.OrdinalIgnoreCase))
+        {
+            return "WebSocket";
+        }
+
         string[] segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (segments.Length > 0 && string.Equals(segments[0], "api", StringComparison.OrdinalIgnoreCase))
         {

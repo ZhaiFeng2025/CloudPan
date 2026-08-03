@@ -22,14 +22,14 @@ public class AdminController : ControllerBase
     }
 
     /// <summary>GET /admin — 管理面板主页（仅 localhost）。</summary>
-    [HttpGet("/admin")]
+    [HttpGet(SpecRoutes.Admin)]
     public IActionResult Dashboard()
     {
         return Content(Html, "text/html; charset=utf-8");
     }
 
     /// <summary>GET /admin/api/files — 文件列表数据。</summary>
-    [HttpGet("/admin/api/files")]
+    [HttpGet(SpecRoutes.AdminApiFiles)]
     public async Task<IActionResult> GetFiles([FromQuery] string? path = null, [FromQuery] int limit = 200)
     {
         var items = await _status.GetFilesAsync(path, limit);
@@ -37,7 +37,7 @@ public class AdminController : ControllerBase
     }
 
     /// <summary>GET /admin/api/devices — 设备列表数据。</summary>
-    [HttpGet("/admin/api/devices")]
+    [HttpGet(SpecRoutes.AdminApiDevices)]
     public async Task<IActionResult> GetDevices()
     {
         var items = await _status.GetDevicesAsync();
@@ -45,7 +45,7 @@ public class AdminController : ControllerBase
     }
 
     /// <summary>GET /admin/api/logs — 同步日志数据。</summary>
-    [HttpGet("/admin/api/logs")]
+    [HttpGet(SpecRoutes.AdminApiLogs)]
     public async Task<IActionResult> GetLogs([FromQuery] int limit = 100)
     {
         var items = await _status.GetLogsAsync(limit);
@@ -53,7 +53,7 @@ public class AdminController : ControllerBase
     }
 
     /// <summary>GET /admin/api/stats — 聚合统计（真实总数）。</summary>
-    [HttpGet("/admin/api/stats")]
+    [HttpGet(SpecRoutes.AdminApiStats)]
     public async Task<IActionResult> GetStats()
     {
         var s = await _status.GetStatsAsync();

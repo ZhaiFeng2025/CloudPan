@@ -12,7 +12,6 @@ namespace CloudPan.Server.Host.Controllers;
 /// 删除/移动/建目录在 FilesController.FileOps.cs，分块上传在 FilesController.ChunkedUpload.cs。
 /// </summary>
 [ApiController]
-[Route("api/files")]
 [EndpointAuth(AuthMode.Token)]
 public partial class FilesController : ControllerBase
 {
@@ -43,7 +42,7 @@ public partial class FilesController : ControllerBase
     /// GET /api/files/tree — 获取文件树（含哈希和版本信息）。
     /// 支持 sinceVersion 增量拉取、cursor 分页。
     /// </summary>
-    [HttpGet("tree")]
+    [HttpGet(SpecRoutes.FilesTree)]
     public async Task<IActionResult> GetTree(
         [FromQuery] int? sinceVersion = null,
         [FromQuery] string? path = null,
@@ -59,7 +58,7 @@ public partial class FilesController : ControllerBase
     /// 冲突判定与冲突副本保存在 Server.Core UploadService（与分块上传路径策略一致，F-56/T-056），
     /// 本层只透传 baseVersion 并映射 CONFLICT 错误体；上传编排（先存档旧版本→再原子覆盖→后更新索引）同样由 UploadService 保证顺序。
     /// </summary>
-    [HttpPost("upload")]
+    [HttpPost(SpecRoutes.FilesUpload)]
     [RequestSizeLimit(50_000_000)]
     public async Task<IActionResult> Upload(
         IFormFile file,
@@ -121,7 +120,7 @@ public partial class FilesController : ControllerBase
     /// <summary>
     /// GET /api/files/download?path=... — 下载文件。
     /// </summary>
-    [HttpGet("download")]
+    [HttpGet(SpecRoutes.FilesDownload)]
     public async Task<IActionResult> Download([FromQuery] string path)
     {
         if (string.IsNullOrWhiteSpace(path))

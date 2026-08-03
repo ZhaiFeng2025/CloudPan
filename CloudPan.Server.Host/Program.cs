@@ -1,3 +1,4 @@
+using CloudPan.Contract;
 using CloudPan.Infrastructure.Configuration;
 using CloudPan.Infrastructure.Persistence;
 using CloudPan.Infrastructure.Storage;
@@ -112,7 +113,7 @@ app.UseTokenAuth();
 app.UseRateLimit();
 
 // WebSocket /ws（消息级认证：deviceId/token 在首条 auth 消息中解析，见 WebSocketHandler）
-app.Map("/ws", async (HttpContext context, IWebSocketHandler handler) =>
+app.Map(SpecRoutes.WebSocket, async (HttpContext context, IWebSocketHandler handler) =>
 {
     if (context.WebSockets.IsWebSocketRequest)
     {

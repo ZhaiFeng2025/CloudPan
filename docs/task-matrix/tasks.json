@@ -2569,7 +2569,7 @@
       "title": "WebSocket 心跳迁移 IHostedService（间隔读 SpecConfig）",
       "dimension": "architecture",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 5,
       "findingId": "F-57",
       "dependsOn": [],
@@ -2599,7 +2599,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "执行者记录（T-057）：WebSocket 心跳自调度迁移 IHostedService。改动文件：① CloudPan.CodeGen/Generators/ManifestGenerator.cs（SpecConfig 生成新增 PingIntervalSeconds/PongTimeoutSeconds，取自 spec api.websocket.heartbeat，重新生成 ContractManifest.g.cs）② CloudPan.Server.Core/WebSocket/WebSocketHeartbeatHostedService.cs（新增 BackgroundService：PeriodicTimer 按 SpecConfig.PingIntervalSeconds 周期调 IWebSocketHandler.CheckHeartbeatsAsync，回调全量 try-catch 符合 7.2）③ CloudPan.Server.Core/WebSocket/WebSocketHandler.cs（删除 _heartbeatTimer 裸 Timer 字段与 PingInterval 字面量；PongTimeout 改读 SpecConfig.PongTimeoutSeconds）④ CloudPan.Server.Core/WebSocket/WebSocketHandler.Lifecycle.cs（CheckHeartbeats(object?) 改公开 async Task CheckHeartbeatsAsync()，保留 Interlocked 防重入 + 全量 try-catch）⑤ CloudPan.Server.Core/WebSocket/IWebSocketHandler.cs（接口新增 CheckHeartbeatsAsync）⑥ CloudPan.Server.Core/CloudPan.Server.Core.csproj（新增 Microsoft.Extensions.Hosting.Abstractions 8.0.1）⑦ CloudPan.Server.Host/Program.cs（AddHostedService<WebSocketHeartbeatHostedService>）⑧ CloudPan.Tests/Server/Services/TokenServiceTests.cs（FakeWebSocketHandler 补 CheckHeartbeatsAsync）。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release --no-build 通过（295/295）；dotnet test --filter Architecture 通过（12/12）；CodeGen --verify 通过；grep -rn 'System.Threading.Timer' CloudPan.Server.Core/WebSocket/ 无匹配（EXIT_CODE=1）；grep -n 'PingInterval' CloudPan.Server.Core/ 含 SpecConfig.PingIntervalSeconds 引用（WebSocketHeartbeatHostedService.cs）。",
+      "note": "执行者记录（T-057）：WebSocket 心跳自调度迁移 IHostedService。改动文件：① CloudPan.CodeGen/Generators/ManifestGenerator.cs（SpecConfig 生成新增 PingIntervalSeconds/PongTimeoutSeconds，取自 spec api.websocket.heartbeat，重新生成 ContractManifest.g.cs）② CloudPan.Server.Core/WebSocket/WebSocketHeartbeatHostedService.cs（新增 BackgroundService：PeriodicTimer 按 SpecConfig.PingIntervalSeconds 周期调 IWebSocketHandler.CheckHeartbeatsAsync，回调全量 try-catch 符合 7.2）③ CloudPan.Server.Core/WebSocket/WebSocketHandler.cs（删除 _heartbeatTimer 裸 Timer 字段与 PingInterval 字面量；PongTimeout 改读 SpecConfig.PongTimeoutSeconds）④ CloudPan.Server.Core/WebSocket/WebSocketHandler.Lifecycle.cs（CheckHeartbeats(object?) 改公开 async Task CheckHeartbeatsAsync()，保留 Interlocked 防重入 + 全量 try-catch）⑤ CloudPan.Server.Core/WebSocket/IWebSocketHandler.cs（接口新增 CheckHeartbeatsAsync）⑥ CloudPan.Server.Core/CloudPan.Server.Core.csproj（新增 Microsoft.Extensions.Hosting.Abstractions 8.0.1）⑦ CloudPan.Server.Host/Program.cs（AddHostedService<WebSocketHeartbeatHostedService>）⑧ CloudPan.Tests/Server/Services/TokenServiceTests.cs（FakeWebSocketHandler 补 CheckHeartbeatsAsync）。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release --no-build 通过（295/295）；dotnet test --filter Architecture 通过（12/12）；CodeGen --verify 通过；grep -rn 'System.Threading.Timer' CloudPan.Server.Core/WebSocket/ 无匹配（EXIT_CODE=1）；grep -n 'PingInterval' CloudPan.Server.Core/ 含 SpecConfig.PingIntervalSeconds 引用（WebSocketHeartbeatHostedService.cs）。｜验收 2026-08-03：3 条自动标准全过，独立裁决置 done——(1) grep -rn 'System.Threading.Timer' CloudPan.Server.Core/WebSocket/ 无匹配（EXIT_CODE=1，目录含 5 个源码文件，非假阴性；全量 Timer 检查仅 PeriodicTimer 周期循环，无裸 Timer 字段）; (2) grep -rn 'PingInterval' CloudPan.Server.Core/ 命中 SpecConfig.PingIntervalSeconds（WebSocketHeartbeatHostedService.cs:19/32），PongTimeout 亦读 SpecConfig.PongTimeoutSeconds（WebSocketHandler.cs:22），间隔/超时均无字面量; (3) dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）+ dotnet test --filter Architecture 通过 12/12 0 失败 + 附加 CodeGen --verify 全部一致（契约 1.2.0）。独立核查：WebSocketHeartbeatHostedService 继承 BackgroundService、PeriodicTimer using 释放、回调全量 try-catch（CLAUDE.md 7.2）、无 fire-and-forget；CheckHeartbeatsAsync Interlocked 防重入 + finally 复位 + 双层 try-catch；IWebSocketHandler 接口含 CheckHeartbeatsAsync；Program.cs:97 AddHostedService 注册正确。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -2607,7 +2607,7 @@
       "title": "服务端路由字面量契约化 + /ws 路径生成",
       "dimension": "simplicity",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 5,
       "findingId": "F-58",
       "dependsOn": [],
@@ -2638,8 +2638,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "执行者记录（T-058）：服务端路由字面量契约化 + /ws 路径生成。改动文件：① shared-spec.json（版本 1.2.0→1.3.0，api.endpoints 注册 /ws 端点 GET/auth=message，changelog 新增 1.3.0 条）② CloudPan.CodeGen/Generators/ApiClientGenerator.cs（ToConstantName 特例 /ws→常量名 WebSocket；类文档注释改『客户端与服务端共用』）③ CloudPan.CodeGen/Generators/ManifestGenerator.cs（删除从 api.websocket.endpoint 提取 /ws 的重复逻辑——/ws 已由 endpoints 循环生成，SpecEndpoints 单源无重复）④ 重新生成 CloudPan.Contract/Generated/SpecRoutes.g.cs（新增 public const string WebSocket=\"/ws\" + RouteIndex 交叉校验项 (WebSocket,GET,/ws)）与 ContractManifest.g.cs 等 8 个生成文件（版本头 1.3.0）⑤ CloudPan.Server.Host/Controllers/ 全部 10 个文件：33 处路由字面量改引用 SpecRoutes 常量，类级 [Route(\"api/...\")] 前缀移除（action 改全路径常量；保留类级 [Route] 会因 Analyzer 无法解析常量字面量而误报 CP100，故必须移除）⑥ CloudPan.Server.Host/Program.cs（using CloudPan.Contract + app.Map(\"/ws\")→app.Map(SpecRoutes.WebSocket)）⑦ CloudPan.Client.Core/Services/WebSocketClient.cs（using CloudPan.Contract + .TrimEnd('/')+\"/ws\"→+SpecRoutes.WebSocket）。取舍说明：requirements 提及『WsPath 常量』，指挥层指令明确『api.endpoints 补 /ws 端点 + SpecRoutes.WebSocket』，取后者——/ws 成为一等端点并纳入 SpecRoutes.DiffAgainstSpecEndpoints 交叉校验（SpecRoutesConsistencyTests 兜底），路由单一事实来源闭环。验证：grep 验收1（Controllers 手写路由字面量）EXIT=1 无匹配；grep 验收2（\"/ws\" 字面量）EXIT=1 无匹配；dotnet run --project CloudPan.CodeGen 生成完成（1.3.0）；--verify 全部一致；dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过（295/295，含 FilesControllerIntegrationTests/ResponseShapeIntegrationTests/WebSocketIntegrationTests 命中改造后真实路由）；dotnet test --filter Architecture 通过（12/12，含 SpecRoutesConsistencyTests 与 ErrorResponseFormatTests /ws 端点 Message 认证断言）。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-059",

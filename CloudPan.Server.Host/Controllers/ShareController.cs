@@ -23,7 +23,7 @@ public class ShareController : ControllerBase
     /// <summary>
     /// POST /api/shares — 创建分享链接。
     /// </summary>
-    [HttpPost("/api/shares")]
+    [HttpPost(SpecRoutes.Shares)]
     public async Task<IActionResult> CreateShare([FromBody] CreateShareRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.FilePath))
@@ -47,7 +47,7 @@ public class ShareController : ControllerBase
     /// <summary>
     /// DELETE /api/shares/{shareId} — 撤销分享链接。
     /// </summary>
-    [HttpDelete("/api/shares/{shareId}")]
+    [HttpDelete(SpecRoutes.SharesByShareId)]
     public async Task<IActionResult> RevokeShare(string shareId)
     {
         var result = await _sharing.RevokeShareAsync(shareId);
@@ -62,7 +62,7 @@ public class ShareController : ControllerBase
     /// <summary>
     /// GET /share/{shareId} — 分享页面（HTML，手机浏览器友好）。
     /// </summary>
-    [HttpGet("/share/{shareId}")]
+    [HttpGet(SpecRoutes.ShareByShareId)]
     [EndpointAuth(AuthMode.Public)]
     public async Task<IActionResult> SharePage(string shareId, [FromQuery] string? password = null)
     {
@@ -117,7 +117,7 @@ public class ShareController : ControllerBase
     /// <summary>
     /// GET /share/{shareId}/download — 下载分享文件。
     /// </summary>
-    [HttpGet("/share/{shareId}/download")]
+    [HttpGet(SpecRoutes.ShareByShareIdDownload)]
     [EndpointAuth(AuthMode.Public)]
     public async Task<IActionResult> ShareDownload(string shareId, [FromQuery] string? password = null)
     {

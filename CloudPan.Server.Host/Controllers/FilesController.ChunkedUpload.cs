@@ -21,7 +21,7 @@ public partial class FilesController
     /// 客户端将大文件拆分为 4MB 块，服务端按序接收，全部到达后合并为完整文件。
     /// 支持断点续传：已接收的块索引幂等跳过。
     /// </summary>
-    [HttpPost("upload/chunk")]
+    [HttpPost(SpecRoutes.FilesUploadChunk)]
     [RequestSizeLimit(5_000_000)] // 块数据 + form 开销
     public async Task<IActionResult> UploadChunk(
         [FromForm] IFormFile chunk,
@@ -82,7 +82,7 @@ public partial class FilesController
     /// <summary>
     /// GET /api/files/upload/chunk/status — 查询分块上传进度。
     /// </summary>
-    [HttpGet("upload/chunk/status")]
+    [HttpGet(SpecRoutes.FilesUploadChunkStatus)]
     public async Task<IActionResult> GetChunkStatus([FromQuery] string path)
     {
         if (string.IsNullOrWhiteSpace(path))

@@ -10,7 +10,6 @@ namespace CloudPan.Server.Host.Controllers;
 /// 浏览、恢复、清空已删除文件（保留 30 天）。
 /// </summary>
 [ApiController]
-[Route("api/trash")]
 [EndpointAuth(AuthMode.Token)]
 public class TrashController : ControllerBase
 {
@@ -22,7 +21,7 @@ public class TrashController : ControllerBase
     }
 
     /// <summary>GET /api/trash — 列出回收站内容。</summary>
-    [HttpGet]
+    [HttpGet(SpecRoutes.Trash)]
     public async Task<IActionResult> ListTrash()
     {
         var items = await _trash.ListAsync();
@@ -30,7 +29,7 @@ public class TrashController : ControllerBase
     }
 
     /// <summary>POST /api/trash/restore — 恢复文件。</summary>
-    [HttpPost("restore")]
+    [HttpPost(SpecRoutes.TrashRestore)]
     public async Task<IActionResult> Restore([FromBody] RestoreTrashRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.MetaFileName))
@@ -48,7 +47,7 @@ public class TrashController : ControllerBase
     }
 
     /// <summary>DELETE /api/trash/empty — 清空回收站。</summary>
-    [HttpDelete("empty")]
+    [HttpDelete(SpecRoutes.TrashEmpty)]
     public async Task<IActionResult> EmptyTrash()
     {
         await _trash.EmptyAsync();

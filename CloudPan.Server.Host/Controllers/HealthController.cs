@@ -26,7 +26,7 @@ public class HealthController : ControllerBase
     }
 
     /// <summary>GET /api/health — 服务健康状态（含磁盘、内存、DB 完整性）。</summary>
-    [HttpGet("/api/health")]
+    [HttpGet(SpecRoutes.Health)]
     public async Task<IActionResult> GetHealth()
     {
         int version = await _versionService.GetCurrentVersionAsync();
@@ -62,7 +62,7 @@ public class HealthController : ControllerBase
     }
 
     /// <summary>GET /api/version — 服务端版本（客户端自动更新检测用）。</summary>
-    [HttpGet("/api/version")]
+    [HttpGet(SpecRoutes.Version)]
     public IActionResult GetVersion()
     {
         return Ok(new VersionResponse(
@@ -73,7 +73,7 @@ public class HealthController : ControllerBase
     }
 
     /// <summary>GET /pair — 设备配对帮助页面（显示完整 Token，与安装器/托盘一致）。</summary>
-    [HttpGet("/pair")]
+    [HttpGet(SpecRoutes.Pair)]
     [ApiExplorerSettings(IgnoreApi = true)]
     [EndpointAuth(AuthMode.Localhost)]
     public IActionResult PairingPage()
@@ -207,7 +207,7 @@ public class HealthController : ControllerBase
     }
 
     /// <summary>GET /api/cert-fingerprint — 获取服务端证书 SHA-256 指纹（客户端 TOFU pinning）。</summary>
-    [HttpGet("/api/cert-fingerprint")]
+    [HttpGet(SpecRoutes.CertFingerprint)]
     [EndpointAuth(AuthMode.Token)]
     public async Task<IActionResult> GetCertFingerprint()
     {
