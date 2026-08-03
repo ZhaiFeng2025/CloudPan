@@ -2,97 +2,81 @@
   {
     "dimension": "function",
     "severity": "P1",
-    "location": "CloudPan.Client.Core/Services/ApiClient.ThrottledStream.cs:44-76,78-92; CloudPan.Client.Core/Services/ApiClient.cs:127-131,166-179",
-    "problem": "限速流在配额耗尽/首次调用时返回 0，被 CopyToAsync 当作 EOF 提前终止 → 限速下载/上传被截断。ThrottledStream.ReadAsync 中 allowed = (int)Math.Min(count, maxBytes - _bytesThisTick)，当 elapsed 极小（构造后立即 CopyToAsync，同一 tick 内）或 _bytesThisTick 追上 maxBytes（每秒配额耗尽）时 allowed<=0 → await Task.Delay(10); return 0（ThrottledStream.cs:71-72,44-46）。而 CopyToAsync 覆写循环 while ((bytesRead = await ReadAsync(...)) > 0)（78-92）把返回 0 当 EOF 直接退出。UploadAsync（ApiClient.cs:127-131）与 DownloadAsync（166-179）均经此流。结果：用户设置任意限速后，大文件（>限速值/秒的任意文件）下载在配额边界截断 → DownloadAsync 哈希校验失败 → 10 次阶梯退避重试全部截断 → 下载永久失败；上传截断 → multipart 不完整 → 服务端解析异常或保存不完整文件。T-063 刚把限速做成运行时热更新（SetUploadLimit/SetDownloadLimit），但限速流本体有确定性 bug，限速功能整体不可用。",
-    "why": "限速是 clouddrive-kb 第 6 节声明功能（限速：改动即时生效，无需重启，T-063 已接线运行时下发），也是 v1.0 声明功能之一。限速一旦开启，所有超过 1 秒配额的文件传输必截断，家庭场景低带宽限制下常态触发，主路径完全失效——合理功能设计对声明功能的主路径可用判据直接违反。",
-    "suggestion": "把 if (allowed <= 0) { await Task.Delay(10); return 0; } 改为 await Task.Delay(10) 后重新计算配额并重试读取（返回 0 只应在底层流 EOF 时发生）；或在 CopyToAsync 覆写循环内把节流等待与真正 EOF 区分开（节流时 sleep 重试读而非 return 0）。并补限速流单测覆盖限速下载 10MB 文件完整到达。"
-  },
-  {
-    "dimension": "function",
-    "severity": "P1",
-    "location": "CloudPan.Client.UI/UI/SelectiveSyncPanel.cs:115,196-232; CloudPan.Client.UI/UI/SettingsForm.SyncTab.cs:10-21",
-    "problem": "选择性同步排除集目录树从未被加载：SelectiveSyncPanel.LoadFromPaths(IEnumerable<string>) 定义了方法（115 行）但全库无任何调用点；SettingsForm.BuildSyncTab 仅 _syncPanel.SelectedPaths = selectedPaths（setter 只把配置应用到已有节点勾选态，树本身为空）。因此用户打开 设置→选择性同步 看到的恒是空状态提示『尚未从服务端加载目录列表』，永远无法勾选/取消勾选任何目录。且 SelectedPaths getter 在树空（root==null）时返回 { '/' } 全选默认值（26-31 行），用户保存设置后 cfg.SelectedPaths 被覆盖为全选——此前手工配置的排除集（如排除 /Private）被静默清空，隐私目录重新开始同步。",
-    "why": "选择性同步/排除集是 T-047/T-054 刚落地的声明功能（知识库『勾选目录树，改动即时生效』），且排除集语义（IsPathSelected 引擎侧）逻辑完整，但 UI 载体（目录树）从未接线 LoadFromPaths，功能对用户完全不可操作，且保存设置会静默丢失用户既有排除配置——功能为家庭用户服务判据与不过度设计但必须可用直接冲突。",
-    "suggestion": "在 SettingsForm 打开时异步加载服务端目录树（经 SyncEngine/新增查询接口拉 /api/tree 目录路径）后调用 LoadFromPaths 填充树；或至少在树为空时禁用保存并明确提示尚未加载。同时修复 SelectedPaths getter：树空且已有排除配置时不应返回全选默认覆盖。"
+    "location": "CloudPan.Server.Core/Thumbnails/ThumbnailService.cs:34-169; CloudPan.Server.Host/Controllers/ThumbnailsController.cs:31-46; CloudPan.Client.UI/UI/FileBrowseRender.cs:50 (无任何客户端调用 /api/thumbnails)",
+    "problem": "『缩略图』作为 v1.0 声明功能在服务端完整实现（解码/缩放/缓存/并发门/缓存 key），但 Windows 与 Android 两个客户端均无任何消费：全库 grep Thumbnail/GetThumbnail/thumbnails 在 CloudPan.Client.UI/Core/Android 无一非生成引用；Windows 文件浏览用 Folder/File 字形（FileBrowseRender.cs:50 ImageIndex 0/1），Android 用扩展名图标（getFileIcon）。即 /api/thumbnails 端点对用户完全不可见，照片墙/网格视图（clouddrive-kb 点名：网格视图/照片墙缩略图/Android 下拉照片墙）从未落地。且 SupportedExts 仅 jpg/jpeg/png/gif/bmp/webp（ThumbnailService.cs:13-16），iPhone/Android 主流 HEIC/HEIF 照片即使接入也无法解码。",
+    "why": "『不多不少』判据的直接违反：一个投入了解码/缩放/缓存/并发限流全套实现的功能没有任何用户可触达路径，且是 .thumbnails 无限增长的存储源头之一；同时家庭相册主格式（HEIC）被排除——声明功能未服务真实家庭用户。",
+    "suggestion": "二选一收敛：① 在 Windows 文件浏览增加网格/照片墙视图并调 /api/thumbnails 渲染（对齐 clouddrive-kb 照片墙），Android 列表缩略图同样接入，并补 HEIC/HEIF 解码（引入支持 HEIC 的编解码器或按 HEIF 转码）；② 若 v1.0 不打算做照片墙，删除 ThumbnailService/端点/缓存以消除死功能。无论哪种，补 .thumbnails 缓存回收。"
   },
   {
     "dimension": "function",
     "severity": "P2",
-    "location": "CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.cs:183-199; CloudPan.Client.Core/Services/ApiClient.ChunkedUpload.cs:33-46,88-92",
-    "problem": "分块上传崩溃恢复在 Finalize 完成（record 已移除）后返回 Found=false，客户端整文件重传并可能生成冲突副本。FinalizeAsync 成功后 db.ChunkedUploads.Remove(record) 移除会话（Finalize.cs:91-92），此后 GetStatusAsync 走 record==null 分支返回 ChunkStatusResult(false, null, empty, 0, false, currentVersion, ...)（183-185 行）——与『从未开始』不可区分。客户端 GetChunkStatusAsync 收到 Found=false + receivedChunks 空 → 循环认为所有块均未收 → 从头重传全部块（ChunkedUpload.cs:40-46）；最后一块 Finalize 时 baseVersion=客户端快照旧版本 < 服务端 currentVersion → SaveConflictCopyIfNeededAsync 生成 _冲突_ 副本（Finalize.cs:44-58）。即 T-064 只覆盖了 isComplete 未落盘窗口（record 仍在时返回 Found=false），未覆盖 Finalize 已完成、record 已移除窗口——崩溃后恢复反而产生冲突副本噪音与整文件重传。",
-    "why": "断点续传是知识库点名的大文件边界；T-064 的修复目标是崩溃恢复不重传/不丢数据，但完成窗口被遗漏导致正常崩溃恢复退化为整文件重传+冲突副本，违反失败可恢复与多设备收敛判据，浪费带宽并污染版本历史。",
-    "suggestion": "GetStatusAsync 在 record==null 时按 currentVersion 查询 FileEntry：若文件已存在（Version>0）且存在 Completed 会话标记（或 FileEntry.LastModified/hash 与客户端 fileHash 一致）→ 返回 isComplete=true + Version，让客户端跳过全部块并直接写快照；否则（从未开始）保持 Found=false。或 Finalize 完成时保留会话 record 但标记 Finalized=true（不移除），客户端据此识别。"
+    "location": "CloudPan.Server.Core/FileIndex/FileIndexService.cs:166-188; CloudPan.Server.Core/Versions/VersionCommitHelper.cs:82-91; CloudPan.Server.Core/Thumbnails/ThumbnailService.cs:136-169; CloudPan.Server.Host/Hosting/BackgroundHostedService.cs:15-44",
+    "problem": "版本存档物理文件（.cloudpan/.versions/）与缩略图缓存（.cloudpan/.thumbnails/）无任何存储回收：VersionCommitHelper.CommitNewVersionInTransactionAsync prune 分支（84-91 行）只删除 VersionRecord DB 行不删对应 .versions 存档文件；FileIndexService.PurgeExpiredTombstonesAsync（181-185 行）删除墓碑关联 VersionRecord 行同样不删存档物理文件——被裁剪/被删除文件的存档文件永久残留。缩略图缓存 key 含内容指纹，每次内容变更生成新文件、旧文件永不删除（ThumbnailService.cs:161-168）。BackgroundHostedService 只有回收站/墓碑/分块/WAL/内存五类清理（15-44 行），无版本存档与缩略图回收任务。家庭长期使用（每文件保留历史版本 + 每图片多代缩略图）后 .versions/.thumbnails 只增不减，磁盘耗尽后 FullSyncAsync 100MB 低水位（SyncEngine.FullScan.cs:21-31）直接拒绝所有同步。",
+    "why": "『磁盘满/长期运行』是知识库边界清单点名场景（Dropbox/坚果云 30 天保留参照），当前只裁 DB 不裁 FS，存储只增不减，违背默认值合理、可长期运行判据；且与上一条缩略图死功能叠加放大磁盘占用。",
+    "suggestion": "版本存档随裁剪/墓碑清理同步删除对应 StoragePath 物理文件（孤儿存档清理单点，对齐 DeleteOrphanArchive）；缩略图按创建时间/LRU 定期清理（保留当前内容指纹 key 即可，重建成本低）；在 BackgroundHostedService 增加统一存储回收任务（IHostedService）。"
   },
   {
     "dimension": "function",
     "severity": "P2",
-    "location": "CloudPan.Server.Core/Files/FileOperationService.cs:115-170; CloudPan.Server.Core/FileIndex/FileIndexService.cs:194-229",
-    "problem": "重命名目标路径已存在时无收敛路径：FileOperationService.MoveAsync 未先检测 newPath 是否存在（115-170 行无任何 target 检查），FileIndexService.MoveAsync 直接 UPDATE FileEntry SET Path=new WHERE Path=old（204-206）——SQLite 主键唯一约束在 new 已有行时抛异常 → 逃逸到 GlobalExceptionMiddleware 返回 500（服务暂时不可用）。跨设备同目录/同名文件碰撞（另一设备已把同名文件上传到 newPath）是双设备家庭场景常态，用户看到 500 而非重命名后名称已存在引导，且 Move 已先于 DB 变更分配了新版本号，索引/版本状态已局部前进。",
-    "why": "重命名是资源管理器最高频操作，目标已存在是常见竞争（另一设备并发创建同名）；返回 500 而非明确 CONFLICT/覆盖确认违反 clouddrive-kb 重名时提示保留两者/替换/比较版本，不静默覆盖，且版本号被无谓消耗。",
-    "suggestion": "MoveAsync 开始前查询 newPath 是否存在：存在则返回 409 CONFLICT（带目标已存在，请选择覆盖或改名）或自动追加 _冲突_/时间戳后缀收敛（对齐 ConflictBackupHelper 命名）；且不要在检测前先 NextVersionAsync 分配版本号。"
-  },
-  {
-    "dimension": "function",
-    "severity": "P2",
-    "location": "CloudPan.Server.Core/Trash/TrashService.cs:126-154; CloudPan.Client.Core/Services/SyncManageService.cs:46-59",
-    "problem": "回收站恢复目标路径已存在无收敛路径：TrashService.RestoreAsync 直接 File.Move(trashFile, targetPath, overwrite:false)（133 行）或 Directory.Move（126 行），目标存在时抛 IOException → catch 返回 INTERNAL_ERROR 恢复文件时出现错误，请稍后重试。用户不知道是重名冲突，也无覆盖/改名恢复选项，恢复永久不可行直到手动改名；客户端 RestoreTrashAsync 只透传布尔（SyncManageService.cs:46-59），用户无从获得具体原因。",
-    "why": "回收站恢复是删除撤销主路径（删除进回收站后 5 秒撤销 Snackbar 依赖恢复），目标被同名文件重建（删除后立即重新创建同一路径）是常见场景；错误信息含糊、无重试分支违反失败可见可重试、错误信息=原因+下一步判据。",
-    "suggestion": "恢复前检测目标是否存在：存在则返回 CONFLICT 错误体（提示覆盖/改名选择）或自动追加 _恢复_时间戳 后缀恢复（对齐 MoveToTrash 唯一化命名）；客户端据此展示可操作选项而非失败提示。"
+    "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt:151,222; CloudPan.Android/app/src/main/java/com/cloudpan/android/worker/PhotoBackupWorker.kt:369; CloudPan.Server.Core/Files/FileOperationService.cs:56; CloudPan.Server.Core/Upload/UploadService.cs:52",
+    "problem": "Android 端所有写操作 baseVersion 恒为 0：删除请求 mapOf(path, baseVersion=0)（FileRepository.kt:151）、手动上传 versionPart=\"0\"（:222）、照片备份 versionPart=\"0\"（PhotoBackupWorker.kt:369）。而服务端并发检测均以 baseVersion>0 为前提（DeleteAsync 56 行、UploadService 52 行『baseVersion > 0 且服务端版本更高才冲突』）——Android 端删除/上传永远不触发冲突检测：文件恰被其他设备并发修改/上传时，Android 删除仍静默移入回收站、Android 上传仍静默覆盖并推进版本（旧内容仅存版本历史），与 Windows 客户端（快照版本号携带并发保护）行为不一致。批量删除（FileListScreen.kt:322-328 逐个 baseVersion=0）同样无保护。",
+    "why": "多设备并发是知识库边界清单点名场景，Android 是家庭第二设备主力；删除/上传无并发保护=静默覆盖其他设备的新改动，违反『冲突处理给出选项而非静默』判据，服务端精心设计的 409 冲突链路在 Android 上形同虚设。",
+    "suggestion": "Android 删除/上传前从服务端文件树取当前 version 作为 baseVersion 携带（删除可先 GET tree 单文件或复用文件列表已拉取的 version 字段；上传可从列表的 fileEntry.version 取基准），使服务端 409 冲突路径生效并在 UI 给冲突选项；至少为 baseVersion=0 的删除/上传补二次确认或冲突提示。"
   },
   {
     "dimension": "function",
     "severity": "P3",
-    "location": "CloudPan.Client.Core/Services/SyncEngine.Transfers.cs:292-321",
-    "problem": "ProcessDeleteAsync 只对 404 容错（300-303 行视为已删），对 409（删除时该文件恰被其他设备修改/上传，服务端版本 > baseVersion，FileOperationService.DeleteAsync.cs:56-67 返回 CONFLICT）未处理：HttpRequestException(409) 逃逸到 ProcessQueueAsync 泛化 catch（Queue.cs:89-107），经 10 次阶梯退避后以已达最大重试次数丢弃——本地文件保留、快照保留、删除从未生效，用户无删除冲突提示或重试入口。",
-    "why": "删除与并发编辑撞车是双设备家庭场景常见竞争；静默失败而非冲突提示违背 clouddrive-kb 冲突处理给出选项而非静默与失败可见可重试判据，用户以为已删除实际未删。",
-    "suggestion": "ProcessDeleteAsync 对 409 转入冲突流程（加入 _pendingConflicts 提示文件已被其他设备修改，是否仍删除？）或明确返回失败并标记删除失败项可重试。"
+    "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/worker/PhotoBackupWorker.kt:359-377; CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt:213-239; CloudPan.Server.Host/Controllers/FilesController.cs:62; CloudPan.Contract/Generated/Enums.g.cs:112-113",
+    "problem": "Android 端完全未实现分块上传：照片备份与手动上传均走单次 multipart /api/files/upload，而该端点 RequestSizeLimit=50MB（FilesController.cs:62）、服务端表单/Kestrel 上限同为 50MB——单文件 >50MB（iPhone/Android 高像素 HEIC/RAW、连拍合成等）上传即 413 PAYLOAD_TOO_LARGE。照片备份 worker 把任何非 2xx 视为失败并累计重试（PhotoBackupWorker.kt:329-346），3 次后标记 Blocked 永久跳过（游标越过）——大照片被永久排除出备份且无用户处理入口。spec 在 Enums.g.cs:113 明确标注 413『改用分块上传』，但 Windows 分块路径（ChunkSize=4MB/阈值 10MB）在 Android 无对应实现。",
+    "why": "照片自动备份是家庭场景核心功能（clouddrive-kb『家人手机照片自动同步』）；边界大文件被静默永久排除，违反大文件/失败可恢复判据，也是服务端与客户端功能对齐（Windows 有分块、Android 无）的缺口。",
+    "suggestion": "Android 上传复用服务端分块会话接口（chunkIndex/totalChunks/fileHash），≥10MB 走分块（对齐 SpecConfig.ChunkedUploadThreshold/ChunkSize）；照片备份失败路径对 413 提示『照片过大，暂不支持』而非静默 Blocked，或缩小/转码后重试。"
   },
   {
     "dimension": "function",
     "severity": "P3",
-    "location": "CloudPan.Client.Core/Services/SyncEngine.Transfers.cs:173-187,367-380; CloudPan.Client.Core/Services/SyncEngine.Conflicts.cs:53-58,91-96",
-    "problem": "磁盘空间前置检查只在 item.FileSize.HasValue && > 50MB 时触发（Transfers.cs:173）。CloudOnly 按需下载 DownloadPathAsync 入队的队列项未设 FileSize（367-380 行），KeepRemote/KeepBoth 冲突解决入队的下载项亦未设 FileSize（Conflicts.cs:53-58,91-96），三者均跳过磁盘检查——大文件按需下载（视频/镜像）在低磁盘下直接写满磁盘，后续同步停摆且无预警。",
-    "why": "断网/磁盘满是知识库边界清单点名的场景；按需下载是家庭用户取回视频/照片的主路径，磁盘写满会使整个同步引擎进入失败循环，违背失败可恢复判据。",
-    "suggestion": "DownloadPathAsync 与冲突解决入队时从 RemoteSnapshots 读取 FileSize 一并写入队列项，或改为下载前无条件检查磁盘空间（低水位 100MB，与 FullSyncAsync.cs:23 一致）。"
+    "location": "CloudPan.Client.Core/Services/SyncEngine.Transfers.cs:328-368; CloudPan.Client.Core/Services/SyncEngine.Queue.cs:89-107",
+    "problem": "客户端对服务端重命名 409（目标已存在，T-077 服务端已返回 CONFLICT）无收敛分支：ProcessRenameAsync（Transfers.cs:336）直接 _api.MoveAsync，目标撞名时 HttpRequestException(409) 逃逸到 ProcessQueueAsync 泛化 catch（Queue.cs:89-107）——10 次阶梯退避后以『已达最大重试』丢弃，无冲突提示、无重试入口。此时本地 FS 已改名而服务端未移动，收敛完全依赖下一次全量扫描的 delete+re-upload：旧路径快照被判本地删除（A 进回收站）、新路径本地文件覆盖服务端同名文件（B 原内容仅存版本历史）——重命名语义丢失、产生回收站条目与版本历史噪音，且用户看到的只是泛化同步失败。T-084 已为删除 409 建 HandleDeleteConflictAsync 先例，重命名 409 未覆盖。",
+    "why": "重命名是资源管理器最高频操作，双设备撞名是常态；静默丢弃+噪音收敛而非冲突引导，违反『重名时提示保留两者/替换，不静默覆盖』与失败可见可重试判据。",
+    "suggestion": "ProcessRenameAsync 对 409 转入冲突流程（对齐 T-084：加入 _pendingConflicts + ConflictDetected，提示目标已存在，选项=覆盖/改名/保留两者），或至少返回 false 并明确归因，避免 10 次退避后静默丢弃。"
   },
   {
     "dimension": "function",
     "severity": "P3",
-    "location": "CloudPan.Client.Core/Services/SyncEngine.Conflicts.cs:62-99; CloudPan.Contract/SyncIgnoreParser.cs:13-22; CloudPan.Server.Core/Files/ConflictBackupHelper.cs:52-66",
-    "problem": "KeepBoth 冲突解决把本地文件备份为 {path}.conflict.{yyyyMMddHHmmss}（Conflicts.cs:67），与服务端冲突副本命名契约 _冲突_yyyyMMdd_HHmmss（ConflictBackupHelper.cs:55 经 SpecConfig.ConflictSuffixPattern）不一致，且该 .conflict. 后缀不在内置忽略规则（SyncIgnoreParser.cs:13-22 仅 .cloudpan/*.tmp/~*）——FileSystemWatcher 立即触发 Created → 备份文件被当作新文件上传服务端，形成本地+云端双备份并制造版本历史噪音，用户看到的冲突副本两种命名风格并存，无法辨认保留两者到底保留了哪个版本。",
-    "why": "冲突处理是 v1.0 声明功能；两端冲突副本命名不一致 + 备份被误同步上传制造双份内容与版本噪音，用户对保留两者的结果困惑，违反冲突处理给出选项而非静默判据。",
-    "suggestion": "统一使用 SpecConfig.ConflictSuffixPattern 生成本地备份名，并把冲突备份后缀加入内置忽略规则或按冲突副本语义明确同步（二选一并一致化）。"
+    "location": "CloudPan.Client.Core/Services/SyncEngine.Transfers.cs:173-187,371-384; CloudPan.Client.Core/Services/SyncEngine.Conflicts.cs:53-58,91-96",
+    "problem": "磁盘空间前置检查只在 item.FileSize.HasValue && >50MB 时触发（Transfers.cs:173）。按需下载 DownloadPathAsync 入队的队列项未设 FileSize（371-384 行）、KeepRemote/KeepBoth 冲突解决入队的下载项亦未设 FileSize（Conflicts.cs:53-58,91-96）——三者全部跳过磁盘检查：大视频/镜像按需下载在低磁盘下直接写满磁盘（File.Create 抛 IOException → 重试 → 丢弃），且磁盘写满拖垮整个同步引擎，无预警无引导。",
+    "why": "磁盘满是知识库边界清单点名场景；按需下载/冲突解决是家庭用户取回大文件的主路径，跳过检查使失败不可预防、不可恢复引导。",
+    "suggestion": "下载前无条件检查磁盘空间（低水位 100MB，与 FullSyncAsync.cs:23 一致），或 DownloadPathAsync/KeepRemote/KeepBoth 入队时从 RemoteSnapshots 读取 FileSize 一并写入队列项；磁盘不足时给出明确错误而非让 File.Create 炸。"
   },
   {
     "dimension": "function",
     "severity": "P3",
-    "location": "CloudPan.Client.UI/UI/MainWindow.cs:111; CloudPan.Client.Core/Services/SyncBrowseService.cs:63,81,93",
-    "problem": "文件浏览主视图每 5 秒全量刷新：GetFileBrowserAsync 每次 db.RemoteSnapshots.ToListAsync() 全量加载所有快照（SyncBrowseService.cs:81）+ 对同步根 Directory.EnumerateFileSystemEntries(AllDirectories) 全盘枚举（:93，含逐文件 ShouldIgnore 正则），再按当前目录前缀过滤。目录数万级（相册/大仓库）时单次刷新可达数秒，与全量扫描/增量同步争抢磁盘 IO，且 5 秒轮询在隐藏到托盘时虽停（MainWindow.cs:187），前台浏览主入口即用户第一操作面持续卡顿。",
-    "why": "海量小文件（相册数千照片）是知识库边界清单点名场景；浏览视图是用户第一操作面，每 5 秒一次全树扫描制造可见卡顿，违背浏览体验流畅、海量小文件吞吐判据。",
-    "suggestion": "快照查询按当前目录前缀裁剪（RemoteSnapshots.Where(Path.StartsWith(prefix))），本地枚举按当前目录裁剪并缓存到本地目录变更为止；仅对当前目录增量轮询，根目录才全量。"
+    "location": "CloudPan.Client.Core/Services/SyncEngine.Conflicts.cs:62-99; CloudPan.Server.Core/Files/ConflictBackupHelper.cs:52-66; CloudPan.Contract/SyncIgnoreParser.cs:13-22",
+    "problem": "KeepBoth 冲突解决把本地文件备份为 {path}.conflict.{yyyyMMddHHmmss}（Conflicts.cs:67），与服务端冲突副本命名契约 _冲突_yyyyMMdd_HHmmss（ConflictBackupHelper.cs:55 经 SpecConfig.ConflictSuffixPattern）不一致；且该 .conflict. 后缀不在内置忽略规则（SyncIgnoreParser.cs:13-22 仅 .cloudpan/*.tmp/~*/.git/node_modules）——FileSystemWatcher 立即触发 Created → 备份文件被当作新文件上传服务端，形成本地+云端双份冲突备份并制造版本历史噪音；用户看到的冲突副本两种命名风格并存，无法辨认『保留两者』到底保留了哪一版。",
+    "why": "冲突处理是 v1.0 声明功能；两端冲突副本命名不一致 + 备份被误同步上传，用户对保留两者的结果困惑，违反『冲突处理给出选项而非静默』与一致性判据。",
+    "suggestion": "统一使用 SpecConfig.ConflictSuffixPattern 生成本地备份名（对齐服务端），并把冲突备份后缀加入内置忽略规则（或明确按冲突副本语义同步），二选一并一致化。"
   },
   {
     "dimension": "function",
     "severity": "P3",
-    "location": "CloudPan.Client.Core/Services/SyncManageService.cs:81-148",
-    "problem": "DeleteForTrashAsync 删除目录时只清本地快照（按前缀 RemoveRange 快照，99-111 行），未按路径前缀移除 SyncQueue 中该目录子路径的待处理下载/重命名项：残留下载项在服务端已移入回收站后 404 重试（浪费流量 + 弹出错误归因），残留重命名项对已墓碑路径 Move → 500 重试；上传项虽因本地递归删除后 !File.Exists 自愈（Transfers.cs:23-27），但下载/重命名路径无此兜底，删除-传输互相打架。",
-    "why": "目录删除（含批量删除进回收站）是家庭用户整理相册的常用操作；残留队列项制造 404/500 错误噪音与无谓流量，违背删除进回收站且可恢复/可撤销、失败可见的干净语义。",
-    "suggestion": "DeleteForTrashAsync 删除目录时按前缀（path + '/'）同时移除 SyncQueue 中全部 Upload/Download/Delete/Rename 队列项（对齐 Server SoftDelete 前缀语义与 DeleteLocalCopyAsync 的精确路径处理）。"
+    "location": "CloudPan.Client.Core/Services/SyncManageService.cs:90-157",
+    "problem": "DeleteForTrashAsync 删除目录时只清本地快照（按路径前缀 RemoveRange RemoteSnapshots，108-120 行），未按前缀移除 SyncQueue 中该目录子路径的待处理下载/重命名项：残留下载项在服务端已移入回收站后 404 重试（浪费流量 + 错误归因噪音），残留重命名项对已墓碑路径 Move → 409/500 重试；上传项虽因本地递归删除后 !File.Exists 自愈（Transfers.cs:23-27），但下载/重命名无此兜底。",
+    "why": "目录删除（含批量删除）是家庭用户整理相册的常用操作；残留队列项制造 404/409/500 错误噪音与无谓流量，违背『删除进回收站且干净语义』与失败可见判据。",
+    "suggestion": "DeleteForTrashAsync 删除目录时按前缀（path + '/'）同时移除 SyncQueue 中全部 Upload/Download/Delete/Rename 队列项（对齐 SoftDeleteAsync 前缀语义与 DeleteLocalCopyAsync 的精确路径处理）。"
   },
   {
     "dimension": "function",
     "severity": "P3",
-    "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt:149-165",
-    "problem": "Android 删除请求 baseVersion 恒为 0（mapOf(path to path, baseVersion to 0)，151 行），而服务端 DeleteAsync 仅在 baseVersion > 0 && entry.Version > baseVersion 时做乐观并发冲突检测（FileOperationService.cs:56）——Android 端删除永远不触发冲突检测，文件恰被其他设备并发修改/上传时仍被静默删除进回收站（Windows 客户端经快照版本号做了并发保护）。批量删除（FileListScreen.kt:322-328）逐个 baseVersion=0，同样无保护。",
-    "why": "多设备并发是知识库边界清单点名场景；Android 是家庭第二设备主力，删除无并发保护导致另一设备刚上传的新内容被静默移入回收站，违背冲突处理给出选项而非静默判据。",
-    "suggestion": "Android 端删除前查询本地最新版本号（或请求时携带文件当前 version），baseVersion 传真实值以触发服务端 409 冲突路径；或由服务端对 baseVersion=0 的删除也提示风险。"
+    "location": "CloudPan.Client.Core/Services/SyncBrowseService.cs:81,93,263,270; CloudPan.Client.UI/UI/MainWindow.cs:110-112",
+    "problem": "文件浏览主视图每 5 秒刷新一次（MainWindow.cs:111），每次 GetFileBrowserAsync 都 db.RemoteSnapshots.ToListAsync() 全量加载所有快照（SyncBrowseService.cs:81）+ 对同步根 Directory.EnumerateFileSystemEntries(AllDirectories) 全盘枚举（:93，含逐文件 ShouldIgnore 正则），再按当前目录前缀过滤；GetFileSyncStatusesAsync（:263,:270）同样全量。目录数万级（相册/大仓库）时单次刷新可达数秒，与全量扫描/增量同步争抢磁盘 IO，且 5 秒轮询在隐藏到托盘时虽停（MainWindow.cs:187），前台浏览主入口即用户第一操作面持续卡顿。",
+    "why": "海量小文件（相册数千照片）是知识库边界清单点名场景；浏览视图是用户第一操作面，每 5 秒一次全树扫描制造可见卡顿，违背海量小文件吞吐与浏览体验流畅判据。",
+    "suggestion": "快照查询按当前目录前缀裁剪（RemoteSnapshots.Where(Path.StartsWith(prefix))）；本地枚举按当前目录裁剪并缓存到本地目录变更为止（订阅 FileWatcher 目录变更失效）；仅对当前目录增量轮询，根目录才全量。"
   },
   {
     "dimension": "function",
     "severity": "P3",
-    "location": "CloudPan.Server.Core/Versions/VersionHistoryService.cs:38-48; CloudPan.Server.Core/Thumbnails/ThumbnailService.cs:136-169",
-    "problem": "版本存档（.cloudpan/.versions）与缩略图缓存（.cloudpan/.thumbnails）无存储回收机制：VersionRecord 裁剪（CommitNewVersionInTransactionAsync prune:true 只删 DB 记录，不删 .versions 物理文件；PurgeExpiredTombstones 删 VersionRecord 亦不同步删存档文件），缩略图 key 含版本/hash 每次内容变化生成新文件旧文件残留（ThumbnailService.cs:161-168）。家庭长期使用后两个目录无限增长，磁盘被版本历史与缩略图占满。",
-    "why": "磁盘满/存储增长是家庭长期使用必现问题；版本保留期与缩略图缓存本应按保留策略清理（Dropbox/坚果云 30 天参照），当前只裁剪 DB 不裁剪 FS，存储只增不减，违背默认值合理、可长期运行判据。",
-    "suggestion": "PurgeExpiredTombstones/PurgeExpiredAsync 裁剪时同步删除对应 StoragePath 存档物理文件（孤儿文件清理）；缩略图按 LRU/创建时间定期清理或全量重建；补存储回收后台任务（IHostedService）。"
+    "location": "CloudPan.Server.Core/Sharing/SharingService.cs:30-71; CloudPan.Server.Host/Controllers/ShareController.cs:122-131",
+    "problem": "CreateShareAsync 未校验 filePath 是否为目录（30-71 行无 entry.Type 检查）：直接调 API 分享目录时，PrepareDownloadAsync 对目录路径 _storage.OpenRead（File.OpenRead）抛 IOException → ShareDownload（ShareController.cs:130）逃逸到 GlobalExceptionMiddleware 返回 500。Windows 客户端 UI 已限制仅文件可分享（MainWindow.Share.cs:302-311），Android 无分享入口，但公开 API 层仍可被脚本/其他客户端触发，分享目录给出 500 而非明确『不支持分享目录』。",
+    "why": "分享是 v1.0 声明功能；API 层越权输入给出 500 而非 4xx 引导，是参数校验缺口，违背失败可见、错误信息=原因+下一步判据。",
+    "suggestion": "CreateShareAsync 检测 entry.Type==Directory 时返回 BAD_REQUEST『暂不支持分享文件夹』（或在服务端支持目录分享——下载时打包，v1.1 可选）；至少避免 500。"
   }
 ]
