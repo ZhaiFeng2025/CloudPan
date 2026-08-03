@@ -107,7 +107,8 @@ public class ResponseShapeIntegrationTests : IClassFixture<WebApplicationFactory
 
         var body = await response.Content.ReadFromJsonAsync<MkdirResponse>(JsonOptions);
         Assert.NotNull(body);
-        Assert.Equal(folderPath, body!.Data.Path);
+        // T-069/F-78：服务端 TrimEnd('/') 规范化，返回路径无尾斜杠
+        Assert.Equal(folderPath.TrimEnd('/'), body!.Data.Path);
     }
 
     [Fact]

@@ -127,7 +127,8 @@ public class FilesControllerIntegrationTests : IClassFixture<WebApplicationFacto
         response.EnsureSuccessStatusCode();
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>(JsonOptions);
-        Assert.Equal(folderPath, body.GetProperty("data").GetProperty("path").GetString());
+        // T-069/F-78：服务端 TrimEnd('/') 规范化，返回路径无尾斜杠
+        Assert.Equal(folderPath.TrimEnd('/'), body.GetProperty("data").GetProperty("path").GetString());
     }
 
     [Fact]

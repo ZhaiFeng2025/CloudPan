@@ -233,9 +233,17 @@ public class FileIndexService : IFileIndexService
     /// </summary>
     public async Task CreateDirectoryAsync(string path, int version)
     {
+        // T-069/F-78：入库前 TrimEnd('/') 兜底规范化——目录条目全库统一无尾斜杠存储。
+        // MkdirAsync 已规范化传参，此处防其他调用方/其他端直接带尾斜杠创建产生重复 FileEntry 行。
+        string dirPath = path.TrimEnd('/');
+        if (dirPath.Length == 0)
+        {
+            dirPath = "/"; // 根路径边缘：TrimEnd 后勿成空串
+        }
+
         await using var db = await _dbFactory.CreateDbContextAsync();
 
-        var existing = await db.FileEntries.FindAsync(path);
+        var existing = await db.FileEntries.FindAsync(dirPath);
         if (existing != null)
         {
             // T-049：同名墓碑（FileState.Deleting）复活为有效目录——目录软删后（墓碑保留窗口内）
@@ -258,7 +266,7 @@ public class FileIndexService : IFileIndexService
 
         db.FileEntries.Add(new FileEntry
         {
-            Path = path,
+            Path = dirPath,
             Type = (int)FileType.Directory,
             CurrentHash = null,
             CurrentSize = 0,

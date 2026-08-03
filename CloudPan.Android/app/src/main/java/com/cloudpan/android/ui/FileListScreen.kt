@@ -377,7 +377,9 @@ fun FileListScreen(
             confirmButton = {
                 TextButton(onClick = {
                     val name = newFolderName; showNewFolderDialog = false; newFolderName = ""
-                    val fullPath = currentPath + name + "/"
+                    // T-069：新建目录不再拼接尾斜杠——与服务端「目录无尾斜杠」约定、Windows 客户端
+                    // mkdir 一致；currentPath 可能带或不带尾斜杠（进入文件夹时来自服务端路径），兜底补分隔符
+                    val fullPath = (if (currentPath.endsWith("/")) currentPath else "$currentPath/") + name
                     scope.launch {
                         val r = repository.createFolder(fullPath)
                         snackbarHostState.showSnackbar(if (r.isSuccess) "已创建" else "创建失败")

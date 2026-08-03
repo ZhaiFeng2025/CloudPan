@@ -169,7 +169,15 @@ public class FileOperationService : IFileOperationService
     /// <inheritdoc />
     public async Task<FileMkdirResult> MkdirAsync(string path)
     {
-        string dirPath = path;
+        // T-069/F-78：目录条目全库统一无尾斜杠存储。TrimEnd('/') 规范化入库——Android 曾以
+        // 尾斜杠拼接路径（/a/name/）入库，与 Windows 客户端无尾斜杠 mkdir（/a/name）对同一逻辑
+        // 目录产生两个 FileEntry 行，导致索引错配与 FullScan 幽灵差异；此处单点兜底所有客户端。
+        string dirPath = path.TrimEnd('/');
+        if (dirPath.Length == 0)
+        {
+            dirPath = "/"; // 根路径边缘：TrimEnd 后勿成空串
+        }
+
         string? pathErr = _storage.ValidatePath(dirPath);
         if (pathErr != null)
         {
@@ -181,9 +189,6 @@ public class FileOperationService : IFileOperationService
         {
             dirPath = "/" + dirPath;
         }
-
-        // T-046：不再追加尾斜杠——目录条目以无尾斜杠路径存储（与客户端快照约定、FileIndexService.Move
-        // 前缀处理、文件浏览路径归一化一致）。客户端同步传参即为无尾斜杠；调用方带尾斜杠亦兼容存储原样。
 
         try
         {

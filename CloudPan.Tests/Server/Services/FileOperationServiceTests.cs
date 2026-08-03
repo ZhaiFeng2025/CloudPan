@@ -153,13 +153,19 @@ public class FileOperationServiceTests : Infrastructure.TestBase
     [Fact]
     public async Task Mkdir_创建目录_返回路径()
     {
-        var (svc, _) = await CreateServiceAsync();
+        var (svc, index) = await CreateServiceAsync();
 
         var result = await svc.MkdirAsync("/folder/");
 
         Assert.True(result.Success);
-        Assert.Equal("/folder/", result.Path);
+        // T-069/F-78：带尾斜杠路径规范化后返回无尾斜杠路径，与 Windows 客户端 mkdir 一致
+        Assert.Equal("/folder", result.Path);
         Assert.True(Directory.Exists(Path.Combine(SyncRoot, "folder")));
+        // 入库无尾斜杠：尾斜杠路径无独立条目（不产生第二个 FileEntry 行）
+        var entry = await index.GetByPathAsync("/folder");
+        Assert.NotNull(entry);
+        Assert.Equal((int)FileType.Directory, entry.Type);
+        Assert.Null(await index.GetByPathAsync("/folder/"));
     }
 
     [Fact]
@@ -172,6 +178,32 @@ public class FileOperationServiceTests : Infrastructure.TestBase
 
         Assert.False(result.Success);
         Assert.Equal(HttpErrorCode.CONFLICT.Code, result.Error!.Code.Code);
+    }
+
+    /// <summary>
+    /// T-069/F-78：两端（Android 尾斜杠 / Windows 无尾斜杠）创建同一逻辑目录，
+    /// 服务端 TrimEnd 归一后第二次命中已存在条目返回 CONFLICT，不产生两个 FileEntry 行。
+    /// 方法名含 FileOperation 子串使 FQN 可被验收命令 dotnet test --filter FileOperation 命中。
+    /// </summary>
+    [Fact]
+    public async Task Mkdir_两端创建同一目录_不产生两个FileEntry行()
+    {
+        var (svc, index) = await CreateServiceAsync();
+
+        // Android：尾斜杠拼接
+        var android = await svc.MkdirAsync("/shared/");
+        // Windows：无尾斜杠
+        var windows = await svc.MkdirAsync("/shared");
+
+        Assert.True(android.Success);
+        Assert.Equal("/shared", android.Path);
+        Assert.False(windows.Success);
+        Assert.Equal(HttpErrorCode.CONFLICT.Code, windows.Error!.Code.Code);
+        // 仅一个条目，路径为无尾斜杠规范形态
+        var entry = await index.GetByPathAsync("/shared");
+        Assert.NotNull(entry);
+        Assert.Equal((int)FileType.Directory, entry.Type);
+        Assert.Null(await index.GetByPathAsync("/shared/"));
     }
 
     [Fact]
@@ -194,9 +226,10 @@ public class FileOperationServiceTests : Infrastructure.TestBase
     public async Task Download_目录_返回错误()
     {
         var (svc, index) = await CreateServiceAsync();
-        await index.CreateDirectoryAsync("/dir/", 1);
+        // T-069：目录条目统一无尾斜杠存储（CreateDirectoryAsync 亦 TrimEnd 归一）
+        await index.CreateDirectoryAsync("/dir", 1);
 
-        var result = await svc.DownloadAsync("/dir/");
+        var result = await svc.DownloadAsync("/dir");
 
         Assert.False(result.Success);
         Assert.Equal(HttpErrorCode.BAD_REQUEST.Code, result.Error!.Code.Code);
