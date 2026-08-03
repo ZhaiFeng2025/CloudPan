@@ -203,6 +203,13 @@ public class FileWatcherService : IDisposable
 
     private bool ShouldIgnore(string fullPath)
     {
+        // T-085：同步根外事件（reparse point/外部路径）不得进入同步逻辑——其相对路径含 ..，
+        // 直接忽略而非让 SyncPath.ToLocalPath 抛异常，避免污染传输队列
+        if (!IsInsideSyncRoot(fullPath))
+        {
+            return true;
+        }
+
         // 快速硬编码检查（高频调用的性能优化）
         string fileName = Path.GetFileName(fullPath);
         if (fileName.StartsWith('~'))
@@ -213,6 +220,22 @@ public class FileWatcherService : IDisposable
         // .syncignore 规则匹配
         string relativePath = "/" + Path.GetRelativePath(_syncRoot, fullPath).Replace('\\', '/');
         return SyncIgnoreParser.ShouldIgnore(relativePath, _ignorePatterns);
+    }
+
+    /// <summary>判断全路径是否位于同步根内（GetRelativePath 结果不以上级跳转 .. 开头）。</summary>
+    private bool IsInsideSyncRoot(string fullPath)
+    {
+        try
+        {
+            string relative = Path.GetRelativePath(_syncRoot, fullPath);
+            return !Path.IsPathRooted(relative)
+                && relative != ".."
+                && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false; // 解析失败按越界处理，忽略该事件
+        }
     }
 
     /// <summary>判断是否为需要跳过延迟的大文件（超过 100MB）。</summary>

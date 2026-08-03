@@ -121,9 +121,10 @@ internal sealed class SyncManageService
         }
 
         // 2. 本地副本即时删除（浏览视图立即消失；其他设备由墓碑传播删本地副本）
-        string localPath = SyncPath.ToLocalPath(_syncRoot, path);
         try
         {
+            // T-085：SyncPath.ToLocalPath 拒绝越界相对路径（抛 ArgumentException），本地删除同样不得越界
+            string localPath = SyncPath.ToLocalPath(_syncRoot, path);
             if (Directory.Exists(localPath))
             {
                 Directory.Delete(localPath, recursive: true);

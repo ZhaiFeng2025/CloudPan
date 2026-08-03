@@ -4315,7 +4315,7 @@
       "title": "客户端路径安全统一防线（SyncPath 越界校验下沉单点）",
       "dimension": "architecture",
       "priority": "P1",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 8,
       "findingId": "F-127",
       "dependsOn": [],
@@ -4328,6 +4328,7 @@
         "补客户端单测：../ 越界相对路径被拒绝、正常子路径通过"
       ],
       "goal": "客户端对服务端下发的任意相对路径都无法写出同步根，规则 8.5 防线两端闭合（纵深防御单点成立）",
+      "note": "执行（T-085）：改动文件：SyncPath.cs（新增 LocalPathValidator：剥离 \\? 前缀后 GetFullPath 前缀校验，防扩展长度路径 .. 绕过；ToLocalPath 越界抛 ArgumentException；NormalizePath 加前缀前消解 .. 段）、SyncEngine.FullScan.cs（私有 ToLocalPath/NormalizePath 委托 SyncPath 单点）、SyncEngine.Changes.cs:176（裸拼改 ToLocalPath）、FileWatcherService.cs（ShouldIgnore 增 IsInsideSyncRoot，越界事件拒绝）、SyncManageService.cs（删除路径 ToLocalPath 移入 try-catch 防回归）、Client.Core.csproj（InternalsVisibleTo）、新增 SyncPathValidationTests（../ 越界拒绝/绝对路径拒绝/正常子路径通过）、修正 SyncEngineTests FullScan_重新勾选（Size 改为文件实际字节数，content.Length 为字符数≠UTF-8 字节数）。验证：dotnet test --filter SyncPath 4/4 通过；SyncEngineTests 75/75、FileWatcherServiceTests 14/14、ThumbnailServiceTests 8/8 隔离通过；dotnet build CloudPan.sln -c Release 0 错 0 警。注：全量套件多次运行出现 SQLite 'unable to open database file'/临时目录失败（失败集各次不同、隔离运行全过、与本次改动无关——环境另一进程清理 %TEMP% 所致）。",
       "acceptanceCriteria": [
         {
           "text": "单测覆盖 ../ 越界路径拒绝、正常子路径通过",
@@ -4347,8 +4348,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "updatedAt": "2026-08-04"
     },
     {
       "id": "T-086",

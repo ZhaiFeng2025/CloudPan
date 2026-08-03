@@ -298,39 +298,13 @@ public partial class SyncEngine
     }
 
     private string ToLocalPath(string relativePath)
-    {
-        string path = Path.Combine(_syncRoot, relativePath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
-        return NormalizePath(path);
-    }
+        => SyncPath.ToLocalPath(_syncRoot, relativePath);
 
     /// <summary>
-    /// 为路径添加 \\?\ 前缀以支持长路径（超过 MAX_PATH 260 字符）。
-    /// 对支持的所有文件 I/O 操作使用此方法包装路径。
+    /// T-085：统一委托 SyncPath.NormalizePath（含加长路径前缀前消解 .. 段），避免散落副本遗漏防线。
     /// </summary>
     private static string NormalizePath(string path)
-    {
-        if (string.IsNullOrEmpty(path))
-        {
-            return path;
-        }
-        // 已包含 \\?\ 前缀则跳过
-        if (path.StartsWith(@"\\?\"))
-        {
-            return path;
-        }
-        // 只对绝对本地路径（如 C:\...）添加前缀
-        if (path.Length >= 3 && path[1] == ':' && path[2] == '\\')
-        {
-            return @"\\?\" + path;
-        }
-        // UNC 路径（\\server\share）转换为 \\?\UNC\ 格式
-        if (path.StartsWith(@"\\"))
-        {
-            return @"\\?\UNC\" + path[2..];
-        }
-
-        return path;
-    }
+        => SyncPath.NormalizePath(path);
 
     /// <summary>检查路径是否在已选择的同步范围内（排除集语义，T-047）。</summary>
     /// <remarks>

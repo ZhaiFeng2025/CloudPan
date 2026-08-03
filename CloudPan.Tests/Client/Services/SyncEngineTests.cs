@@ -1821,7 +1821,9 @@ public class SyncEngineTests : IDisposable
             setupDb.RemoteSnapshots.Add(new RemoteSnapshot
             {
                 Path = "/photos/summer.jpg", Type = (int)FileType.File,
-                Size = content.Length, Version = 3, State = (int)FileState.CloudOnly, Hash = localHash
+                // T-085：Size 用文件实际字节数（WriteAllText 写 UTF-8，Chinese 内容字节数 ≠ content.Length 字符数），
+                // 与 Hash 保持一致，才能真正验证『本地内容与快照一致 → 不重传』
+                Size = new FileInfo(filePath).Length, Version = 3, State = (int)FileState.CloudOnly, Hash = localHash
             });
             await setupDb.SaveChangesAsync();
         }

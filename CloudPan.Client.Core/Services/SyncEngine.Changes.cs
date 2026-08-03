@@ -173,7 +173,8 @@ public partial class SyncEngine
         int? baseVersion = null;
         if (operation == SyncOperation.Upload)
         {
-            string fullPath = NormalizePath(Path.Combine(_syncRoot, relativePath.TrimStart('/')));
+            // T-085：相对路径→同步根落盘路径统一经 ToLocalPath（内部 LocalPathValidator 越界校验），不再裸拼
+            string fullPath = ToLocalPath(relativePath);
 
             // T-046：目录单独入队 mkdir——目录不是文件，走 ProcessMkdirAsync 建立服务端条目而非丢弃
             if (Directory.Exists(fullPath))

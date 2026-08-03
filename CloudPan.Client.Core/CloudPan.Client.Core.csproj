@@ -15,6 +15,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- T-085：单测需访问 internal 的 SyncPath/LocalPathValidator（与 Client.UI/Server.Host 同款模式） -->
+    <InternalsVisibleTo Include="CloudPan.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.22" />
     <!-- SQLite 原生库：自包含单文件发布必需，解决 DllNotFoundException -->
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.10" />
