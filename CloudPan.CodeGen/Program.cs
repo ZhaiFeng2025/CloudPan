@@ -18,8 +18,8 @@ public static class Program
     private const string SharedOutputDir = "CloudPan.Contract/Generated";
     // 持久化实体依赖 EF Core 特性（[Index]），归属基础设施层 → CloudPan.Infrastructure/Generated
     private const string ServerOutputDir = "CloudPan.Infrastructure/Generated";
-    // 客户端本地 EF 实体（SyncQueue/RemoteSnapshot/SyncCursor）→ CloudPan.Client.Core/Generated
-    private const string ClientOutputDir = "CloudPan.Client.Core/Generated";
+    // 客户端本地 EF 实体（SyncQueue/RemoteSnapshot/SyncCursor）→ CloudPan.Infrastructure/Generated（T-068 随持久化迁入基础设施层）
+    private const string ClientOutputDir = "CloudPan.Infrastructure/Generated";
     // Android Kotlin 契约产物 → CloudPan.Android/.../data/Generated（package com.cloudpan.android.data）
     private const string AndroidOutputDir = "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/Generated";
 
@@ -117,24 +117,28 @@ public static class Program
                 }
             }
 
-            // 3. 规则 0：客户端实体必须从契约生成，禁止手工翻译回归（T-062）
+            // 3. 规则 0：客户端持久化实体必须从契约生成，禁止手工翻译回归（T-062/T-068）。
+            // T-068 实体随持久化迁入 CloudPan.Infrastructure（Generated/ 为合法生成物）；扫描其余目录防手工定义回归。
             if (verifyMode)
             {
-                string clientModelsDir = Path.Combine(solutionRoot, "CloudPan.Client.Core", "Models");
+                string infraScanDir = Path.Combine(solutionRoot, "CloudPan.Infrastructure");
                 string[] manualEntityPatterns = { "public class SyncQueueItem", "public class RemoteSnapshot", "public class SyncCursorState" };
-                string modelsContent = Directory.Exists(clientModelsDir)
-                    ? string.Concat(Directory.EnumerateFiles(clientModelsDir, "*.cs", SearchOption.AllDirectories)
+                string infraContent = Directory.Exists(infraScanDir)
+                    ? string.Concat(Directory.EnumerateFiles(infraScanDir, "*.cs", SearchOption.AllDirectories)
+                        .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}Generated{Path.DirectorySeparatorChar}")
+                                 && !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
+                                 && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
                         .Select(f => File.ReadAllText(f)))
                     : "";
-                string? matched = manualEntityPatterns.FirstOrDefault(p => modelsContent.Contains(p, StringComparison.Ordinal));
+                string? matched = manualEntityPatterns.FirstOrDefault(p => infraContent.Contains(p, StringComparison.Ordinal));
                 if (matched != null)
                 {
-                    Console.WriteLine($"❌ 客户端实体: Client.Core/Models 含手工实体类定义 '{matched}'，应引用 Generated 类型（规则 0）");
+                    Console.WriteLine($"❌ 客户端实体: Infrastructure 非 Generated 目录含手工实体类定义 '{matched}'，应引用 Generated 类型（规则 0）");
                     hasChanges = true;
                 }
                 else
                 {
-                    Console.WriteLine("✅ 客户端实体: Client.Core/Models 无手工实体类定义");
+                    Console.WriteLine("✅ 客户端实体: Infrastructure 非 Generated 目录无手工实体类定义");
                 }
             }
 

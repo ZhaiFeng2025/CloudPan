@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 
 #nullable enable
 
-namespace CloudPan.Client.Core.Models;
+namespace CloudPan.Infrastructure.Models;
 
 /// <summary>
 /// 客户端持久化传输队列。

@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace CloudPan.Client.Core.Migrations
+namespace CloudPan.Infrastructure.Persistence.Client.Migrations
 {
     /// <inheritdoc />
     public partial class InitialCreate : Migration

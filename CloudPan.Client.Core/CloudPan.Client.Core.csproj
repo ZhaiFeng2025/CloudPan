@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- 客户端领域层：同步状态机/队列/传输客户端/客户端持久化。依赖方向：→ Infrastructure/Contract；不引用 WinForms（R-A2）。 -->
+  <!-- 客户端领域层：同步状态机/队列/传输客户端。持久化（ClientDbContext/迁移/实体）已下沉 Infrastructure/Persistence（T-068），领域层仅经 IDbContextFactory 使用。依赖方向：→ Infrastructure/Contract；不引用 WinForms（R-A2）。 -->
   <PropertyGroup>
     <!-- net8.0-windows：SettingsStore 使用 DPAPI（ProtectedData） -->
     <TargetFramework>net8.0-windows</TargetFramework>

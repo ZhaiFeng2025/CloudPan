@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 
-namespace CloudPan.Client.Core.Models;
+namespace CloudPan.Infrastructure.Persistence.Client;
 
 /// <summary>
 /// dotnet ef 设计时工厂：仅供生成/执行 EF Migrations 使用，不参与运行时。

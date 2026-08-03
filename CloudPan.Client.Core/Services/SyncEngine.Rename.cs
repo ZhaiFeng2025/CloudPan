@@ -1,4 +1,5 @@
-using CloudPan.Client.Core.Models;
+using CloudPan.Infrastructure.Models;
+using CloudPan.Infrastructure.Persistence.Client;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 

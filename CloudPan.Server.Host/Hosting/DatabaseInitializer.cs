@@ -65,10 +65,8 @@ public static class DatabaseInitializer
             throw new InvalidOperationException($"DB 完整性检查失败(异常): {ex.Message}", ex);
         }
 
-        // WAL 模式 + 外键
-        db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
-        db.Database.ExecuteSqlRaw("PRAGMA synchronous=NORMAL;");
-        db.Database.ExecuteSqlRaw("PRAGMA foreign_keys=ON;");
+        // WAL 模式 + 外键（单一实现 SqlitePragma，T-068 与服务端/客户端对齐复用，删除两端重复实现）
+        SqlitePragma.EnsureWAL(db);
 
         // 种子："server" 设备（VersionRecord.DeviceId FK）
         if (!db.Devices.Any(d => d.Id == "server"))

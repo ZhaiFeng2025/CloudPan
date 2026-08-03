@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using System.Text;
 using CloudPan.Client.Core.Models;
 using CloudPan.Client.Core.Services;
+using CloudPan.Infrastructure.Persistence;
+using CloudPan.Infrastructure.Persistence.Client;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -195,7 +197,8 @@ public sealed class ClientBootstrap
     {
         try
         {
-            using ClientDbContext checkDb = new ClientDbContext(DbPath);
+            // 仅经 IDbContextFactory 使用客户端 DbContext，不直接持有持久化实现（T-068）
+            using ClientDbContext checkDb = Provider.GetRequiredService<IDbContextFactory<ClientDbContext>>().CreateDbContext();
             string? result = checkDb.Database.SqlQueryRaw<string>("PRAGMA quick_check;").AsEnumerable().FirstOrDefault();
             if (result != "ok")
             {
@@ -225,10 +228,10 @@ public sealed class ClientBootstrap
             Log.Warning(ex, "备份损坏数据库失败，继续重建");
         }
 
-        using ClientDbContext db = new ClientDbContext(DbPath);
+        using ClientDbContext db = Provider.GetRequiredService<IDbContextFactory<ClientDbContext>>().CreateDbContext();
         db.Database.EnsureDeleted();
         db.Database.Migrate();
-        db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
+        SqlitePragma.EnsureWAL(db);
         Log.Information("数据库已重建");
     }
 
@@ -361,10 +364,12 @@ public sealed class ClientBootstrap
 
     private void EnsureDbCreated(string dbPath)
     {
-        using ClientDbContext db = new ClientDbContext(dbPath);
+        // 仅经 IDbContextFactory 使用客户端 DbContext，不直接持有持久化实现（T-068）
+        using ClientDbContext db = Provider.GetRequiredService<IDbContextFactory<ClientDbContext>>().CreateDbContext();
         // EF Migrations 建库/升级（初始迁移幂等：全新库建全表，旧库已有表跳过、缺失的表补建，T-008）
         db.Database.Migrate();
-        db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
+        // WAL 策略单一实现（T-068）
+        SqlitePragma.EnsureWAL(db);
         // 旧库列级兼容：EnsureCreated 时代创建的 SyncQueue 缺 TargetPath 列（重命名操作字段），
         // 经 PRAGMA 判断后 ALTER 补列（SQLite ALTER ADD COLUMN 无 IF NOT EXISTS，先查后补保证幂等）
         EnsureSyncQueueTargetPathColumn(db);

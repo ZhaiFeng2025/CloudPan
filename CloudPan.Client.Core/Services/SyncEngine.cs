@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Net;
 using CloudPan.Client.Core.Models;
 using CloudPan.Contract;
+using CloudPan.Infrastructure.Persistence.Client;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 

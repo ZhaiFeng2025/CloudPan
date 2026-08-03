@@ -60,14 +60,14 @@ public static class EntityGenerator
     }
 
     /// <summary>
-    /// 客户端 EF 实体输出（CloudPan.Client.Core/Generated/ClientEntities.g.cs）。
-    /// 与客户端手工实体同命名空间 CloudPan.Client.Core.Models，客户端 DbContext 直接引用生成类型。
+    /// 客户端 EF 实体输出（CloudPan.Infrastructure/Generated/ClientEntities.g.cs，T-068 随持久化迁入基础设施层）。
+    /// 与服务端实体同命名空间 CloudPan.Infrastructure.Models，客户端 DbContext 直接引用生成类型。
     /// </summary>
     public static string GenerateClient(SpecDocument spec)
     {
         StringBuilder sb = new StringBuilder();
         WriteHeader(sb, spec, "shared-spec.json → entities（客户端本地表）");
-        sb.AppendLine("namespace CloudPan.Client.Core.Models;");
+        sb.AppendLine("namespace CloudPan.Infrastructure.Models;");
         sb.AppendLine();
 
         foreach (var (entityName, entity) in spec.Entities)

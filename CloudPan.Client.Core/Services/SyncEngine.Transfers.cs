@@ -1,6 +1,6 @@
 using System.Globalization;
-using CloudPan.Client.Core.Models;
 using CloudPan.Contract;
+using CloudPan.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
