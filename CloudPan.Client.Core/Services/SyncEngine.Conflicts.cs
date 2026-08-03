@@ -103,4 +103,25 @@ public partial class SyncEngine
         NotifyStatus("冲突已解决: " + relativePath);
         ConflictResolved?.Invoke(relativePath);
     }
+
+    // T-084：删除 409 冲突——文件被其他设备修改/上传（服务端版本 > baseVersion）。
+    // 转入冲突流程（_pendingConflicts + ConflictDetected），不静默丢弃删除意图、
+    // 不删本地副本/快照，队列项保留等待用户决策（可保留服务端版本撤销删除）。
+    private Task<bool> HandleDeleteConflictAsync(SyncQueue item)
+    {
+        string localPath = ToLocalPath(item.FilePath);
+        ConflictInfo conflictInfo = new ConflictInfo(
+            RelativePath: item.FilePath,
+            LocalPath: localPath,
+            LocalModifiedTime: File.GetLastWriteTimeUtc(localPath),
+            RemoteModifiedTime: null,
+            LocalFileSize: new FileInfo(localPath).Length,
+            RemoteFileSize: null,
+            RemoteHash: null);
+
+        _pendingConflicts.TryAdd(item.FilePath, conflictInfo);
+        ConflictDetected?.Invoke(conflictInfo);
+        _logger.LogWarning("删除冲突（409）: {Path} — 文件已被其他设备修改，是否仍删除？", item.FilePath);
+        return Task.FromResult(false); // 队列项保留但被 _pendingConflicts 跳过，等待用户决策
+    }
 }

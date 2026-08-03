@@ -133,6 +133,16 @@ public class MockApiClient : IApiClient
 
     public async Task DeleteAsync(string path, int baseVersion, CancellationToken ct = default)
     {
+        // 模拟服务端删除冲突检测：baseVersion > 0 且服务端当前版本 > baseVersion → 409
+        // （对齐 FileOperationService.DeleteAsync 语义，供删除并发编辑冲突测试使用，T-084）
+        if (baseVersion > 0 && Files.TryGetValue(path, out var cur) && cur.Version > baseVersion)
+        {
+            throw new HttpRequestException(
+                $"版本冲突：客户端基于 v{baseVersion}，服务端当前 v{cur.Version}",
+                null,
+                System.Net.HttpStatusCode.Conflict);
+        }
+
         // 模拟 HTTP 404 行为（在测试中通过异常控制）
         DeleteCalls.TryGetValue(path, out int count);
         DeleteCalls[path] = count + 1;

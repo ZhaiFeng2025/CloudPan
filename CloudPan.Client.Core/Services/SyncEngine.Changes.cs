@@ -229,13 +229,20 @@ public partial class SyncEngine
             fileSize = localSize;
         }
 
+        // T-084：删除同样携带基准版本（本地上一次已同步版本）——服务端据此检测删除时的并发修改
+        //（服务端版本 > baseVersion → 409），避免静默丢弃其他设备的改动；处理见 HandleDeleteConflictAsync。
+        if (operation == SyncOperation.Delete)
+        {
+            baseVersion = (await db.RemoteSnapshots.FindAsync(relativePath))?.Version;
+        }
+
         db.SyncQueue.Add(new SyncQueue
         {
             FilePath = relativePath,
             Operation = (int)operation,
             Priority = fileSize < QueuePriorityThreshold ? (int)QueuePriority.High : (int)QueuePriority.Normal,
             FileSize = fileSize,
-            BaseVersion = baseVersion // 冲突检测基准版本，ProcessUploadAsync 携带给服务端触发 409
+            BaseVersion = baseVersion // 冲突检测基准版本，ProcessUploadAsync/ProcessDeleteAsync 携带给服务端触发 409
         });
         await db.SaveChangesAsync();
         _logger.LogInformation($"入队: {operation} {relativePath}");

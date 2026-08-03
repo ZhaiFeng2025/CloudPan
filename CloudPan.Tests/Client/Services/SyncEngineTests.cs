@@ -756,6 +756,65 @@ public class SyncEngineTests : IDisposable
         Assert.Equal(remoteModifiedUtc, conflictInfo.RemoteModifiedTime!.Value.ToUniversalTime());
     }
 
+    // T-084：删除 409 —— 文件被其他设备修改/上传（服务端版本 > 本机快照版本），
+    // 转入冲突流程（ConflictDetected + _pendingConflicts）而非静默丢弃删除意图
+    [Fact]
+    public async Task ProcessDelete_服务端409_转入冲突流程不静默丢弃()
+    {
+        // 服务端 v2（另一设备已修改/上传），本机快照停留在 v1，本地文件存在（删除意图真实）
+        string filePath = Path.Combine(_syncRoot, "del-conflict.txt");
+        await File.WriteAllTextAsync(filePath, "本地待删内容");
+        _api.Files["/del-conflict.txt"] = ("hash-v2", 8, 2);
+
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.Add(new RemoteSnapshot
+            {
+                Path = "/del-conflict.txt", Type = (int)FileType.File,
+                Size = new FileInfo(filePath).Length, Version = 1,
+                State = (int)FileState.Synced, Hash = "hash-v1"
+            });
+            await setupDb.SaveChangesAsync();
+        }
+
+        // 本地删除 → 入队删除（T-084：携带 BaseVersion = 快照版本 1，服务端据此检测并发修改）
+        await _engine.EnqueueLocalChangeAsync("/del-conflict.txt", SyncOperation.Delete);
+
+        await using (var enqueueDb = await _dbFactory.CreateDbContextAsync())
+        {
+            var item = await enqueueDb.SyncQueue.FirstOrDefaultAsync(q => q.FilePath == "/del-conflict.txt");
+            Assert.NotNull(item);
+            Assert.Equal(1, item!.BaseVersion);
+        }
+
+        // 订阅冲突事件（具名字段处理器，Dispose 中退订满足 CP300）
+        int conflictCount = 0;
+        ConflictInfo? conflictInfo = null;
+        _conflictHandler = ci => { conflictCount++; conflictInfo = ci; };
+        _engine.ConflictDetected += _conflictHandler;
+
+        // 处理队列 → 服务端 409 → 转入冲突流程
+        var method = typeof(SyncEngine).GetMethod("ProcessQueueAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+        Task? task = (Task?)method!.Invoke(_engine, [CancellationToken.None]);
+        Assert.NotNull(task);
+        await task;
+
+        Assert.Equal(1, conflictCount); // 冲突提示已触发，未静默丢弃
+        Assert.NotNull(conflictInfo);
+        Assert.Equal("/del-conflict.txt", conflictInfo!.RelativePath);
+
+        // 本地副本与快照均保留（删除未生效，等待用户决策），队列项保留（被 _pendingConflicts 跳过）
+        Assert.True(File.Exists(filePath));
+        await using (var dbFinal = await _dbFactory.CreateDbContextAsync())
+        {
+            Assert.NotNull(await dbFinal.RemoteSnapshots.FindAsync("/del-conflict.txt"));
+            int remaining = await dbFinal.SyncQueue.CountAsync(q => q.FilePath == "/del-conflict.txt");
+            Assert.Equal(1, remaining);
+        }
+    }
+
     // ============================================================
     // 连续 401 触发重配引导测试（F-34/T-034）
     // ============================================================

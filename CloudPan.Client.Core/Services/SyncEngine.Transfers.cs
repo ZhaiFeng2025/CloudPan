@@ -301,6 +301,10 @@ public partial class SyncEngine
         {
             // 服务端已不存在，继续删除本地即可
         }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Conflict)
+        {
+            return await HandleDeleteConflictAsync(item);
+        }
 
         string localPath = ToLocalPath(item.FilePath);
         if (File.Exists(localPath))
