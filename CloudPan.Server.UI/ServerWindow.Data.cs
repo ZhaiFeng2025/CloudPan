@@ -1,10 +1,10 @@
+using CloudPan.Contract;
 using CloudPan.Infrastructure.Design;
-using CloudPan.Infrastructure.Persistence;
-using Microsoft.EntityFrameworkCore;
+using CloudPan.Server.Core;
 
 namespace CloudPan.Server.UI;
 
-/// <summary>ServerWindow 部分类：设备状态刷新（EF 查询）与线程安全日志追加。</summary>
+/// <summary>ServerWindow 部分类：设备状态刷新（经 IServerStatusService 查询）与线程安全日志追加。</summary>
 public partial class ServerWindow
 {
     private async Task RefreshDataAsync()
@@ -16,8 +16,7 @@ public partial class ServerWindow
             _uptimeLabel.ForeColor = CloudPanColors.SuccessGreen;
             _statusLabel.ForeColor = CloudPanColors.SuccessGreen;
 
-            await using var db = await _dbFactory.CreateDbContextAsync();
-            var devices = await db.Devices.OrderByDescending(d => d.LastSeen).Take(20).ToListAsync();
+            List<AdminDeviceItem> devices = (await _statusService.GetDevicesAsync()).Take(20).ToList();
 
             _deviceList.BeginUpdate();
             _deviceList.Items.Clear();

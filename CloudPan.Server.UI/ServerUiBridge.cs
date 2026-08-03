@@ -1,8 +1,10 @@
 using System.Security.Principal;
 using CloudPan.Infrastructure.Configuration;
+using CloudPan.Server.Core;
 using CloudPan.Server.Host.Hosting;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 
 namespace CloudPan.Server.UI;
@@ -89,7 +91,10 @@ public sealed class ServerUiBridge : IHostUIBridge
             app.Configuration.GetValue<string>("SyncRoot"),
             app.Configuration.GetValue<int?>("Port"),
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "CloudPan"));
-        ServerWindow window = new ServerWindow(app.Services, effectivePort, syncRoot);
+        ServerWindow window = new ServerWindow(
+            app.Services.GetRequiredService<IServerStatusService>(),
+            app.Services.GetRequiredService<ITokenService>(),
+            effectivePort, syncRoot);
         ServerTrayApp tray = new ServerTrayApp(app, window, effectivePort);
 
         if (serverFaulted)

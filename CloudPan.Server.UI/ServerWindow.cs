@@ -1,7 +1,5 @@
 using CloudPan.Infrastructure.Design;
-using CloudPan.Infrastructure.Persistence;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
+using CloudPan.Server.Core;
 
 namespace CloudPan.Server.UI;
 
@@ -20,7 +18,7 @@ public partial class ServerWindow : Form
     private readonly Label _emptyIcon;
     private readonly Label _emptyTitle;
     private readonly Label _emptyHint;
-    private readonly IDbContextFactory<CloudPanDbContext> _dbFactory;
+    private readonly IServerStatusService _statusService;
     private readonly System.Windows.Forms.Timer _refreshTimer;
     private readonly DateTime _startTime = DateTime.UtcNow;
     private readonly System.Windows.Forms.TabControl _tabs;
@@ -32,9 +30,9 @@ public partial class ServerWindow : Form
     /// </summary>
     private readonly List<string> _pendingLogs = new();
 
-    public ServerWindow(IServiceProvider services, int effectivePort, string currentSyncRoot)
+    public ServerWindow(IServerStatusService statusService, ITokenService tokenService, int effectivePort, string currentSyncRoot)
     {
-        _dbFactory = services.GetRequiredService<IDbContextFactory<CloudPanDbContext>>();
+        _statusService = statusService;
         Text = "CloudPan 服务端 — 管理";
         Size = new Size(720, 520);
         MinimumSize = new Size(600, 400);
@@ -217,7 +215,7 @@ public partial class ServerWindow : Form
         overviewTab.Controls.Add(overviewHost);
         _tabs.TabPages.Add(overviewTab);
 
-        _settingsPage = new SettingsPage(services, effectivePort, currentSyncRoot, AddLog) { Dock = DockStyle.Fill };
+        _settingsPage = new SettingsPage(tokenService, statusService, effectivePort, currentSyncRoot, AddLog) { Dock = DockStyle.Fill };
         TabPage settingsTab = new TabPage("设置");
         settingsTab.Controls.Add(_settingsPage);
         _tabs.TabPages.Add(settingsTab);

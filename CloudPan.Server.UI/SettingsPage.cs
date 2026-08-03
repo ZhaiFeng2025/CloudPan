@@ -1,7 +1,6 @@
 using CloudPan.Contract;
 using CloudPan.Infrastructure.Design;
 using CloudPan.Server.Core;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace CloudPan.Server.UI;
 
@@ -37,10 +36,10 @@ public partial class SettingsPage : UserControl
             [SettingGroup.Security] = "安全",
         };
 
-    public SettingsPage(IServiceProvider services, int effectivePort, string currentSyncRoot, Action<string> log)
+    public SettingsPage(ITokenService tokenService, IServerStatusService statusService, int effectivePort, string currentSyncRoot, Action<string> log)
     {
-        _tokenService = services.GetRequiredService<ITokenService>();
-        _statusService = services.GetRequiredService<IServerStatusService>();
+        _tokenService = tokenService;
+        _statusService = statusService;
         _effectivePort = effectivePort;
         _currentSyncRoot = currentSyncRoot;
         _log = log;
