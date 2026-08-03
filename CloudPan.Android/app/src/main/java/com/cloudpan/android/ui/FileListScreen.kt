@@ -130,6 +130,12 @@ fun FileListScreen(
     var selectedPaths by remember { mutableStateOf<Set<String>>(emptySet()) }
     var isSelectionMode by remember { mutableStateOf(false) }
     var showSortMenu by remember { mutableStateOf(false) }
+    // ---- T-059：分页状态（nextCursor 增量加载） ----
+    var nextCursor by remember { mutableStateOf<String?>(null) }
+    var hasMore by remember { mutableStateOf(false) }
+    var isLoadingMore by remember { mutableStateOf(false) }
+    // 已自动发起加载的游标（防止失败后无限重试；翻页成功后游标变化自然推进）
+    var lastAutoLoadCursor by remember { mutableStateOf<String?>(null) }
     var showBulkDeleteDialog by remember { mutableStateOf(false) }
     var showTrashDialog by remember { mutableStateOf(false) } // T-050：回收站入口
 
@@ -149,20 +155,27 @@ fun FileListScreen(
     // FIX 4: 数据库实例提到 Composable 顶层，不在 LazyColumn items 中重复创建
     val db = remember { AppDatabase.getInstance(context) }
 
-    val pullRefreshState = rememberPullRefreshState(
-        refreshing = isRefreshing,
-        onRefresh = {
-            searchQuery = ""
-            loadFiles()
-        }
-    )
-
     // ---- 加载逻辑 ----
+
+    /** 分页状态提示：空结果与 hasMore 分别表达。 */
+    fun updateStatus() {
+        status = when {
+            files.isEmpty() && hasMore -> "正在加载更多……"
+            files.isEmpty() -> ""
+            hasMore -> "已加载 ${files.size} 项 · 滚动加载更多"
+            else -> "${files.size} 个项目"
+        }
+    }
 
     fun loadFiles() {
         scope.launch {
             isRefreshing = true
             status = "加载中……"
+            // T-059：重置分页状态（搜索/切目录/刷新都从头开始）
+            nextCursor = null
+            hasMore = false
+            isLoadingMore = false
+            lastAutoLoadCursor = null
             if (searchQuery.length >= 2) {
                 val result = repository.searchFiles(searchQuery)
                 result.onSuccess { items ->
@@ -178,13 +191,16 @@ fun FileListScreen(
                 val result = if (currentPath == "/") repository.getFileTree()
                 else repository.getFileTreeInFolder(currentPath)
                 result.onSuccess { response ->
+                    // 服务端按 Path 返回整个子树，UI 只取当前目录的直系子项
                     files = sortFiles(
                         response.data
                             .filter { it.path != currentPath }
                             .filter { isDirectChild(currentPath, it.path) },
                         sortBy
                     )
-                    status = if (files.isEmpty()) "" else "${files.size} 个项目"
+                    nextCursor = response.nextCursor
+                    hasMore = response.hasMore
+                    updateStatus()
                 }.onFailure { e ->
                     snackbarHostState.showSnackbar("加载失败：${e.message}")
                 }
@@ -192,6 +208,45 @@ fun FileListScreen(
             isRefreshing = false
         }
     }
+
+    /** T-059：滚动到底自动加载下一页（nextCursor 增量），去重后拼接直系子项。 */
+    fun loadMore() {
+        if (!hasMore || nextCursor == null || isLoadingMore) return
+        scope.launch {
+            isLoadingMore = true
+            val path = currentPath
+            val result = if (path == "/") repository.getFileTree(cursor = nextCursor)
+            else repository.getFileTreeInFolder(path, cursor = nextCursor)
+            result.onSuccess { response ->
+                // 请求期间已切换目录/刷新，丢弃过期页，避免串目录拼接（无重复无丢项）
+                if (currentPath != path) {
+                    nextCursor = null
+                    hasMore = false
+                    return@onSuccess
+                }
+                val direct = response.data
+                    .filter { it.path != path }
+                    .filter { isDirectChild(path, it.path) }
+                // 去重拼接：服务端游标保证不与已加载页重叠，此处按 path 兜底防边界重复
+                val existing = files.map { it.path }.toSet()
+                files = sortFiles(files + direct.filter { it.path !in existing }, sortBy)
+                nextCursor = response.nextCursor
+                hasMore = response.hasMore
+                updateStatus()
+            }.onFailure { e ->
+                snackbarHostState.showSnackbar("加载更多失败：${e.message}")
+            }
+            isLoadingMore = false
+        }
+    }
+
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = isRefreshing,
+        onRefresh = {
+            searchQuery = ""
+            loadFiles()
+        }
+    )
 
     // 路径或排序变更时立即重新加载
     LaunchedEffect(currentPath, sortBy) { loadFiles() }
@@ -350,7 +405,8 @@ fun FileListScreen(
                     if (isDownloading) {
                         Spacer(Modifier.height(16.dp))
                         LinearProgressIndicator(
-                            progress = { downloadProgress },
+                            // Material3 1.1.x 进度参数为 Float（BOM 2023.10.01）
+                            progress = downloadProgress,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(8.dp)
@@ -426,7 +482,7 @@ fun FileListScreen(
                     if (offlineDownloadJob != null) {
                         Spacer(Modifier.height(16.dp))
                         LinearProgressIndicator(
-                            progress = { offlineDownloadProgress },
+                            progress = offlineDownloadProgress,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(8.dp)
@@ -733,7 +789,9 @@ fun FileListScreen(
                     )
                 }
 
-                if (files.isEmpty() && !isRefreshing) {
+                // T-059：仅当分页已翻完（!hasMore）且无子项时才显示空状态；
+                // 若首屏直系子项为空但 hasMore 仍为真，则继续走 LazyColumn 触发增量加载
+                if (files.isEmpty() && !isRefreshing && !hasMore) {
                     // FIX 10: 空状态视图（插画 + 引导文案）
                     Box(
                         modifier = Modifier.fillMaxSize(),
@@ -895,6 +953,39 @@ fun FileListScreen(
                                     }
                                 }
                             )
+                        }
+                        // T-059：hasMore 时滚动到底自动加载下一页（nextCursor 增量）
+                        if (hasMore) {
+                            item(key = "load_more") {
+                                LaunchedEffect(nextCursor, isLoadingMore) {
+                                    val cur = nextCursor
+                                    if (!isLoadingMore && cur != null && cur != lastAutoLoadCursor) {
+                                        lastAutoLoadCursor = cur
+                                        loadMore()
+                                    }
+                                }
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        if (isLoadingMore) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(20.dp),
+                                                strokeWidth = 2.dp
+                                            )
+                                            Spacer(Modifier.width(8.dp))
+                                            Text("加载中……", style = MaterialTheme.typography.bodySmall)
+                                        } else {
+                                            Text(
+                                                "滚动加载更多",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

@@ -2607,7 +2607,7 @@
       "title": "服务端路由字面量契约化 + /ws 路径生成",
       "dimension": "simplicity",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 5,
       "findingId": "F-58",
       "dependsOn": [],
@@ -2638,7 +2638,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "执行者记录（T-058）：服务端路由字面量契约化 + /ws 路径生成。改动文件：① shared-spec.json（版本 1.2.0→1.3.0，api.endpoints 注册 /ws 端点 GET/auth=message，changelog 新增 1.3.0 条）② CloudPan.CodeGen/Generators/ApiClientGenerator.cs（ToConstantName 特例 /ws→常量名 WebSocket；类文档注释改『客户端与服务端共用』）③ CloudPan.CodeGen/Generators/ManifestGenerator.cs（删除从 api.websocket.endpoint 提取 /ws 的重复逻辑——/ws 已由 endpoints 循环生成，SpecEndpoints 单源无重复）④ 重新生成 CloudPan.Contract/Generated/SpecRoutes.g.cs（新增 public const string WebSocket=\"/ws\" + RouteIndex 交叉校验项 (WebSocket,GET,/ws)）与 ContractManifest.g.cs 等 8 个生成文件（版本头 1.3.0）⑤ CloudPan.Server.Host/Controllers/ 全部 10 个文件：33 处路由字面量改引用 SpecRoutes 常量，类级 [Route(\"api/...\")] 前缀移除（action 改全路径常量；保留类级 [Route] 会因 Analyzer 无法解析常量字面量而误报 CP100，故必须移除）⑥ CloudPan.Server.Host/Program.cs（using CloudPan.Contract + app.Map(\"/ws\")→app.Map(SpecRoutes.WebSocket)）⑦ CloudPan.Client.Core/Services/WebSocketClient.cs（using CloudPan.Contract + .TrimEnd('/')+\"/ws\"→+SpecRoutes.WebSocket）。取舍说明：requirements 提及『WsPath 常量』，指挥层指令明确『api.endpoints 补 /ws 端点 + SpecRoutes.WebSocket』，取后者——/ws 成为一等端点并纳入 SpecRoutes.DiffAgainstSpecEndpoints 交叉校验（SpecRoutesConsistencyTests 兜底），路由单一事实来源闭环。验证：grep 验收1（Controllers 手写路由字面量）EXIT=1 无匹配；grep 验收2（\"/ws\" 字面量）EXIT=1 无匹配；dotnet run --project CloudPan.CodeGen 生成完成（1.3.0）；--verify 全部一致；dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过（295/295，含 FilesControllerIntegrationTests/ResponseShapeIntegrationTests/WebSocketIntegrationTests 命中改造后真实路由）；dotnet test --filter Architecture 通过（12/12，含 SpecRoutesConsistencyTests 与 ErrorResponseFormatTests /ws 端点 Message 认证断言）。",
+      "note": "执行者记录（T-058）：服务端路由字面量契约化 + /ws 路径生成。改动文件：① shared-spec.json（版本 1.2.0→1.3.0，api.endpoints 注册 /ws 端点 GET/auth=message，changelog 新增 1.3.0 条）② CloudPan.CodeGen/Generators/ApiClientGenerator.cs（ToConstantName 特例 /ws→常量名 WebSocket；类文档注释改『客户端与服务端共用』）③ CloudPan.CodeGen/Generators/ManifestGenerator.cs（删除从 api.websocket.endpoint 提取 /ws 的重复逻辑——/ws 已由 endpoints 循环生成，SpecEndpoints 单源无重复）④ 重新生成 CloudPan.Contract/Generated/SpecRoutes.g.cs（新增 public const string WebSocket=\"/ws\" + RouteIndex 交叉校验项 (WebSocket,GET,/ws)）与 ContractManifest.g.cs 等 8 个生成文件（版本头 1.3.0）⑤ CloudPan.Server.Host/Controllers/ 全部 10 个文件：33 处路由字面量改引用 SpecRoutes 常量，类级 [Route(\"api/...\")] 前缀移除（action 改全路径常量；保留类级 [Route] 会因 Analyzer 无法解析常量字面量而误报 CP100，故必须移除）⑥ CloudPan.Server.Host/Program.cs（using CloudPan.Contract + app.Map(\"/ws\")→app.Map(SpecRoutes.WebSocket)）⑦ CloudPan.Client.Core/Services/WebSocketClient.cs（using CloudPan.Contract + .TrimEnd('/')+\"/ws\"→+SpecRoutes.WebSocket）。取舍说明：requirements 提及『WsPath 常量』，指挥层指令明确『api.endpoints 补 /ws 端点 + SpecRoutes.WebSocket』，取后者——/ws 成为一等端点并纳入 SpecRoutes.DiffAgainstSpecEndpoints 交叉校验（SpecRoutesConsistencyTests 兜底），路由单一事实来源闭环。验证：grep 验收1（Controllers 手写路由字面量）EXIT=1 无匹配；grep 验收2（\"/ws\" 字面量）EXIT=1 无匹配；dotnet run --project CloudPan.CodeGen 生成完成（1.3.0）；--verify 全部一致；dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过（295/295，含 FilesControllerIntegrationTests/ResponseShapeIntegrationTests/WebSocketIntegrationTests 命中改造后真实路由）；dotnet test --filter Architecture 通过（12/12，含 SpecRoutesConsistencyTests 与 ErrorResponseFormatTests /ws 端点 Message 认证断言）。｜验收 2026-08-03：3 条自动标准全过，独立裁决置 done——(1) grep -rnE 'Http(Get|Post|Put|Delete)\\(\"/[^\"]+\"\\)|Route\\(\"/[^\"]+\"\\)' CloudPan.Server.Host/Controllers/ 无匹配（EXIT_CODE=1，目录含 10 个源码文件，非假阴性）；抽查 31 处路由属性全部为 [HttpGet(SpecRoutes.X)] 常量引用，无手写路径字面量。(2) grep -rn '\"/ws\"' CloudPan.Server.Host/Program.cs CloudPan.Client.Core/Services/WebSocketClient.cs 无匹配（EXIT_CODE=1），宽范围扫描整个 CloudPan.Server.Host/ 亦无 /ws 字面量；抽查 WebSocketClient.cs:52 为 .TrimEnd('/')+SpecRoutes.WebSocket、Program.cs:116 为 app.Map(SpecRoutes.WebSocket)，两端均走生成常量。(3) dotnet run --project CloudPan.CodeGen -- --verify 校验通过（契约 1.3.0 枚举/DTO/实体/清单/错误响应/API响应/设置/路由常量全部一致）+ dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）。独立核查：SpecRoutes.g.cs:166 生成 WebSocket=\"/ws\" 常量，:200 RouteIndex 交叉校验项含 (WebSocket,GET,/ws)；Controller 类级 [Route(\"api/...\")] 前缀已移除、action 改全路径常量（mission 附加 grep '\"api/' 无匹配，EXIT_CODE=1）。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -2646,7 +2646,7 @@
       "title": "Android 文件列表分页（nextCursor 增量加载）",
       "dimension": "function",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 5,
       "findingId": "F-59",
       "dependsOn": [],
@@ -2675,8 +2675,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "执行者记录（T-059）：Android 文件列表分页（nextCursor 增量加载）。改动文件：① CloudPan.Android/app/src/main/java/com/cloudpan/android/data/CloudPanApi.kt（getFileTreeInFolder 增加 @Query cursor，分页必需）② data/FileRepository.kt（新增 FILE_TREE_PAGE_SIZE=200 常量替代固定 limit=100；getFileTree/getFileTreeInFolder 透传 cursor 游标，safeCall 内解包 Response 并对 HTTP 非 2xx 抛异常转 Result.failure）③ ui/FileListScreen.kt（新增 nextCursor/hasMore/isLoadingMore/lastAutoLoadCursor 状态；loadFiles 重置分页取首屏直系子项并记录游标；loadMore 滚动到底增量拼接、按 path 去重直系子项、请求期间切目录则丢弃过期页防串目录；LazyColumn 尾部 hasMore 时 footer item 自动触发加载；空结果与 hasMore 状态分别提示；空状态视图仅当 !hasMore 且无子项时显示）④ tasks.json（状态推进）。技术方案：服务端 GET /api/files/tree 按 Path 排序返回整个子树 + cursor 游标（GetFileTreeAsync），UI 逐页遍历子树过滤 isDirectChild 直系子项、累加直至 hasMore=false，实现『根目录/大目录展示全部直系子项、不静默截断』（requirement 2 的等价方案）。附加说明（基线不编译修复）：Android 项目基线在现有依赖下本就编译失败——getFileTree/getFileTreeInFolder/createShare 的 safeCall 未解包 Response 致类型不匹配、LinearProgressIndicator(progress={}) 在 Material3 1.1.x（BOM 2023.10.01）无此重载、kotlinx.coroutines.ensureActive 无法解析、loadFiles 前向引用报错（基线 compileDebugKotlin 实测 8 处错误）；因错误全部位于本任务 scope 两文件且阻塞验收标准 2（compileDebugKotlin 编译通过），已做最小机械修复且不改变业务语义：safeCall 解包+失败抛异常、LinearProgressIndicator 改 Float 参数、下载循环取消检查改 kotlin.coroutines.coroutineContext[Job]?.isActive 等价写法、updateStatus/pullRefreshState 调整声明顺序。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误，C# 端不受影响）；Android ./gradlew :app:compileDebugKotlin 通过（BUILD SUCCESSFUL，基线 8 处既有错误全部消除）；:app:assembleDebug 联网构建成功（app-debug.apk 16MB；离线模式仅因 3 个 runtime jar 缓存缺失失败，与代码无关）；验收 1 grep（FileRepository 含 nextCursor|hasMore|limit 分页游标驱动）通过。手动验收项：① 构造 >100 子项文件夹（如数千照片目录），滚动到底自动加载剩余项，最终列表含全部子项且不重复不丢项；② 根目录可浏览全部顶层直系子项（逐页遍历子树）；③ 空文件夹显示『此文件夹为空』空状态；④ 大目录列表尾部显示『加载中/滚动加载更多』提示，翻完后消失；⑤ 下拉刷新/切目录/换排序重置分页从头加载；⑥ 搜索模式不显示分页 footer。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-060",

@@ -12,6 +12,12 @@ import java.io.FileOutputStream
 import java.time.Instant
 
 /**
+ * 文件树单页大小。服务端按 Path 排序 + cursor 游标翻页（T-059），
+ * 客户端配合 FileTreeResponse.nextCursor/hasMore 增量加载。
+ */
+private const val FILE_TREE_PAGE_SIZE = 200
+
+/**
  * 文件操作仓库——封装 API 调用和错误处理。
  */
 class FileRepository(private val settings: SettingsStore) {
@@ -36,14 +42,21 @@ class FileRepository(private val settings: SettingsStore) {
     }
 
     suspend fun getFileTree(sinceVersion: Int = 0, cursor: String? = null, subPath: String? = null): Result<FileTreeResponse> {
-        // Retrofit 的 @Query 支持 null 参数自动忽略
-        return safeCall { api().getFileTree(sinceVersion, 100, cursor) }
+        // Retrofit 的 @Query 支持 null 参数自动忽略；HTTP 非 2xx 时抛异常，由 safeCall 转 Result.failure
+        return safeCall {
+            val r = api().getFileTree(sinceVersion, FILE_TREE_PAGE_SIZE, cursor)
+            if (!r.isSuccessful) throw Exception("获取文件列表失败: ${r.code()} ${r.message()}")
+            r.body()!!
+        }
         // 注：CloudPanApi.getFileTree 暂不支持 subPath，需要直接拼接 URL
     }
 
-    suspend fun getFileTreeInFolder(folderPath: String): Result<FileTreeResponse> {
+    /** 指定文件夹子树的分页请求（T-059：cursor 增量翻页，nextCursor 由调用方拼接）。 */
+    suspend fun getFileTreeInFolder(folderPath: String, cursor: String? = null): Result<FileTreeResponse> {
         return safeCall {
-            api().getFileTreeInFolder(folderPath, 100)
+            val r = api().getFileTreeInFolder(folderPath, FILE_TREE_PAGE_SIZE, cursor)
+            if (!r.isSuccessful) throw Exception("获取文件夹列表失败: ${r.code()} ${r.message()}")
+            r.body()!!
         }
     }
 
@@ -100,7 +113,10 @@ class FileRepository(private val settings: SettingsStore) {
                         var downloaded = 0L
                         var bytesRead: Int
                         while (input.read(buffer).also { bytesRead = it } != -1) {
-                            kotlinx.coroutines.ensureActive()
+                            // 下载循环内协程取消检查（等价 kotlinx.coroutines.ensureActive()）
+                            if (kotlin.coroutines.coroutineContext[kotlinx.coroutines.Job]?.isActive != true) {
+                                throw kotlinx.coroutines.CancellationException()
+                            }
                             out.write(buffer, 0, bytesRead)
                             downloaded += bytesRead
                             onProgress(downloaded, totalBytes)
@@ -187,7 +203,11 @@ class FileRepository(private val settings: SettingsStore) {
     suspend fun createShare(filePath: String, password: String? = null): Result<ShareResponse> {
         val body = mutableMapOf<String, Any>("filePath" to filePath)
         if (password != null) body["password"] = password
-        return safeCall { api().createShare(body) }
+        return safeCall {
+            val r = api().createShare(body)
+            if (!r.isSuccessful) throw Exception("创建分享失败: ${r.code()} ${r.message()}")
+            r.body()!!
+        }
     }
 
     suspend fun uploadFile(localFile: File, remotePath: String): Result<UploadResponse> {

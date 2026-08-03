@@ -20,11 +20,12 @@ interface CloudPanApi {
         @Query("cursor") cursor: String? = null
     ): Response<FileTreeResponse>
 
-    /** 获取指定文件夹下的文件列表。 */
+    /** 获取指定文件夹下的文件列表（T-059：支持 cursor 游标分页）。 */
     @GET("api/files/tree")
     suspend fun getFileTreeInFolder(
         @Query("path") folderPath: String,
-        @Query("limit") limit: Int = 5000
+        @Query("limit") limit: Int = 5000,
+        @Query("cursor") cursor: String? = null
     ): Response<FileTreeResponse>
 
     @Multipart
