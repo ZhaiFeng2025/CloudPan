@@ -69,4 +69,20 @@ interface CloudPanApi {
 
     @GET("api/devices")
     suspend fun getDevices(): Response<Map<String, Any>>
+
+    // ---- 回收站（T-050，对齐 Windows T-014：删除走软删进回收站，可恢复/清空）----
+
+    /** 回收站文件列表（GET /api/trash）。 */
+    @GET("api/trash")
+    suspend fun getTrash(): Response<TrashListResponse>
+
+    /** 恢复回收站文件（POST /api/trash/restore，metaFileName 为回收站元数据文件名）。 */
+    @POST("api/trash/restore")
+    suspend fun restoreTrash(
+        @Body request: Map<String, @JvmSuppressWildcards Any>
+    ): Response<Map<String, Any>>
+
+    /** 清空回收站（DELETE /api/trash/empty）。 */
+    @DELETE("api/trash/empty")
+    suspend fun emptyTrash(): Response<Map<String, Any>>
 }

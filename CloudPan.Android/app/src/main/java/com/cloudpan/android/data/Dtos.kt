@@ -55,6 +55,24 @@ data class ShareData(
     @SerializedName("maxDownloads") val maxDownloads: Int?
 )
 
+/**
+ * 回收站条目（T-050）。字段对齐 shared-spec.json → api.responses.TrashItem：
+ * originalPath / trashFileName / fileSize / isDirectory / deletedAt / ageDays。
+ */
+data class TrashItemDto(
+    @SerializedName("originalPath") val originalPath: String,
+    @SerializedName("trashFileName") val trashFileName: String,
+    @SerializedName("fileSize") val fileSize: Long,
+    @SerializedName("isDirectory") val isDirectory: Boolean,
+    @SerializedName("deletedAt") val deletedAt: String,
+    @SerializedName("ageDays") val ageDays: Int
+)
+
+/** GET /api/trash 响应包装（对齐 TrashListResponse）。 */
+data class TrashListResponse(
+    @SerializedName("data") val data: List<TrashItemDto>
+)
+
 data class ErrorBody(
     @SerializedName("error") val error: ErrorInfo
 )

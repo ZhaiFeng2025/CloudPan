@@ -125,9 +125,61 @@ class FileRepository(private val settings: SettingsStore) {
         }
     }
 
-    suspend fun deleteFile(path: String): Result<Unit> {
+    /**
+     * 删除文件/文件夹（T-050：软删进回收站，可恢复）。
+     * 调 POST /api/files/delete（服务端移入回收站 + 墓碑），成功后查回收站列表返回对应条目供撤销；
+     * 无匹配条目返回 null（删除成功但不可撤销）。禁止物理删除——回收站是唯一可恢复路径。
+     */
+    suspend fun deleteFile(path: String): Result<TrashItemDto?> {
         return safeCall {
-            api().deleteFile(mapOf("path" to path, "baseVersion" to 0))
+            val r = api().deleteFile(mapOf("path" to path, "baseVersion" to 0))
+            if (!r.isSuccessful) {
+                throw Exception("删除失败: ${r.code()} ${r.message()}")
+            }
+            // 查回收站刚删条目（供 5 秒内撤销），失败不影响删除结果
+            try {
+                val trash = api().getTrash()
+                if (trash.isSuccessful) {
+                    trash.body()?.data?.firstOrNull { it.originalPath == path }
+                } else null
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
+    /** 回收站文件列表（GET /api/trash）。 */
+    suspend fun getTrash(): Result<List<TrashItemDto>> {
+        return safeCall {
+            val r = api().getTrash()
+            if (!r.isSuccessful) {
+                throw Exception("获取回收站失败: ${r.code()} ${r.message()}")
+            }
+            r.body()?.data ?: emptyList()
+        }
+    }
+
+    /**
+     * 恢复回收站条目（POST /api/trash/restore）。
+     * metaFileName = 条目 TrashFileName + ".json"（对齐服务端 MoveToTrashAsync 写盘命名）。
+     */
+    suspend fun restoreTrash(trashFileName: String): Result<Unit> {
+        return safeCall {
+            val r = api().restoreTrash(mapOf("metaFileName" to "$trashFileName.json"))
+            if (!r.isSuccessful) {
+                throw Exception("恢复失败: ${r.code()} ${r.message()}")
+            }
+            Unit
+        }
+    }
+
+    /** 清空回收站（DELETE /api/trash/empty，物理删除，不可恢复）。 */
+    suspend fun emptyTrash(): Result<Unit> {
+        return safeCall {
+            val r = api().emptyTrash()
+            if (!r.isSuccessful) {
+                throw Exception("清空失败: ${r.code()} ${r.message()}")
+            }
             Unit
         }
     }

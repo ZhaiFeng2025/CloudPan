@@ -2246,7 +2246,7 @@
       "title": "修复目录删除传播断裂（目录自身墓碑化 + FullScan 目录删除兜底）",
       "dimension": "function",
       "priority": "P1",
-      "status": "acceptance",
+      "status": "done",
       "batch": 5,
       "findingId": "F-49",
       "dependsOn": [],
@@ -2283,7 +2283,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "执行者记录（T-049）：修复目录删除传播断裂（F-49）。改动文件：① CloudPan.Server.Core/FileIndex/FileIndexService.cs——SoftDeleteAsync 目录分支由纯前缀匹配（Path LIKE '/dir/%'）改为『Path == normalized OR Path.StartsWith(normalized + \"/\")』，生产无尾斜杠路径下目录自身 FileEntry 纳入墓碑化（目录自身+后代均标记 Deleting）；CreateDirectoryAsync 对同名墓碑（State=Deleting）复活为 Synced 目录——目录软删后同名重建不再 409。② CloudPan.Client.Core/Services/SyncEngine.Scan.cs——ApplyRemoteChangesAsync 远端目录快照 IsDownloaded=false（语义=『目录曾在本机物化』守卫，防 FullScan 误删远端未物化空目录造成删除-重建振荡）；墓碑分支对 Directory.Exists 递归删除本地目录（SafeDeleteDirectory），空目录不再在设备幽灵残留并被 FullScan 重新 mkdir 复活。③ CloudPan.Client.Core/Services/SyncEngine.Queue.cs——新增 SafeDeleteDirectory（目录递归删除，尽力而为）。④ CloudPan.Client.Core/Services/SyncEngine.FullScan.cs——删除检测补目录分支：本地目录缺失且快照为目录且 IsDownloaded=true → 入队 Delete（5 分钟兜底扫描不再只依赖 FileSystemWatcher）；远端未物化（IsDownloaded=false）不误判。⑤ CloudPan.Tests/Server/Services/FileIndexServiceTests.cs——SoftDelete_文件夹_递归标记/新建文件夹/重复创建对齐生产无尾斜杠约定；新增 CreateDirectory_同名墓碑_复活为Synced目录。⑥ CloudPan.Tests/Client/Services/SyncEngineTests.cs——新增 FullScan_本地目录缺失_快照为目录_入队Delete + FullScan_远端未物化目录快照_本地缺失_不误删。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test --filter 'FileIndexServiceTests|SyncEngineTests' -c Release 通过（77/77）；dotnet test CloudPan.Tests -c Release 通过（281/281）。",
+      "note": "执行者记录（T-049）：修复目录删除传播断裂（F-49）。改动文件：① CloudPan.Server.Core/FileIndex/FileIndexService.cs——SoftDeleteAsync 目录分支由纯前缀匹配（Path LIKE '/dir/%'）改为『Path == normalized OR Path.StartsWith(normalized + \"/\")』，生产无尾斜杠路径下目录自身 FileEntry 纳入墓碑化（目录自身+后代均标记 Deleting）；CreateDirectoryAsync 对同名墓碑（State=Deleting）复活为 Synced 目录——目录软删后同名重建不再 409。② CloudPan.Client.Core/Services/SyncEngine.Scan.cs——ApplyRemoteChangesAsync 远端目录快照 IsDownloaded=false（语义=『目录曾在本机物化』守卫，防 FullScan 误删远端未物化空目录造成删除-重建振荡）；墓碑分支对 Directory.Exists 递归删除本地目录（SafeDeleteDirectory），空目录不再在设备幽灵残留并被 FullScan 重新 mkdir 复活。③ CloudPan.Client.Core/Services/SyncEngine.Queue.cs——新增 SafeDeleteDirectory（目录递归删除，尽力而为）。④ CloudPan.Client.Core/Services/SyncEngine.FullScan.cs——删除检测补目录分支：本地目录缺失且快照为目录且 IsDownloaded=true → 入队 Delete（5 分钟兜底扫描不再只依赖 FileSystemWatcher）；远端未物化（IsDownloaded=false）不误判。⑤ CloudPan.Tests/Server/Services/FileIndexServiceTests.cs——SoftDelete_文件夹_递归标记/新建文件夹/重复创建对齐生产无尾斜杠约定；新增 CreateDirectory_同名墓碑_复活为Synced目录。⑥ CloudPan.Tests/Client/Services/SyncEngineTests.cs——新增 FullScan_本地目录缺失_快照为目录_入队Delete + FullScan_远端未物化目录快照_本地缺失_不误删。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test --filter 'FileIndexServiceTests|SyncEngineTests' -c Release 通过（77/77）；dotnet test CloudPan.Tests -c Release 通过（281/281）。验收结论（task-verifier，2026-08-03）：独立复验全绿。AC1 无尾斜杠目录软删：dotnet test --filter FileIndexService 18/18 通过，SoftDeleteAsync 目录分支 `Path==normalized OR Path.StartsWith(normalized+\"/\")` 已落地，单测断言目录自身 /parent 与子文件均 Deleting（无尾斜杠创建）；AC2 目录删除兜底：dotnet test --filter SyncEngine 59/59 通过，FullScan 目录分支 `Type==Directory && IsDownloaded` 入队 Delete 已落地，含防误删用例（未物化目录不误删，删除-重建振荡防护）；AC3 全量测试 dotnet test CloudPan.Tests -c Release 281/281 通过；AC4 dotnet build CloudPan.sln -c Release 0 警告 0 错误。另核验 CreateDirectoryAsync 对 Deleting 同名墓碑复活为 Synced（409 修复）已落地且有单测。全部 4 条自动验收标准通过，无手动项，裁决 done。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -2291,7 +2291,7 @@
       "title": "Android 删除改走回收站（软删 + 撤销 Snackbar + 回收站入口）",
       "dimension": "ux",
       "priority": "P1",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 5,
       "findingId": "F-50",
       "dependsOn": [],
@@ -2320,8 +2320,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "执行者记录（T-050）：Android 删除改走回收站（软删 + 撤销 Snackbar + 回收站入口），对齐 Windows T-014。改动文件：① CloudPan.Android/app/src/main/java/com/cloudpan/android/data/CloudPanApi.kt——新增回收站三端点（GET /api/trash、POST /api/trash/restore、DELETE /api/trash/empty），路径对齐 shared-spec.json api.endpoints 与 C# SpecRoutes。② 同目录 Dtos.kt——新增 TrashItemDto/TrashListResponse，字段对齐 shared-spec api.responses.TrashItem（originalPath/trashFileName/fileSize/isDirectory/deletedAt/ageDays）。③ 同目录 FileRepository.kt——deleteFile 改为调 POST /api/files/delete（服务端软删=移入回收站+墓碑，非物理删除），成功返回 TrashItemDto? 供撤销；新增 getTrash()/restoreTrash(trashFileName)/emptyTrash()（metaFileName = TrashFileName + '.json'，对齐 SyncEngine.Trash.cs）。④ CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt——单删/批量删除确认文案白话化（『将「名称」移入回收站，可在回收站恢复』）；删除后 Snackbar『已删除，可撤销』+ 撤销动作（调 restoreTrash）；TopAppBar 新增回收站入口（DeleteSweep 图标）→ TrashDialog（列表/恢复选中/清空二次确认）。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误，C# 端不受影响）；Android :app:compileDebugKotlin 基线即失败，预存错误见下，本次改动未引入新错误。手动验收项：① 单删/批量删除走软删，确认文案白话化；② 删除后 Snackbar 出现『已删除，可撤销』，点撤销文件恢复；③ TopAppBar 回收站入口可见，列出已删文件，恢复选中/清空可用（清空有二次确认）；④ Android compileDebugKotlin 编译通过依赖修复预存问题（FileRepository.kt getFileTree/getFileTreeInFolder/createShare 的 Result<Response<T>> 包装不匹配、ensureActive 未导入；FileListScreen.kt loadFiles 局部函数前向引用、LinearProgressIndicator lambda 参数不匹配）。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-051",

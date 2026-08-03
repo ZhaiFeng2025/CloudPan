@@ -2,6 +2,7 @@ package com.cloudpan.android.ui
 
 import android.os.Environment
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -31,6 +32,7 @@ import com.cloudpan.android.data.AppDatabase
 import com.cloudpan.android.data.FileEntryDto
 import com.cloudpan.android.data.FileRepository
 import com.cloudpan.android.data.OfflineCacheEntity
+import com.cloudpan.android.data.TrashItemDto
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -129,6 +131,7 @@ fun FileListScreen(
     var isSelectionMode by remember { mutableStateOf(false) }
     var showSortMenu by remember { mutableStateOf(false) }
     var showBulkDeleteDialog by remember { mutableStateOf(false) }
+    var showTrashDialog by remember { mutableStateOf(false) } // T-050：回收站入口
 
     // 离线缓存下载状态
     var offlineDownloadFile by remember { mutableStateOf<FileEntryDto?>(null) }
@@ -206,22 +209,41 @@ fun FileListScreen(
 
     // ---- 对话框 ----
 
-    // 删除确认
+    // 删除确认（T-050：软删进回收站可恢复，确认文案白话化）
     if (deleteTarget != null) {
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
             icon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
             title = { Text("删除") },
-            text = { Text("确定删除 ${deleteTarget!!.path.removePrefix("/")}？") },
+            text = { Text("将「${fileName(deleteTarget!!.path)}」移入回收站，可在回收站恢复") },
             confirmButton = {
                 TextButton(onClick = {
                     val f = deleteTarget!!; deleteTarget = null
                     scope.launch {
                         val r = repository.deleteFile(f.path)
-                        snackbarHostState.showSnackbar(
-                            if (r.isSuccess) "已删除" else "删除失败：${r.exceptionOrNull()?.message}"
-                        )
-                        loadFiles()
+                        loadFiles() // 先刷新列表，Snackbar 挂起等待不阻塞
+                        if (r.isSuccess) {
+                            val trashItem = r.getOrNull()
+                            if (trashItem != null) {
+                                val result = snackbarHostState.showSnackbar(
+                                    message = "已删除，可撤销",
+                                    actionLabel = "撤销",
+                                    withDismissAction = true,
+                                    duration = SnackbarDuration.Short
+                                )
+                                if (result == SnackbarResult.ActionPerformed) {
+                                    val ok = repository.restoreTrash(trashItem.trashFileName).isSuccess
+                                    snackbarHostState.showSnackbar(
+                                        if (ok) "已恢复" else "恢复失败，请到回收站查看"
+                                    )
+                                    if (ok) loadFiles()
+                                }
+                            } else {
+                                snackbarHostState.showSnackbar("已删除")
+                            }
+                        } else {
+                            snackbarHostState.showSnackbar("删除失败：${r.exceptionOrNull()?.message}")
+                        }
                     }
                 }) { Text("删除", color = MaterialTheme.colorScheme.error) }
             },
@@ -229,27 +251,52 @@ fun FileListScreen(
         )
     }
 
-    // FIX 7: 批量删除
+    // FIX 7: 批量删除（T-050：软删进回收站可恢复，确认文案白话化）
     if (showBulkDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showBulkDeleteDialog = false },
             icon = { Icon(Icons.Default.DeleteSweep, null, tint = MaterialTheme.colorScheme.error) },
             title = { Text("批量删除") },
-            text = { Text("确定删除已选择的 ${selectedPaths.size} 项？") },
+            text = { Text("将已选择的 ${selectedPaths.size} 项移入回收站，可在回收站恢复") },
             confirmButton = {
                 TextButton(onClick = {
                     showBulkDeleteDialog = false
                     scope.launch {
                         var success = 0; var failed = 0
+                        val deletedItems = mutableListOf<TrashItemDto>()
                         for (path in selectedPaths) {
-                            if (repository.deleteFile(path).isSuccess) success++ else failed++
+                            val r = repository.deleteFile(path)
+                            if (r.isSuccess) {
+                                success++
+                                r.getOrNull()?.let { deletedItems.add(it) }
+                            } else failed++
                         }
-                        snackbarHostState.showSnackbar(
-                            "已删除 ${success} 项" + if (failed > 0) "，${failed} 项失败" else ""
-                        )
                         selectedPaths = emptySet()
                         isSelectionMode = false
-                        loadFiles()
+                        loadFiles() // 先刷新列表，Snackbar 挂起等待不阻塞
+                        if (success > 0 && deletedItems.isNotEmpty()) {
+                            val result = snackbarHostState.showSnackbar(
+                                message = "已删除 ${success} 项，可撤销" +
+                                    if (failed > 0) "，${failed} 项失败" else "",
+                                actionLabel = "撤销",
+                                withDismissAction = true,
+                                duration = SnackbarDuration.Short
+                            )
+                            if (result == SnackbarResult.ActionPerformed) {
+                                var restored = 0
+                                for (item in deletedItems) {
+                                    if (repository.restoreTrash(item.trashFileName).isSuccess) restored++
+                                }
+                                snackbarHostState.showSnackbar(
+                                    if (restored > 0) "已恢复 ${restored} 项" else "恢复失败，请到回收站查看"
+                                )
+                                if (restored > 0) loadFiles()
+                            }
+                        } else {
+                            snackbarHostState.showSnackbar(
+                                "已删除 ${success} 项" + if (failed > 0) "，${failed} 项失败" else ""
+                            )
+                        }
                     }
                 }) { Text("删除", color = MaterialTheme.colorScheme.error) }
             },
@@ -482,6 +529,15 @@ fun FileListScreen(
         }
     }
 
+    // T-050：回收站对话框（最近删除列表 + 恢复/清空）
+    if (showTrashDialog) {
+        TrashDialog(
+            repository = repository,
+            snackbarHostState = snackbarHostState,
+            onDismiss = { showTrashDialog = false }
+        )
+    }
+
     // ---- 主布局 ----
 
     Scaffold(
@@ -616,6 +672,10 @@ fun FileListScreen(
 
                             IconButton(onClick = { showNewFolderDialog = true }) {
                                 Icon(Icons.Default.CreateNewFolder, "新建文件夹")
+                            }
+                            // T-050：回收站入口（最近删除，可恢复/清空）
+                            IconButton(onClick = { showTrashDialog = true }) {
+                                Icon(Icons.Default.DeleteSweep, "回收站")
                             }
                             IconButton(onClick = {
                                 searchQuery = ""
@@ -848,4 +908,114 @@ fun FileListScreen(
             )
         }
     }
+}
+
+// ---- T-050：回收站对话框（最近删除列表 + 恢复/清空，对齐 Windows T-014） ----
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TrashDialog(
+    repository: FileRepository,
+    snackbarHostState: SnackbarHostState,
+    onDismiss: () -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    var items by remember { mutableStateOf<List<TrashItemDto>>(emptyList()) }
+    var loaded by remember { mutableStateOf(false) }
+    var selectedMeta by remember { mutableStateOf<String?>(null) }
+    var showEmptyConfirm by remember { mutableStateOf(false) }
+
+    suspend fun refresh() {
+        val r = repository.getTrash()
+        items = r.getOrNull() ?: emptyList()
+        loaded = true
+    }
+
+    LaunchedEffect(Unit) { refresh() }
+
+    // 清空回收站确认（不可逆操作，需二次确认）
+    if (showEmptyConfirm) {
+        AlertDialog(
+            onDismissRequest = { showEmptyConfirm = false },
+            icon = { Icon(Icons.Default.DeleteForever, null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("清空回收站") },
+            text = { Text("确定要清空回收站吗？清空后无法恢复。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showEmptyConfirm = false
+                    scope.launch {
+                        val ok = repository.emptyTrash().isSuccess
+                        snackbarHostState.showSnackbar(if (ok) "已清空回收站" else "清空失败")
+                        refresh()
+                    }
+                }) { Text("清空", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { showEmptyConfirm = false }) { Text("取消") } }
+        )
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.DeleteSweep, null, tint = MaterialTheme.colorScheme.error) },
+        title = { Text("回收站（最近删除）") },
+        text = {
+            Column(Modifier.fillMaxWidth()) {
+                if (!loaded) {
+                    Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                        Text("加载中……")
+                    }
+                } else if (items.isEmpty()) {
+                    Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                        Text("回收站是空的")
+                    }
+                } else {
+                    Column(Modifier.heightIn(max = 300.dp)) {
+                        items.forEach { item ->
+                            val displayName = fileName(item.originalPath)
+                            val isSelected = item.trashFileName == selectedMeta
+                            ListItem(
+                                headlineContent = {
+                                    Text(displayName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                },
+                                supportingContent = {
+                                    Text(
+                                        (if (item.isDirectory) "文件夹" else formatSize(item.fileSize)) +
+                                            " · " + (if (item.ageDays > 0) "${item.ageDays} 天前" else "刚刚")
+                                    )
+                                },
+                                colors = ListItemDefaults.colors(
+                                    containerColor = if (isSelected)
+                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                                    else Color.Transparent
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { selectedMeta = if (isSelected) null else item.trashFileName }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val meta = selectedMeta
+                if (meta != null) {
+                    scope.launch {
+                        val ok = repository.restoreTrash(meta).isSuccess
+                        snackbarHostState.showSnackbar(if (ok) "已恢复" else "恢复失败，请稍后重试")
+                        if (ok) refresh()
+                    }
+                }
+            }) { Text("恢复选中") }
+        },
+        dismissButton = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { showEmptyConfirm = true }) {
+                    Text("清空回收站", color = MaterialTheme.colorScheme.error)
+                }
+                TextButton(onClick = onDismiss) { Text("关闭") }
+            }
+        }
+    )
 }
