@@ -1492,7 +1492,7 @@
       "title": "UDP 发现响应版本与主机名修复",
       "dimension": "function",
       "priority": "P2",
-      "status": "in-progress",
+      "status": "acceptance",
       "batch": 3,
       "findingId": "F-35",
       "dependsOn": [],
@@ -1518,7 +1518,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "冲突取舍：UDP 版本来源 spec 常量 vs 程序集版本——选 AssemblyInformationalVersion（反映发布物真实版本，客户端据此判断协议兼容）。",
+      "note": "冲突取舍：UDP 版本来源 spec 常量 vs 程序集版本——选 AssemblyInformationalVersion（反映发布物真实版本，客户端据此判断协议兼容）。\n【T-035 执行 2026-08-03】UdpDiscoveryHostedService 响应修复：新增 GetVersion() 读 AssemblyInformationalVersion（实测 1.0.0+0872e35...，替代硬编码 0.2.0）；新增 GetLocalHost() 枚举活动网卡（OperationalStatus.Up / 非 Loopback / 非 Tunnel）取首个 IPv4 作 server 直连地址，Environment.MachineName 作兜底且仅用于 name 字段；新增 BuildServerInfo 纯函数化 JSON 构造，ExecuteAsync 引用之。\n改动文件：CloudPan.Server.Host/Hosting/UdpDiscoveryHostedService.cs；新增 CloudPan.Tests/Server/Hosting/UdpDiscoveryHostedServiceTests.cs（3 用例：GetVersion 与程序集 InformationalVersion 一致 / GetLocalHost 返回局域网 IP 或 MachineName 兜底 / BuildServerInfo 响应 JSON version==程序集版本、server host 可取、name==MachineName）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter UdpDiscovery 3/3 通过；全量 dotnet test CloudPan.Tests -c Release 247/247 通过；验收① grep -n '0.2.0' CloudPan.Server.Host/Hosting/UdpDiscoveryHostedService.cs 无匹配（exit 1）。\n兼容说明：客户端 SetupForm.Discovery.cs 仅解析 server/name 字段不消费 version，server 改为局域网 IP 更利于主机名不可解析环境，改动不破坏发现兼容。",
       "updatedAt": "2026-08-03"
     },
     {
