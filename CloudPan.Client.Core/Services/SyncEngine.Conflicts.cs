@@ -75,7 +75,8 @@ public partial class SyncEngine
                         // 备份失败 → 中止解决流程（不触发 ConflictResolved），重新入队下载。
                         // ProcessDownloadAsync 会在下载前再次检测本地修改并重建冲突状态，避免文件悬空。
                         _logger.LogError(ex, "保留两者时重命名本地文件失败: {Path}", localPath);
-                        ErrorOccurred?.Invoke(relativePath, $"本地文件备份失败，无法保留两者: {ex.Message}", SyncOperation.Download);
+                        // F-31：不再透出原始异常字符串
+                        ErrorOccurred?.Invoke(relativePath, new ErrorAttribution("本地文件备份失败，无法保留两者", "请关闭可能占用该文件的程序后重试"), SyncOperation.Download);
                         db.SyncQueue.Add(new SyncQueueItem
                         {
                             FilePath = relativePath,

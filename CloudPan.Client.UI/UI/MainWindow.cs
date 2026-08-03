@@ -69,11 +69,11 @@ public partial class MainWindow : Form
 
     private readonly List<SyncErrorInfo> _errors = new();
 
-    /// <summary>错误条目——记录失败的同步操作。</summary>
+    /// <summary>错误条目——记录失败的同步操作（含白话归因）。</summary>
     private class SyncErrorInfo
     {
         public string FilePath { get; set; } = "";
-        public string Message { get; set; } = "";
+        public ErrorAttribution Attribution { get; set; } = new("", "");
         public DateTime Timestamp { get; set; }
         public SyncOperation Operation { get; set; }
     }

@@ -15,16 +15,16 @@ public partial class MainWindow
     // 嵌入式错误面板（状态栏错误计数 + 弹出列表）
     // ================================================================
 
-    private void OnErrorOccurred(string filePath, string errorMessage, SyncOperation operation)
+    private void OnErrorOccurred(string filePath, ErrorAttribution attribution, SyncOperation operation)
     {
         if (InvokeRequired)
         {
-            Invoke(() => OnErrorOccurred(filePath, errorMessage, operation));
+            Invoke(() => OnErrorOccurred(filePath, attribution, operation));
             return;
         }
 
         // 去重：同一文件同一错误不重复添加
-        if (_errors.Any(e => e.FilePath == filePath && e.Message == errorMessage))
+        if (_errors.Any(e => e.FilePath == filePath && e.Attribution.Message == attribution.Message))
         {
             return;
         }
@@ -32,14 +32,14 @@ public partial class MainWindow
         SyncErrorInfo errorInfo = new SyncErrorInfo
         {
             FilePath = filePath,
-            Message = errorMessage,
+            Attribution = attribution,
             Timestamp = DateTime.Now,
             Operation = operation
         };
 
         _errors.Add(errorInfo);
         UpdateErrorBadge();
-        AddLog($"错误: {filePath} — {errorMessage}");
+        AddLog($"错误: {filePath} — {attribution.Message}");
     }
 
     /// <summary>更新状态栏错误计数标签的显示。</summary>
@@ -102,7 +102,9 @@ public partial class MainWindow
         foreach (var err in _errors)
         {
             string fileName = Path.GetFileName(err.FilePath);
-            listBox.Items.Add($"[{err.Timestamp:HH:mm:ss}] {fileName} — {err.Message}");
+            // F-31：显示白话归因 + 下一步，而非原始异常字符串
+            string nextStep = string.IsNullOrEmpty(err.Attribution.NextStep) ? "" : $"（下一步：{err.Attribution.NextStep}）";
+            listBox.Items.Add($"[{err.Timestamp:HH:mm:ss}] {fileName} — {err.Attribution.Message} {nextStep}");
         }
 
         // 右键菜单：单条重试/忽略（本地函数捕获局部状态，同时满足 CP301 具名订阅）

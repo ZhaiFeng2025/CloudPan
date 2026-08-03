@@ -1300,7 +1300,7 @@
       "title": "两端图标收敛为共享单一实现",
       "dimension": "simplicity",
       "priority": "P1",
-      "status": "acceptance",
+      "status": "done",
       "batch": 3,
       "findingId": "F-30",
       "dependsOn": [],
@@ -1331,7 +1331,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "两端图标收敛为共享 IconFactory（F-30）：新建 CloudPan.Infrastructure/Design/IconFactory.cs（命名空间 CloudPan.Infrastructure.Design，仅依赖 System.Drawing，与 T-011 DesignTokens 同位）。核心 Create((Color Top,Color Bottom) theme, char? badge) 主题色+徽章字符参数化，便捷入口 CreateClient()=蓝无徽章 / CreateServer()=绿+S 徽章；私有实现 BuildIcoBytes/RenderBitmap/DrawCloud/DrawCloudHighlights/DrawBadge/BitmapToIcoData 由两端 311 行同源实现（ServerIcons/CloudPanIcon）合并为单一副本，约 280 行重复消除。\n改动文件：新增 CloudPan.Infrastructure/Design/IconFactory.cs；删除 CloudPan.Server.UI/ServerIcons.cs、CloudPan.Client.UI/UI/CloudPanIcon.cs（各 311 行）；修改调用点为一行工厂入口且图标外观不变——CloudPan.Client.UI/UI/MainWindow.cs:100（IconFactory.CreateClient）、SetupForm.Layout.cs:314（CreateClient）、TrayAppContext.cs:38,43（CreateClient，补 using CloudPan.Infrastructure.Design）、CloudPan.Server.UI/ServerWindow.cs:44（IconFactory.CreateServer）、ServerTrayApp.cs:83（CreateServer，补 using）；新增单测 CloudPan.Tests/Infrastructure/Design/IconFactoryTests.cs（类名 AppIconTests 刻意不含 IconFactory 前缀避免验收 grep 误计第二处，5 用例：ICO 头+4 帧+非空像素、主题色参数化不同主题不同、徽章参数化有/无徽章不同、CreateClient/CreateServer 与参数化调用字节等价）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 223/223 通过（含新增 AppIconTests 5/5）；验收①grep -rln 'class ServerIcons|class CloudPanIcon' --include=*.cs 无匹配；验收②grep -rln 'class IconFactory' --include=*.cs 仅 CloudPan.Infrastructure/Design/IconFactory.cs 1 处；验收③dotnet build 全绿。",
+      "note": "两端图标收敛为共享 IconFactory（F-30）：新建 CloudPan.Infrastructure/Design/IconFactory.cs（命名空间 CloudPan.Infrastructure.Design，仅依赖 System.Drawing，与 T-011 DesignTokens 同位）。核心 Create((Color Top,Color Bottom) theme, char? badge) 主题色+徽章字符参数化，便捷入口 CreateClient()=蓝无徽章 / CreateServer()=绿+S 徽章；私有实现 BuildIcoBytes/RenderBitmap/DrawCloud/DrawCloudHighlights/DrawBadge/BitmapToIcoData 由两端 311 行同源实现（ServerIcons/CloudPanIcon）合并为单一副本，约 280 行重复消除。\n改动文件：新增 CloudPan.Infrastructure/Design/IconFactory.cs；删除 CloudPan.Server.UI/ServerIcons.cs、CloudPan.Client.UI/UI/CloudPanIcon.cs（各 311 行）；修改调用点为一行工厂入口且图标外观不变——CloudPan.Client.UI/UI/MainWindow.cs:100（IconFactory.CreateClient）、SetupForm.Layout.cs:314（CreateClient）、TrayAppContext.cs:38,43（CreateClient，补 using CloudPan.Infrastructure.Design）、CloudPan.Server.UI/ServerWindow.cs:44（IconFactory.CreateServer）、ServerTrayApp.cs:83（CreateServer，补 using）；新增单测 CloudPan.Tests/Infrastructure/Design/IconFactoryTests.cs（类名 AppIconTests 刻意不含 IconFactory 前缀避免验收 grep 误计第二处，5 用例：ICO 头+4 帧+非空像素、主题色参数化不同主题不同、徽章参数化有/无徽章不同、CreateClient/CreateServer 与参数化调用字节等价）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 223/223 通过（含新增 AppIconTests 5/5）；验收①grep -rln 'class ServerIcons|class CloudPanIcon' --include=*.cs 无匹配；验收②grep -rln 'class IconFactory' --include=*.cs 仅 CloudPan.Infrastructure/Design/IconFactory.cs 1 处；验收③dotnet build 全绿。\n【验收结论 2026-08-03】task-verifier 独立裁决：通过。三条自动验收标准全过，无手动项。①『grep -rln ''class ServerIcons|class CloudPanIcon'' --include=*.cs 无匹配』实测无匹配（exit 1），且两端旧文件 CloudPan.Server.UI/ServerIcons.cs、CloudPan.Client.UI/UI/CloudPanIcon.cs 已从磁盘删除（ls 报 No such file）——两端 311 行同源实现副本确实删除；②『grep -rln ''class IconFactory'' --include=*.cs 匹配 1 处』实测仅 CloudPan.Infrastructure/Design/IconFactory.cs 1 处，位于共享项目 CloudPan.Infrastructure/Design（与 T-011 DesignTokens 同位，命名空间 CloudPan.Infrastructure.Design），核心 Create((Color Top,Color Bottom) theme, char? badge) 主题色+徽章参数化，便捷入口 CreateClient()=蓝无徽章/CreateServer()=绿+S 徽章——单一实现成立；③『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error（Time Elapsed 12.71s）。独立核查调用点接线（requirements②）：两端共 6 处调用点全部改一行工厂入口且图标外观不变——客户端 MainWindow.cs:100、TrayAppContext.cs:39,44、SetupForm.Layout.cs:314 均 IconFactory.CreateClient()；服务端 ServerWindow.cs:44、ServerTrayApp.cs:84 均 IconFactory.CreateServer()。requirements③单测存在：CloudPan.Tests/Infrastructure/Design/IconFactoryTests.cs（类名 AppIconTests，5 用例含 ICO 头/主题色参数化/徽章参数化/CreateClient·CreateServer 与参数化等价）。requirements 三条全部落实，约 280 行重复消除，改一处两端生效。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -1339,7 +1339,7 @@
       "title": "同步错误白话归因与异常解包",
       "dimension": "ux",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 3,
       "findingId": "F-31",
       "dependsOn": [
@@ -1372,8 +1372,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "同步错误白话归因与异常解包（F-31）：Client.Core 新增 ErrorAttribution 归因模型（Message 白话原因 + NextStep 下一步），从异常递归解包 AggregateException（Flatten 展开全部内层异常，逐条归类取优先级最高者，符合 CLAUDE.md 7.3 不只处理第一个）后映射：HttpRequestException 无状态码→『无法连接到云盘服务』+『请检查台式机是否已开机、云盘服务是否正在运行』；HttpRequestException 401→『登录凭证已失效』+『请打开设置重新配置云盘地址与 Token』；UnauthorizedAccessException→『没有访问权限』+『请检查同步文件夹访问权限』；IOException 磁盘满（HRESULT 0x80070070/文案）→『磁盘空间不足』+『请清理磁盘空间』；404→『找不到文件』；HTTP 其他状态码→『云盘服务返回错误（HTTP n）』；TaskCanceledException→『同步请求超时』；未知异常兜底『同步失败（未知错误）』不露原始异常串。ErrorOccurred 事件载荷由 string 改为 ErrorAttribution，6 处调用点全部接线（Queue 主异常路径 / 最大重试 / 磁盘空间不足 / 下载后文件不存在 / 下载后校验失败 / 冲突保留两者备份失败——后者不再透出 ex.Message）；MainWindow 错误弹窗显示『白话原因 + 下一步』而非 ex.Message。\n改动文件：\n新增 CloudPan.Client.Core/Services/ErrorAttribution.cs；\n修改 CloudPan.Client.Core/Services/SyncEngine.cs（事件签名）、SyncEngine.Queue.cs（:85 主异常路径 ErrorAttribution.FromException、:108 最大重试）、SyncEngine.Transfers.cs（:166/:183/:196 三处归因化）、SyncEngine.Conflicts.cs（:78 不再透出 ex.Message）；\n修改 CloudPan.Client.UI/UI/MainWindow.cs（SyncErrorInfo.Message→Attribution）、MainWindow.Errors.cs（OnErrorOccurred 签名/去重/日志 + ShowErrorPopup 显示下一步）；\n新增 CloudPan.Tests/Client/Services/ErrorAttributionTests.cs（7 用例）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 230/230 通过（原 223 + 新增 7）；dotnet test --filter ErrorAttribution 7/7 通过（网络/权限/磁盘满归因 + AggregateException 嵌套解包 + 多内层取最具体 + 未知异常兜底不露原始串）；CodeQuality+Architecture 11/11 通过。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-032",

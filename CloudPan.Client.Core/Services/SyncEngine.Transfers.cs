@@ -163,7 +163,7 @@ public partial class SyncEngine
                 {
                     _logger.LogWarning("磁盘空间不足，暂停大文件下载: {Path}（需要 {Need}MB，可用 {Avail}MB）",
                         item.FilePath, (item.FileSize.Value + 50_000_000) / 1_048_576, drive.AvailableFreeSpace / 1_048_576);
-                    ErrorOccurred?.Invoke(item.FilePath, "磁盘空间不足，跳过下载", SyncOperation.Download);
+                    ErrorOccurred?.Invoke(item.FilePath, new ErrorAttribution("磁盘空间不足，已跳过下载", "请清理磁盘空间后重试"), SyncOperation.Download);
                     return true; // 从队列移除，后续由全量扫描重新发现
                 }
             }
@@ -180,7 +180,7 @@ public partial class SyncEngine
             item.RetryCount++;
             item.LastError = "下载后文件不存在";
             _logger.LogWarning($"下载后文件不存在（{item.RetryCount}/{MaxRetryCount}）: {item.FilePath}");
-            ErrorOccurred?.Invoke(item.FilePath, "下载后文件不存在", SyncOperation.Download);
+            ErrorOccurred?.Invoke(item.FilePath, new ErrorAttribution("下载后文件不存在", "文件可能已在服务端被删除，请刷新后再试"), SyncOperation.Download);
             return false; // 留在队列；RetryCount 递增使 MaxRetryCount 兜底生效（修复无限重试）
         }
 
@@ -193,7 +193,7 @@ public partial class SyncEngine
                 item.RetryCount++;
                 item.LastError = "下载后哈希校验失败";
                 _logger.LogWarning($"下载后哈希不匹配: {item.FilePath}（期望: {result.ExpectedHash[..16]}..., 实际: {actualHash[..16]}...），重试 {item.RetryCount}/{MaxRetryCount}");
-                ErrorOccurred?.Invoke(item.FilePath, "下载后哈希校验失败", SyncOperation.Download);
+                ErrorOccurred?.Invoke(item.FilePath, new ErrorAttribution("下载后文件校验失败", "文件可能已损坏，请重试；若反复失败请重新同步"), SyncOperation.Download);
                 return false;
             }
         }

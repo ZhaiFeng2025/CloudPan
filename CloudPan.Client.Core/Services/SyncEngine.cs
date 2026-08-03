@@ -98,8 +98,8 @@ public partial class SyncEngine : IDisposable
     public event Action<ConflictInfo>? ConflictDetected;
     /// <summary>冲突已解决事件。参数为相对路径。</summary>
     public event Action<string>? ConflictResolved;
-    /// <summary>同步错误事件。参数：(filePath, errorMessage, operationType)</summary>
-    public event Action<string, string, SyncOperation>? ErrorOccurred;
+    /// <summary>同步错误事件。参数：(filePath, 白话归因, operationType)，归因由 ErrorAttribution 生成。</summary>
+    public event Action<string, ErrorAttribution, SyncOperation>? ErrorOccurred;
 
     /// <summary>进度状态变更事件（详细信息）。</summary>
     /// <summary>最近一次完整同步完成的时间戳。</summary>

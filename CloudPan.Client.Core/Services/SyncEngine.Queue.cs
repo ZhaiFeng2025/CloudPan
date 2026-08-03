@@ -82,7 +82,8 @@ public partial class SyncEngine
                     item.LastError = ex.Message;
                     SyncOperation op = (SyncOperation)item.Operation;
                     _logger.LogError($"传输异常 [{item.RetryCount}/{MaxRetryCount}]: {item.FilePath} — {ex.Message}");
-                    ErrorOccurred?.Invoke(item.FilePath, ex.Message, op);
+                    // F-31：不再透出原始异常字符串，转为白话归因 + 下一步
+                    ErrorOccurred?.Invoke(item.FilePath, ErrorAttribution.FromException(ex), op);
 
                     // 阶梯退避：200ms→400ms→...→2000ms 后保持 2000ms
                     int backoffMs = GetBackoffDelay(item.RetryCount);
@@ -105,7 +106,7 @@ public partial class SyncEngine
                     {
                         SyncOperation op = (SyncOperation)item.Operation;
                         _logger.LogError($"传输放弃（已达最大重试）: {item.FilePath}");
-                        ErrorOccurred?.Invoke(item.FilePath, $"已达最大重试次数 ({item.RetryCount})", op);
+                        ErrorOccurred?.Invoke(item.FilePath, new ErrorAttribution($"已达最大重试次数（{item.RetryCount}）", "请重试；若反复失败，请检查网络或文件权限"), op);
                         NotifyStatus($"同步失败: {Path.GetFileName(item.FilePath)}");
                     }
                 }
