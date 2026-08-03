@@ -93,6 +93,8 @@ builder.Services.Configure<FormOptions>(options =>
 // 后台任务（R-A6：定时任务用 IHostedService）
 builder.Services.AddHostedService<BackgroundHostedService>();
 builder.Services.AddHostedService<UdpDiscoveryHostedService>();
+// WebSocket 心跳（T-057：间隔读 SpecConfig.PingIntervalSeconds，独立 IHostedService 统一托管）
+builder.Services.AddHostedService<WebSocketHeartbeatHostedService>();
 
 var app = builder.Build();
 

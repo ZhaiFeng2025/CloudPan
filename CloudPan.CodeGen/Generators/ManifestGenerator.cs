@@ -227,6 +227,12 @@ public static class ManifestGenerator
         sb.AppendLine("    /// <summary>WebSocket 重连最大退避时间（秒）</summary>");
         sb.AppendLine($"    public const int WebSocketReconnectMaxBackoffSeconds = {(spec.Api.Websocket.ReconnectMaxBackoffSeconds ?? 60)};");
         sb.AppendLine();
+        sb.AppendLine("    /// <summary>WebSocket 心跳间隔（秒）。消费者：WebSocketHeartbeatHostedService</summary>");
+        sb.AppendLine($"    public const int PingIntervalSeconds = {spec.Api.Websocket.Heartbeat.PingIntervalSeconds};");
+        sb.AppendLine();
+        sb.AppendLine("    /// <summary>WebSocket Pong 超时（秒）。消费者：WebSocketHandler 心跳检测</summary>");
+        sb.AppendLine($"    public const int PongTimeoutSeconds = {spec.Api.Websocket.Heartbeat.PongTimeoutSeconds};");
+        sb.AppendLine();
         sb.AppendLine($"    /// <summary>分块上传每块字节数</summary>");
         sb.AppendLine($"    public const int ChunkSize = {chunkSize};");
         sb.AppendLine();

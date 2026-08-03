@@ -42,60 +42,61 @@ public partial class WebSocketHandler
     /// <summary>防止心跳检测重叠执行的轻量锁。</summary>
     private int _heartbeatRunning;
 
-    private void CheckHeartbeats(object? state)
+    /// <summary>
+    /// 心跳检测：Pong 超时清理、发送 Ping、维护设备在线状态。
+    /// 由 WebSocketHeartbeatHostedService 按 SpecConfig.PingIntervalSeconds 周期调用（T-057），
+    /// 本类不再内置裸 Timer；异步安全经 Interlocked 防重入 + 全量 try-catch（CLAUDE.md 7.2）。
+    /// </summary>
+    public async Task CheckHeartbeatsAsync()
     {
-        // 防止上一轮心跳尚未完成时 Timer 再次触发导致重叠执行
+        // 防止上一轮心跳尚未完成时再次触发导致重叠执行
         if (Interlocked.CompareExchange(ref _heartbeatRunning, 1, 0) != 0)
         {
             _logger.LogWarning("心跳检测跳过——上一轮尚未完成");
             return;
         }
 
-        // 使用 Task.Run 包裹异步逻辑，避免 async void 异常崩溃进程（符合 CLAUDE.md 7.2 规范）
-        Task.Run(async () =>
+        try
         {
-            try
+            var now = DateTime.UtcNow;
+            foreach (var (deviceId, conn) in _connections)
             {
-                var now = DateTime.UtcNow;
-                foreach (var (deviceId, conn) in _connections)
+                try
                 {
-                    try
+                    if (conn.Socket.State != WebSocketState.Open)
                     {
-                        if (conn.Socket.State != WebSocketState.Open)
-                        {
-                            _connections.TryRemove(deviceId, out _);
-                            await UpdateDeviceOnlineAsync(deviceId, false);
-                            continue;
-                        }
-
-                        // Pong 超时检测
-                        if (now - conn.LastPong > PongTimeout)
-                        {
-                            _logger.LogWarning("WebSocket 心跳超时: {DeviceId}", deviceId);
-                            _connections.TryRemove(deviceId, out _);
-                            await CloseSafeAsync(conn.Socket, WebSocketCloseStatus.NormalClosure, "heartbeat timeout");
-                            await UpdateDeviceOnlineAsync(deviceId, false);
-                            continue;
-                        }
-
-                        // 发送 Ping
-                        await SendJsonAsync(conn.Socket, new { type = WebSocketEvent.Ping });
+                        _connections.TryRemove(deviceId, out _);
+                        await UpdateDeviceOnlineAsync(deviceId, false);
+                        continue;
                     }
-                    catch (Exception ex)
+
+                    // Pong 超时检测（超时阈值读 SpecConfig.PongTimeoutSeconds）
+                    if (now - conn.LastPong > PongTimeout)
                     {
-                        _logger.LogWarning(ex, "心跳处理异常: {DeviceId}={Error}", deviceId, ex.Message);
+                        _logger.LogWarning("WebSocket 心跳超时: {DeviceId}", deviceId);
+                        _connections.TryRemove(deviceId, out _);
+                        await CloseSafeAsync(conn.Socket, WebSocketCloseStatus.NormalClosure, "heartbeat timeout");
+                        await UpdateDeviceOnlineAsync(deviceId, false);
+                        continue;
                     }
+
+                    // 发送 Ping
+                    await SendJsonAsync(conn.Socket, new { type = WebSocketEvent.Ping });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "心跳处理异常: {DeviceId}={Error}", deviceId, ex.Message);
                 }
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "心跳检测整体异常");
-            }
-            finally
-            {
-                Interlocked.Exchange(ref _heartbeatRunning, 0);
-            }
-        });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "心跳检测整体异常");
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _heartbeatRunning, 0);
+        }
     }
 
     // ============================================================

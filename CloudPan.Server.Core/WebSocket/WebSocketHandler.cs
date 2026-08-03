@@ -17,10 +17,9 @@ public partial class WebSocketHandler : IWebSocketHandler, IDisposable
     private readonly ConcurrentDictionary<string, WebSocketConnection> _connections = new();
     private readonly ITokenService _tokenService;
     private readonly ILogger<WebSocketHandler> _logger;
-    private readonly System.Threading.Timer _heartbeatTimer;
 
-    private static readonly TimeSpan PingInterval = TimeSpan.FromSeconds(30);
-    private static readonly TimeSpan PongTimeout = TimeSpan.FromSeconds(60);
+    // 心跳间隔由 WebSocketHeartbeatHostedService 按 SpecConfig.PingIntervalSeconds 调度（T-057），本类不再内置裸 Timer
+    private static readonly TimeSpan PongTimeout = TimeSpan.FromSeconds(SpecConfig.PongTimeoutSeconds);
     private static readonly TimeSpan AuthTimeout = TimeSpan.FromSeconds(10);
 
     public int ActiveConnectionCount => _connections.Count;
@@ -31,7 +30,6 @@ public partial class WebSocketHandler : IWebSocketHandler, IDisposable
     {
         _tokenService = tokenService;
         _logger = logger;
-        _heartbeatTimer = new System.Threading.Timer(CheckHeartbeats, null, PingInterval, PingInterval);
     }
 
     // ============================================================
@@ -221,7 +219,6 @@ public partial class WebSocketHandler : IWebSocketHandler, IDisposable
 
     public void Dispose()
     {
-        _heartbeatTimer.Dispose();
         foreach (var (_, conn) in _connections)
         {
             try { conn.Socket.Dispose(); } catch (Exception ex)

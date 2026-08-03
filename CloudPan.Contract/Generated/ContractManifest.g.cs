@@ -110,6 +110,12 @@ public static class SpecConfig
     /// <summary>WebSocket 重连最大退避时间（秒）</summary>
     public const int WebSocketReconnectMaxBackoffSeconds = 60;
 
+    /// <summary>WebSocket 心跳间隔（秒）。消费者：WebSocketHeartbeatHostedService</summary>
+    public const int PingIntervalSeconds = 30;
+
+    /// <summary>WebSocket Pong 超时（秒）。消费者：WebSocketHandler 心跳检测</summary>
+    public const int PongTimeoutSeconds = 60;
+
     /// <summary>分块上传每块字节数</summary>
     public const int ChunkSize = 4194304;
 

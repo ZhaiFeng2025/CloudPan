@@ -31,6 +31,7 @@ public class TokenServiceTests : Infrastructure.TestBase
         public Task BroadcastFileDeletedAsync(string path, string? excludeDeviceId = null) => Task.CompletedTask;
         public Task BroadcastFileRenamedAsync(string oldPath, string newPath, string? excludeDeviceId = null) => Task.CompletedTask;
         public Task DisconnectAllAsync(string reason) { DisconnectAllCalls++; return Task.CompletedTask; }
+        public Task CheckHeartbeatsAsync() => Task.CompletedTask;
         public int ActiveConnectionCount => 0;
     }
 

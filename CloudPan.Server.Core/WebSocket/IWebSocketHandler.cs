@@ -20,6 +20,9 @@ public interface IWebSocketHandler
     /// <summary>断开所有已连接设备（Token 轮换可选步骤）。逐个容错，不中断整体。</summary>
     Task DisconnectAllAsync(string reason);
 
+    /// <summary>心跳检测：Pong 超时清理、发送 Ping、维护在线状态。由 WebSocketHeartbeatHostedService 周期调度。</summary>
+    Task CheckHeartbeatsAsync();
+
     /// <summary>当前活跃连接数。</summary>
     int ActiveConnectionCount { get; }
 }

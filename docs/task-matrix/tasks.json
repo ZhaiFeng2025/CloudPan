@@ -2530,7 +2530,7 @@
       "title": "FilesController.Upload 冲突检测下沉 Core",
       "dimension": "architecture",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 5,
       "findingId": "F-56",
       "dependsOn": [],
@@ -2561,7 +2561,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "执行者记录（T-056）：FilesController.Upload 冲突判定与处理下沉 Core。改动文件：① CloudPan.Server.Core/Upload/IUploadService.cs（UploadResult record 改为 outcome 层次——abstract UploadOutcome / UploadSuccessOutcome / UploadConflictOutcome，参照分块上传 ChunkUploadOutcome 模式；UploadAsync 新增 baseVersion 参数）② CloudPan.Server.Core/Upload/UploadService.cs（注入 IFileOperationService；编排前先经 db.FileEntries.FindAsync 读现有条目做冲突检测——baseVersion>0 且服务端当前版本更大→调 HandleUploadConflictAsync 保存冲突副本并返回 UploadConflictOutcome，不推进主文件版本，语义与 ChunkedUploadService.FinalizeAsync 一致）③ CloudPan.Server.Host/Controllers/FilesController.cs（删除 Controller 内 _index.GetByPathAsync 比较 baseVersion 与直接调 HandleUploadConflictAsync 的策略代码，改为只透传 baseVersion 并 switch outcome 映射：成功→WebSocket 广播+200，冲突→CONFLICT 错误体，UploadStorageException→500 不变）④ CloudPan.Tests/Server/Services/UploadServiceTests.cs（新增单测 2 条：Upload_服务端版本大于baseVersion_保存冲突副本不覆盖原文件、Upload_baseVersion匹配_正常覆盖返回新版本）⑤ CloudPan.Tests/Server/Services/VersionHistoryServiceTests.cs（适配 UploadService 新构造签名与 UploadAsync 新参数 baseVersion=0）。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过（295/295，含新增 2 条）；dotnet test --filter Upload 通过（19/19）；dotnet test --filter Architecture 通过（12/12）；grep -n 'HandleUploadConflictAsync\\|GetByPathAsync' CloudPan.Server.Host/Controllers/FilesController.cs 无匹配（EXIT_CODE=1）。",
+      "note": "执行者记录（T-056）：FilesController.Upload 冲突判定与处理下沉 Core。改动文件：① CloudPan.Server.Core/Upload/IUploadService.cs（UploadResult record 改为 outcome 层次——abstract UploadOutcome / UploadSuccessOutcome / UploadConflictOutcome，参照分块上传 ChunkUploadOutcome 模式；UploadAsync 新增 baseVersion 参数）② CloudPan.Server.Core/Upload/UploadService.cs（注入 IFileOperationService；编排前先经 db.FileEntries.FindAsync 读现有条目做冲突检测——baseVersion>0 且服务端当前版本更大→调 HandleUploadConflictAsync 保存冲突副本并返回 UploadConflictOutcome，不推进主文件版本，语义与 ChunkedUploadService.FinalizeAsync 一致）③ CloudPan.Server.Host/Controllers/FilesController.cs（删除 Controller 内 _index.GetByPathAsync 比较 baseVersion 与直接调 HandleUploadConflictAsync 的策略代码，改为只透传 baseVersion 并 switch outcome 映射：成功→WebSocket 广播+200，冲突→CONFLICT 错误体，UploadStorageException→500 不变）④ CloudPan.Tests/Server/Services/UploadServiceTests.cs（新增单测 2 条：Upload_服务端版本大于baseVersion_保存冲突副本不覆盖原文件、Upload_baseVersion匹配_正常覆盖返回新版本）⑤ CloudPan.Tests/Server/Services/VersionHistoryServiceTests.cs（适配 UploadService 新构造签名与 UploadAsync 新参数 baseVersion=0）。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过（295/295，含新增 2 条）；dotnet test --filter Upload 通过（19/19）；dotnet test --filter Architecture 通过（12/12）；grep -n 'HandleUploadConflictAsync\\|GetByPathAsync' CloudPan.Server.Host/Controllers/FilesController.cs 无匹配（EXIT_CODE=1）。｜验收 2026-08-03：自动项 3 条全过——(1) grep -n 'HandleUploadConflictAsync\\|GetByPathAsync' CloudPan.Server.Host/Controllers/FilesController.cs 无匹配（bash grep EXIT_CODE=1，文件存在 156 行，Controller 已不再内嵌冲突策略，符合「只透传 baseVersion」目标）; (2) dotnet test --filter Upload 通过 19/19 0 失败（含 UploadServiceTests 新增普通上传冲突用例 Upload_服务端版本大于baseVersion_保存冲突副本不覆盖原文件 与 Upload_baseVersion匹配_正常覆盖返回新版本，上传冲突 409 语义可测）; (3) dotnet test --filter Architecture 通过 12/12 0 失败 + dotnet build CloudPan.sln -c Release 通过 0 警告 0 错误。无手动项，独立裁决置 done。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -2569,7 +2569,7 @@
       "title": "WebSocket 心跳迁移 IHostedService（间隔读 SpecConfig）",
       "dimension": "architecture",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 5,
       "findingId": "F-57",
       "dependsOn": [],
@@ -2599,8 +2599,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "执行者记录（T-057）：WebSocket 心跳自调度迁移 IHostedService。改动文件：① CloudPan.CodeGen/Generators/ManifestGenerator.cs（SpecConfig 生成新增 PingIntervalSeconds/PongTimeoutSeconds，取自 spec api.websocket.heartbeat，重新生成 ContractManifest.g.cs）② CloudPan.Server.Core/WebSocket/WebSocketHeartbeatHostedService.cs（新增 BackgroundService：PeriodicTimer 按 SpecConfig.PingIntervalSeconds 周期调 IWebSocketHandler.CheckHeartbeatsAsync，回调全量 try-catch 符合 7.2）③ CloudPan.Server.Core/WebSocket/WebSocketHandler.cs（删除 _heartbeatTimer 裸 Timer 字段与 PingInterval 字面量；PongTimeout 改读 SpecConfig.PongTimeoutSeconds）④ CloudPan.Server.Core/WebSocket/WebSocketHandler.Lifecycle.cs（CheckHeartbeats(object?) 改公开 async Task CheckHeartbeatsAsync()，保留 Interlocked 防重入 + 全量 try-catch）⑤ CloudPan.Server.Core/WebSocket/IWebSocketHandler.cs（接口新增 CheckHeartbeatsAsync）⑥ CloudPan.Server.Core/CloudPan.Server.Core.csproj（新增 Microsoft.Extensions.Hosting.Abstractions 8.0.1）⑦ CloudPan.Server.Host/Program.cs（AddHostedService<WebSocketHeartbeatHostedService>）⑧ CloudPan.Tests/Server/Services/TokenServiceTests.cs（FakeWebSocketHandler 补 CheckHeartbeatsAsync）。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release --no-build 通过（295/295）；dotnet test --filter Architecture 通过（12/12）；CodeGen --verify 通过；grep -rn 'System.Threading.Timer' CloudPan.Server.Core/WebSocket/ 无匹配（EXIT_CODE=1）；grep -n 'PingInterval' CloudPan.Server.Core/ 含 SpecConfig.PingIntervalSeconds 引用（WebSocketHeartbeatHostedService.cs）。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-058",
