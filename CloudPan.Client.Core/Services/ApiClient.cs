@@ -60,7 +60,7 @@ public class ApiClient : IApiClient, IDisposable
     {
         try
         {
-            var response = await _http.GetAsync("/api/health", ct);
+            var response = await _http.GetAsync(SpecRoutes.Health, ct);
             return response.IsSuccessStatusCode;
         }
         catch (OperationCanceledException)
@@ -77,7 +77,7 @@ public class ApiClient : IApiClient, IDisposable
     /// <summary>获取文件树（增量）。</summary>
     public async Task<FileTreeResponse?> GetFileTreeAsync(int sinceVersion, int limit = 5000, string? subPath = null, string? cursor = null, CancellationToken ct = default)
     {
-        string url = $"/api/files/tree?sinceVersion={sinceVersion}&limit={limit}";
+        string url = $"{SpecRoutes.FilesTree}?sinceVersion={sinceVersion}&limit={limit}";
         if (!string.IsNullOrEmpty(subPath))
         {
             url += $"&path={Uri.EscapeDataString(subPath)}";
@@ -112,7 +112,7 @@ public class ApiClient : IApiClient, IDisposable
         form.Add(new StringContent(baseVersion.ToString()), "baseVersion");
         form.Add(new StringContent(lastModified), "lastModified");
 
-        var response = await _http.PostAsync("/api/files/upload", form, ct);
+        var response = await _http.PostAsync(SpecRoutes.FilesUpload, form, ct);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<UploadResponse>(JsonOptions, ct);
     }
@@ -121,7 +121,7 @@ public class ApiClient : IApiClient, IDisposable
     /// <exception cref="InvalidDataException">文件 SHA-256 与服务端不匹配（触发重传）。</exception>
     public async Task<DownloadResult?> DownloadAsync(string remotePath, string localPath, IProgress<long>? progress = null, CancellationToken ct = default)
     {
-        string url = $"/api/files/download?path={Uri.EscapeDataString(remotePath)}";
+        string url = $"{SpecRoutes.FilesDownload}?path={Uri.EscapeDataString(remotePath)}";
         var response = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
         response.EnsureSuccessStatusCode();
 
@@ -184,7 +184,7 @@ public class ApiClient : IApiClient, IDisposable
     /// <summary>删除文件。</summary>
     public async Task DeleteAsync(string path, int baseVersion, CancellationToken ct = default)
     {
-        var response = await _http.PostAsJsonAsync("/api/files/delete",
+        var response = await _http.PostAsJsonAsync(SpecRoutes.FilesDelete,
             new { path, baseVersion }, JsonOptions, ct);
         response.EnsureSuccessStatusCode();
     }
@@ -192,7 +192,7 @@ public class ApiClient : IApiClient, IDisposable
     /// <summary>移动/重命名文件。</summary>
     public async Task MoveAsync(string oldPath, string newPath, int baseVersion, CancellationToken ct = default)
     {
-        var response = await _http.PostAsJsonAsync("/api/files/move",
+        var response = await _http.PostAsJsonAsync(SpecRoutes.FilesMove,
             new { oldPath, newPath, baseVersion }, JsonOptions, ct);
         response.EnsureSuccessStatusCode();
     }
@@ -200,7 +200,7 @@ public class ApiClient : IApiClient, IDisposable
     /// <summary>创建文件夹。</summary>
     public async Task MkdirAsync(string path, CancellationToken ct = default)
     {
-        var response = await _http.PostAsJsonAsync("/api/files/mkdir",
+        var response = await _http.PostAsJsonAsync(SpecRoutes.FilesMkdir,
             new { path }, JsonOptions, ct);
         response.EnsureSuccessStatusCode();
     }
@@ -212,7 +212,7 @@ public class ApiClient : IApiClient, IDisposable
     /// <summary>获取回收站列表（按删除时间倒序）。</summary>
     public async Task<List<TrashItem>> GetTrashAsync(CancellationToken ct = default)
     {
-        var response = await _http.GetAsync("/api/trash", ct);
+        var response = await _http.GetAsync(SpecRoutes.Trash, ct);
         response.EnsureSuccessStatusCode();
         var result = await response.Content.ReadFromJsonAsync<TrashListResponse>(JsonOptions, ct);
         return result?.Data?.ToList() ?? new List<TrashItem>();
@@ -221,7 +221,7 @@ public class ApiClient : IApiClient, IDisposable
     /// <summary>恢复回收站条目到原位（撤销删除）。</summary>
     public async Task RestoreTrashAsync(string metaFileName, CancellationToken ct = default)
     {
-        var response = await _http.PostAsJsonAsync("/api/trash/restore",
+        var response = await _http.PostAsJsonAsync(SpecRoutes.TrashRestore,
             new { metaFileName }, JsonOptions, ct);
         response.EnsureSuccessStatusCode();
     }
@@ -229,7 +229,7 @@ public class ApiClient : IApiClient, IDisposable
     /// <summary>清空回收站。</summary>
     public async Task EmptyTrashAsync(CancellationToken ct = default)
     {
-        var response = await _http.DeleteAsync("/api/trash/empty", ct);
+        var response = await _http.DeleteAsync(SpecRoutes.TrashEmpty, ct);
         response.EnsureSuccessStatusCode();
     }
 
@@ -241,7 +241,7 @@ public class ApiClient : IApiClient, IDisposable
     public async Task<ShareCreateResponse?> CreateShareAsync(
         string filePath, string? password, string? expiresAt, int? maxDownloads, CancellationToken ct = default)
     {
-        var response = await _http.PostAsJsonAsync("/api/shares",
+        var response = await _http.PostAsJsonAsync(SpecRoutes.Shares,
             new { filePath, password, expiresAt, maxDownloads }, JsonOptions, ct);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<ShareCreateResponse>(JsonOptions, ct);
@@ -250,7 +250,8 @@ public class ApiClient : IApiClient, IDisposable
     /// <summary>撤销分享链接。返回 false 表示分享不存在或已失效。</summary>
     public async Task<bool> RevokeShareAsync(string shareId, CancellationToken ct = default)
     {
-        var response = await _http.DeleteAsync($"/api/shares/{Uri.EscapeDataString(shareId)}", ct);
+        var response = await _http.DeleteAsync(
+            SpecRoutes.SharesByShareId.Replace("{shareId}", Uri.EscapeDataString(shareId)), ct);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
             return false;
@@ -264,7 +265,7 @@ public class ApiClient : IApiClient, IDisposable
     public async Task<List<VersionItem>> GetVersionsAsync(string path, int limit = 50, CancellationToken ct = default)
     {
         var response = await _http.GetAsync(
-            $"/api/versions?path={Uri.EscapeDataString(path)}&limit={limit}", ct);
+            $"{SpecRoutes.Versions}?path={Uri.EscapeDataString(path)}&limit={limit}", ct);
         response.EnsureSuccessStatusCode();
         var result = await response.Content.ReadFromJsonAsync<VersionListResponse>(JsonOptions, ct);
         return result?.Data?.ToList() ?? new List<VersionItem>();
@@ -273,7 +274,7 @@ public class ApiClient : IApiClient, IDisposable
     /// <summary>回滚文件到指定历史版本（服务端会先存档当前版本，再用历史文件覆盖）。</summary>
     public async Task<VersionRestoreResponse?> RestoreVersionAsync(string filePath, int version, CancellationToken ct = default)
     {
-        var response = await _http.PostAsJsonAsync("/api/versions/restore",
+        var response = await _http.PostAsJsonAsync(SpecRoutes.VersionsRestore,
             new { filePath, version }, JsonOptions, ct);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<VersionRestoreResponse>(JsonOptions, ct);
@@ -330,7 +331,7 @@ public class ApiClient : IApiClient, IDisposable
             form.Add(new StringContent(baseVersion.ToString()), "baseVersion");
             form.Add(new StringContent(lastModified), "lastModified");
 
-            var response = await _http.PostAsync("/api/files/upload/chunk", form, ct);
+            var response = await _http.PostAsync(SpecRoutes.FilesUploadChunk, form, ct);
 
             // 处理冲突
             if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
@@ -366,7 +367,7 @@ public class ApiClient : IApiClient, IDisposable
         try
         {
             var response = await _http.GetAsync(
-                $"/api/files/upload/chunk/status?path={Uri.EscapeDataString(path)}", ct);
+                $"{SpecRoutes.FilesUploadChunkStatus}?path={Uri.EscapeDataString(path)}", ct);
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
                 return null;

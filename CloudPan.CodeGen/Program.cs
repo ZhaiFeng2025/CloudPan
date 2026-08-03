@@ -58,6 +58,7 @@ public static class Program
                 ["错误响应"] = (SharedOutputDir, "ErrorResponse.g.cs",     ErrorResponseGenerator.Generate(spec)),
                 ["API响应"]  = (SharedOutputDir, "ApiResponses.g.cs",      ApiResponseGenerator.Generate(spec)),
                 ["设置"]     = (SharedOutputDir, "Settings.g.cs",          SettingsGenerator.Generate(spec)),
+                ["路由常量"] = (SharedOutputDir, "SpecRoutes.g.cs",        ApiClientGenerator.Generate(spec)),
                 // Controller 骨架仅作参考，实际业务逻辑需手写，不再自动生成
             };
 
