@@ -125,6 +125,10 @@ public partial class SyncEngine : IDisposable
 
     private readonly List<System.Text.RegularExpressions.Regex> _ignorePatterns;
 
+    // T-070：查询侧/管理侧拆分为独立服务（只读操作不触碰状态机可变状态，见 SyncBrowseService/SyncManageService）
+    private readonly SyncBrowseService _browse;
+    private readonly SyncManageService _manage;
+
     // 构造函数中初始化 _ignorePatterns（见上方构造函数修改）
 
     public SyncEngine(IApiClient api, SyncConfig config, IDbContextFactory<ClientDbContext> dbFactory, ILogger<SyncEngine> logger, WebSocketClient? wsClient = null, FileWatcherService? fileWatcher = null)
@@ -137,6 +141,8 @@ public partial class SyncEngine : IDisposable
         _ignorePatterns = SyncIgnoreParser.LoadFromSyncRoot(_syncRoot);
         _selectedPaths = config.SelectedPaths ?? new List<string> { "/" };
         _wsClient = wsClient;
+        _browse = new SyncBrowseService(_api, _dbFactory, _logger, _syncRoot, _ignorePatterns);
+        _manage = new SyncManageService(_api, _dbFactory, _logger, _syncRoot);
 
         // 订阅 WebSocket 推送事件（具名方法，Dispose 中取消订阅防止事件源持有本引擎引用导致泄漏）
         if (_wsClient != null)
@@ -330,4 +336,55 @@ public partial class SyncEngine : IDisposable
         _syncLock.Dispose();
         _fileWatcher?.Dispose();
     }
+
+    // ────────────────────────────────────────────────────────────
+    // T-070 委托：查询侧/管理侧只读操作已拆分到 SyncBrowseService/SyncManageService，
+    // 此处保留公开 API（MainWindow/测试调用点不变，行为不变），转发到对应服务。
+    // ────────────────────────────────────────────────────────────
+
+    /// <inheritdoc cref="SyncBrowseService.GetFileBrowserAsync"/>
+    public Task<IReadOnlyList<FileBrowseItem>> GetFileBrowserAsync(
+        string directoryPath, string? searchText = null, CancellationToken ct = default)
+        => _browse.GetFileBrowserAsync(directoryPath, searchText, ct);
+
+    /// <inheritdoc cref="SyncBrowseService.GetFileSyncStatusesAsync"/>
+    public Task<IReadOnlyList<FileSyncStatusItem>> GetFileSyncStatusesAsync(CancellationToken ct = default)
+        => _browse.GetFileSyncStatusesAsync(ct);
+
+    /// <inheritdoc cref="SyncBrowseService.DownloadRemoteToTempAsync"/>
+    public Task<string?> DownloadRemoteToTempAsync(string relativePath, CancellationToken ct = default)
+        => _browse.DownloadRemoteToTempAsync(relativePath, ct);
+
+    /// <inheritdoc cref="SyncManageService.GetTrashAsync"/>
+    public Task<List<TrashItem>> GetTrashAsync(CancellationToken ct = default)
+        => _manage.GetTrashAsync(ct);
+
+    /// <inheritdoc cref="SyncManageService.RestoreTrashAsync"/>
+    public Task<bool> RestoreTrashAsync(TrashItem item, CancellationToken ct = default)
+        => _manage.RestoreTrashAsync(item, ct);
+
+    /// <inheritdoc cref="SyncManageService.EmptyTrashAsync"/>
+    public Task<bool> EmptyTrashAsync(CancellationToken ct = default)
+        => _manage.EmptyTrashAsync(ct);
+
+    /// <inheritdoc cref="SyncManageService.DeleteForTrashAsync"/>
+    public Task<TrashItem?> DeleteForTrashAsync(string path, CancellationToken ct = default)
+        => _manage.DeleteForTrashAsync(path, ct);
+
+    /// <inheritdoc cref="SyncManageService.CreateShareAsync"/>
+    public Task<ShareCreateResponse?> CreateShareAsync(
+        string filePath, string? password, string? expiresAt, int? maxDownloads, CancellationToken ct = default)
+        => _manage.CreateShareAsync(filePath, password, expiresAt, maxDownloads, ct);
+
+    /// <inheritdoc cref="SyncManageService.RevokeShareAsync"/>
+    public Task<bool> RevokeShareAsync(string shareId, CancellationToken ct = default)
+        => _manage.RevokeShareAsync(shareId, ct);
+
+    /// <inheritdoc cref="SyncManageService.GetVersionHistoryAsync"/>
+    public Task<List<VersionItem>> GetVersionHistoryAsync(string path, int limit = 50, CancellationToken ct = default)
+        => _manage.GetVersionHistoryAsync(path, limit, ct);
+
+    /// <inheritdoc cref="SyncManageService.RestoreVersionAsync"/>
+    public Task<VersionRestoreResponse?> RestoreVersionAsync(string filePath, int version, CancellationToken ct = default)
+        => _manage.RestoreVersionAsync(filePath, version, ct);
 }

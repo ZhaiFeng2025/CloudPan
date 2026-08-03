@@ -1,15 +1,33 @@
 using CloudPan.Contract;
+using CloudPan.Infrastructure.Persistence.Client;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace CloudPan.Client.Core.Services;
 
 /// <summary>
-/// SyncEngine 部分实现：回收站操作（T-014）——文件浏览删除默认进回收站（服务端软删墓碑+移入回收站），
-/// 提供列表/恢复/清空与删除后 5 秒内撤销。
+/// 同步引擎管理操作服务（T-070 拆分）：回收站（T-014）、分享（T-018）、版本历史（T-018）。
+/// 只读/管理侧操作，不触碰同步状态机的可变状态（计数器/事件/锁），依赖注入 ApiClient/DbContextFactory。
 /// </summary>
-public partial class SyncEngine
+internal sealed class SyncManageService
 {
+    private readonly IApiClient _api;
+    private readonly IDbContextFactory<ClientDbContext> _dbFactory;
+    private readonly ILogger<SyncEngine> _logger;
+    private readonly string _syncRoot;
+
+    public SyncManageService(
+        IApiClient api,
+        IDbContextFactory<ClientDbContext> dbFactory,
+        ILogger<SyncEngine> logger,
+        string syncRoot)
+    {
+        _api = api;
+        _dbFactory = dbFactory;
+        _logger = logger;
+        _syncRoot = syncRoot;
+    }
+
     /// <summary>获取回收站条目列表（按删除时间倒序）。</summary>
     public async Task<List<TrashItem>> GetTrashAsync(CancellationToken ct = default)
     {
@@ -94,7 +112,7 @@ public partial class SyncEngine
         }
 
         // 2. 本地副本即时删除（浏览视图立即消失；其他设备由墓碑传播删本地副本）
-        string localPath = ToLocalPath(path);
+        string localPath = SyncPath.ToLocalPath(_syncRoot, path);
         try
         {
             if (Directory.Exists(localPath))
@@ -103,7 +121,7 @@ public partial class SyncEngine
             }
             else if (File.Exists(localPath))
             {
-                SafeDelete(localPath);
+                SyncPath.SafeDelete(localPath, _logger);
             }
         }
         catch (Exception ex)
@@ -125,6 +143,63 @@ public partial class SyncEngine
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "查询回收站条目失败（不影响删除）: {Path}", path);
+            return null;
+        }
+    }
+
+    /// <summary>创建分享链接。失败返回 null。</summary>
+    public async Task<ShareCreateResponse?> CreateShareAsync(
+        string filePath, string? password, string? expiresAt, int? maxDownloads, CancellationToken ct = default)
+    {
+        try
+        {
+            return await _api.CreateShareAsync(filePath, password, expiresAt, maxDownloads, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "创建分享链接失败: {Path}", filePath);
+            return null;
+        }
+    }
+
+    /// <summary>撤销分享链接。返回 false 表示分享不存在或已失效，或请求失败。</summary>
+    public async Task<bool> RevokeShareAsync(string shareId, CancellationToken ct = default)
+    {
+        try
+        {
+            return await _api.RevokeShareAsync(shareId, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "撤销分享失败: {ShareId}", shareId);
+            return false;
+        }
+    }
+
+    /// <summary>获取文件历史版本列表（按版本倒序）。失败返回空列表。</summary>
+    public async Task<List<VersionItem>> GetVersionHistoryAsync(string path, int limit = 50, CancellationToken ct = default)
+    {
+        try
+        {
+            return await _api.GetVersionsAsync(path, limit, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "获取版本历史失败: {Path}", path);
+            return new List<VersionItem>();
+        }
+    }
+
+    /// <summary>回滚文件到指定历史版本。失败返回 null。</summary>
+    public async Task<VersionRestoreResponse?> RestoreVersionAsync(string filePath, int version, CancellationToken ct = default)
+    {
+        try
+        {
+            return await _api.RestoreVersionAsync(filePath, version, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "回滚版本失败: {Path} v{Version}", filePath, version);
             return null;
         }
     }

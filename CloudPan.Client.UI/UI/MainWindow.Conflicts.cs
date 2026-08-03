@@ -133,8 +133,35 @@ public partial class MainWindow
         int idx = _conflictListBox.SelectedIndex;
         if (idx >= 0 && idx < _conflicts.Count)
         {
-            ShowConflictResolution(_conflicts[idx].Info);
+            ConflictResolutionDialog.Show(this, _engine, _conflicts[idx].Info);
         }
+    }
+
+    /// <summary>执行冲突解决，向 SyncEngine 发送回调，更新冲突列表（由 ConflictResolutionDialog 回调）。</summary>
+    internal void ResolveConflict(ConflictInfo conflict, ConflictResolution resolution)
+    {
+        _conflicts.RemoveAll(c => c.Info == conflict);
+        UpdateConflictBadge();
+        RefreshConflictListItems();
+        if (_conflicts.Count == 0)
+        {
+            _conflictListForm?.Close();
+        }
+
+        string fileName = Path.GetFileName(conflict.RelativePath);
+        AddLog(resolution switch
+        {
+            ConflictResolution.KeepLocal => $"冲突解决: 保留本机版本 — {fileName}",
+            ConflictResolution.KeepRemote => $"冲突解决: 保留服务端版本 — {fileName}",
+            ConflictResolution.KeepBoth => $"冲突解决: 保留两者 — {fileName}",
+            _ => $"冲突解决: {fileName}"
+        });
+
+        Task.Run(async () =>
+        {
+            try { await _engine.OnConflictResolved(conflict.RelativePath, resolution); }
+            catch (Exception ex) { AddLog($"冲突解决失败: {ex.Message}"); }
+        });
     }
 
     private void ConflictListClose_Click(object? sender, EventArgs e) => _conflictListForm?.Close();
@@ -158,7 +185,7 @@ public partial class MainWindow
             var (info, detectedAt) = _conflicts[i];
             string name = Path.GetFileName(info.RelativePath);
             string localTime = (info.LocalModifiedTime ?? DateTime.MinValue).ToString("HH:mm:ss");
-            string localSize = FormatFileSize(info.LocalFileSize);
+            string localSize = UiFormat.FormatFileSize(info.LocalFileSize);
             string remoteTime = info.RemoteModifiedTime?.ToString("HH:mm:ss") ?? "—";
             _conflictListBox.Items.Add($"[{i + 1}] {name}  本机: {localTime} / {localSize}  云盘: {remoteTime}  检测于: {detectedAt:HH:mm:ss}");
         }

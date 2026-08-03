@@ -1,24 +1,30 @@
 using System.Diagnostics;
+using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Windows.Forms;
 using CloudPan.Client.Core.Services;
+using CloudPan.Contract;
 using CloudPan.Infrastructure.Design;
 
 namespace CloudPan.Client.UI;
 
-/// <summary>MainWindow 部分类：冲突解决对话框（非模态）、版本信息面板与格式化工具（T-036）。</summary>
-public partial class MainWindow
+/// <summary>
+/// 冲突解决对话框（T-070 拆分）：非模态版本对比 + 白话选项（保留两者/本机/服务端）。
+/// 由 MainWindow 在冲突列表中逐条点开调用，回调 MainWindow.ResolveConflict 完成解决。
+/// </summary>
+internal static class ConflictResolutionDialog
 {
     /// <summary>
     /// 显示冲突解决对话框——非模态（批量冲突只弹聚合列表，此处由用户逐条点开）。
     /// 选项配白话解释，默认「保留两者」（安全，不丢任何内容），提供「对比两个版本」。
     /// </summary>
-    private void ShowConflictResolution(ConflictInfo conflict)
+    public static void Show(MainWindow window, SyncEngine engine, ConflictInfo conflict)
     {
         string fileName = Path.GetFileName(conflict.RelativePath);
         string localTime = conflict.LocalModifiedTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "未知";
-        string localSizeStr = FormatFileSize(conflict.LocalFileSize);
+        string localSizeStr = UiFormat.FormatFileSize(conflict.LocalFileSize);
         string remoteTime = conflict.RemoteModifiedTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "未知";
-        string remoteSizeStr = conflict.RemoteFileSize.HasValue ? FormatFileSize(conflict.RemoteFileSize.Value) : "未知";
+        string remoteSizeStr = conflict.RemoteFileSize.HasValue ? UiFormat.FormatFileSize(conflict.RemoteFileSize.Value) : "未知";
 
         Form dialog = new Form
         {
@@ -88,7 +94,7 @@ public partial class MainWindow
         void OnKeepBothClick(object? s, EventArgs e)
         {
             dialog.Close();
-            ResolveConflict(conflict, ConflictResolution.KeepBoth);
+            window.ResolveConflict(conflict, ConflictResolution.KeepBoth);
         }
         btnBoth.Click += OnKeepBothClick;
         optionPanel.Controls.Add(btnBoth, 0, 0);
@@ -105,7 +111,7 @@ public partial class MainWindow
         void OnKeepLocalClick(object? s, EventArgs e)
         {
             dialog.Close();
-            ResolveConflict(conflict, ConflictResolution.KeepLocal);
+            window.ResolveConflict(conflict, ConflictResolution.KeepLocal);
         }
         btnLocal.Click += OnKeepLocalClick;
         optionPanel.Controls.Add(btnLocal, 0, 1);
@@ -122,7 +128,7 @@ public partial class MainWindow
         void OnKeepRemoteClick(object? s, EventArgs e)
         {
             dialog.Close();
-            ResolveConflict(conflict, ConflictResolution.KeepRemote);
+            window.ResolveConflict(conflict, ConflictResolution.KeepRemote);
         }
         btnRemote.Click += OnKeepRemoteClick;
         optionPanel.Controls.Add(btnRemote, 0, 2);
@@ -146,7 +152,7 @@ public partial class MainWindow
                 {
                     Process.Start(new ProcessStartInfo(localPath) { UseShellExecute = true });
                 }
-                string? remoteTemp = await _engine.DownloadRemoteToTempAsync(conflict.RelativePath);
+                string? remoteTemp = await engine.DownloadRemoteToTempAsync(conflict.RelativePath);
                 if (remoteTemp != null && File.Exists(remoteTemp))
                 {
                     Process.Start(new ProcessStartInfo(remoteTemp) { UseShellExecute = true });
@@ -159,7 +165,7 @@ public partial class MainWindow
             }
             catch (Exception ex)
             {
-                AddLog($"对比打开失败: {ex.Message}");
+                window.AddLog($"对比打开失败: {ex.Message}");
             }
         }
         btnCompare.Click += OnCompareVersionsClick;
@@ -173,7 +179,7 @@ public partial class MainWindow
         btnBoth.Focus();
 
         dialog.Controls.Add(layout);
-        dialog.Show(this); // 非模态：冲突处理路径不再同步弹模态对话框（F-36/T-036）
+        dialog.Show(window); // 非模态：冲突处理路径不再同步弹模态对话框（F-36/T-036）
     }
 
     /// <summary>构建版本信息面板（左侧色条 + 文字）。</summary>
@@ -214,59 +220,4 @@ public partial class MainWindow
         Margin = new Padding(8, 0, 0, 0),
         Font = new Font((SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont).FontFamily, 9f),
     };
-
-    /// <summary>执行冲突解决，向 SyncEngine 发送回调，更新冲突列表。</summary>
-    private void ResolveConflict(ConflictInfo conflict, ConflictResolution resolution)
-    {
-        _conflicts.RemoveAll(c => c.Info == conflict);
-        UpdateConflictBadge();
-        RefreshConflictListItems();
-        if (_conflicts.Count == 0)
-        {
-            _conflictListForm?.Close();
-        }
-
-        string fileName = Path.GetFileName(conflict.RelativePath);
-        AddLog(resolution switch
-        {
-            ConflictResolution.KeepLocal => $"冲突解决: 保留本机版本 — {fileName}",
-            ConflictResolution.KeepRemote => $"冲突解决: 保留服务端版本 — {fileName}",
-            ConflictResolution.KeepBoth => $"冲突解决: 保留两者 — {fileName}",
-            _ => $"冲突解决: {fileName}"
-        });
-
-        Task.Run(async () =>
-        {
-            try { await _engine.OnConflictResolved(conflict.RelativePath, resolution); }
-            catch (Exception ex) { AddLog($"冲突解决失败: {ex.Message}"); }
-        });
-    }
-
-    // ================================================================
-    // 格式化工具
-    // ================================================================
-
-    /// <summary>格式化文件大小为人类可读形式（B/KB/MB/GB）。</summary>
-    private static string FormatFileSize(long bytes)
-    {
-        return bytes switch
-        {
-            < 1024 => $"{bytes} B",
-            < 1024 * 1024 => $"{bytes / 1024.0:F1} KB",
-            < 1024 * 1024 * 1024 => $"{bytes / (1024.0 * 1024.0):F1} MB",
-            _ => $"{bytes / (1024.0 * 1024.0 * 1024.0):F2} GB"
-        };
-    }
-
-    /// <summary>格式化数据传输速率（字节/秒 → "12.3 MB" 形式，小于 1MB 时显示 KB）。</summary>
-    private static string FormatDataRate(double bytesPerSecond)
-    {
-        return bytesPerSecond switch
-        {
-            < 1024 => $"{bytesPerSecond:F0} B",
-            < 1024 * 1024 => $"{bytesPerSecond / 1024.0:F1} KB",
-            < 1024 * 1024 * 1024 => $"{bytesPerSecond / (1024.0 * 1024.0):F1} MB",
-            _ => $"{bytesPerSecond / (1024.0 * 1024.0 * 1024.0):F2} GB"
-        };
-    }
 }

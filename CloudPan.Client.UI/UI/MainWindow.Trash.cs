@@ -151,7 +151,7 @@ public partial class MainWindow
                 foreach (TrashItem t in data)
                 {
                     ListViewItem lvi = new ListViewItem(DisplayName(t)) { Tag = t };
-                    lvi.SubItems.Add(t.IsDirectory ? "" : FormatFileSize(t.FileSize));
+                    lvi.SubItems.Add(t.IsDirectory ? "" : UiFormat.FormatFileSize(t.FileSize));
                     lvi.SubItems.Add(t.AgeDays > 0 ? $"{t.AgeDays} 天前" : "刚刚");
                     list.Items.Add(lvi);
                 }

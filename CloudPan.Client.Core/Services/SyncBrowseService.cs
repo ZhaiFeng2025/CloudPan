@@ -1,6 +1,9 @@
 using CloudPan.Contract;
 using CloudPan.Infrastructure.Models;
+using CloudPan.Infrastructure.Persistence.Client;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using System.Text.RegularExpressions;
 
 namespace CloudPan.Client.Core.Services;
 
@@ -14,9 +17,36 @@ public sealed record FileBrowseItem(
     int State,
     bool LocalExists);
 
-/// <summary>SyncEngine 部分实现：文件浏览数据查询（T-013，主窗口文件浏览主视图的数据来源）。</summary>
-public partial class SyncEngine
+/// <summary>每文件同步状态视图项——供 UI 渲染每文件状态图标（✓↻!✗☁）。</summary>
+public sealed record FileSyncStatusItem(string RelativePath, bool IsDirectory, int State, bool LocalExists);
+
+/// <summary>
+/// 同步引擎查询/读取服务（T-070 拆分）：文件浏览、每文件状态、冲突对比下载。
+/// 只读操作，不触碰同步状态机的可变状态（计数器/事件/锁/排除集热更新），
+/// 依赖注入 ApiClient/DbContextFactory，路径逻辑统一走 <see cref="SyncPath"/>。
+/// </summary>
+internal sealed class SyncBrowseService
 {
+    private readonly IApiClient _api;
+    private readonly IDbContextFactory<ClientDbContext> _dbFactory;
+    private readonly ILogger<SyncEngine> _logger;
+    private readonly string _syncRoot;
+    private readonly List<Regex> _ignorePatterns;
+
+    public SyncBrowseService(
+        IApiClient api,
+        IDbContextFactory<ClientDbContext> dbFactory,
+        ILogger<SyncEngine> logger,
+        string syncRoot,
+        List<Regex> ignorePatterns)
+    {
+        _api = api;
+        _dbFactory = dbFactory;
+        _logger = logger;
+        _syncRoot = syncRoot;
+        _ignorePatterns = ignorePatterns;
+    }
+
     /// <summary>
     /// 返回浏览视图数据：目录模式下返回 <paramref name="directoryPath"/> 的直接子项；
     /// 搜索模式下返回其下所有路径中名称包含关键字的项（含深层子目录，递归定位文件）。
@@ -58,16 +88,16 @@ public partial class SyncEngine
         // 3. 本地文件系统（新增本地文件/目录 → Modified/Uploading）
         HashSet<string> localFiles = new(StringComparer.OrdinalIgnoreCase);
         HashSet<string> localDirs = new(StringComparer.OrdinalIgnoreCase);
-        if (Directory.Exists(NormalizePath(_syncRoot)))
+        if (Directory.Exists(SyncPath.NormalizePath(_syncRoot)))
         {
-            foreach (string fullPath in Directory.EnumerateFileSystemEntries(NormalizePath(_syncRoot), "*", SearchOption.AllDirectories))
+            foreach (string fullPath in Directory.EnumerateFileSystemEntries(SyncPath.NormalizePath(_syncRoot), "*", SearchOption.AllDirectories))
             {
-                if (ShouldIgnoreScan(fullPath))
+                if (SyncPath.ShouldIgnore(_syncRoot, fullPath, _ignorePatterns))
                 {
                     continue;
                 }
 
-                string rel = ToRelativePath(fullPath);
+                string rel = SyncPath.ToRelativePath(_syncRoot, fullPath);
                 if (Directory.Exists(fullPath))
                 {
                     localDirs.Add(rel);
@@ -80,7 +110,7 @@ public partial class SyncEngine
         }
 
         // 4. 归一化浏览路径："/" 根或 "/a/b" 形式（无尾斜杠）
-        string normDir = NormalizePath(directoryPath) ?? "/";
+        string normDir = SyncPath.NormalizePath(directoryPath) ?? "/";
         normDir = normDir.Replace('\\', '/').TrimEnd('/');
         if (normDir.Length == 0 || !normDir.StartsWith('/'))
         {
@@ -166,7 +196,7 @@ public partial class SyncEngine
             long size = 0;
             try
             {
-                size = new FileInfo(ToLocalPath(rel)).Length;
+                size = new FileInfo(SyncPath.ToLocalPath(_syncRoot, rel)).Length;
             }
             catch (Exception ex)
             {
@@ -200,5 +230,123 @@ public partial class SyncEngine
             return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
         });
         return result;
+    }
+
+    /// <summary>
+    /// 读取同步目录每文件的当前同步状态：
+    /// 服务端快照 FileState（Synced/CloudOnly/Deleting/Modified）+ 待处理队列（Uploading/Downloading/Deleting）+ 本地存在性。
+    /// 冲突与错误由 UI 依据本地维护的冲突/错误列表叠加，不在此查询（避免与 UI 状态源重复）。
+    /// </summary>
+    public async Task<IReadOnlyList<FileSyncStatusItem>> GetFileSyncStatusesAsync(CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        // 1. 待处理队列 → 瞬态状态（Uploading/Downloading/Deleting），优先级高于快照状态
+        var queueOps = await db.SyncQueue
+            .Where(q => q.Operation == (int)SyncOperation.Upload
+                     || q.Operation == (int)SyncOperation.Download
+                     || q.Operation == (int)SyncOperation.Delete)
+            .ToListAsync(ct);
+        var queueStateByPath = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var q in queueOps)
+        {
+            int state = q.Operation switch
+            {
+                (int)SyncOperation.Upload => (int)FileState.Uploading,
+                (int)SyncOperation.Download => (int)FileState.Downloading,
+                _ => (int)FileState.Deleting
+            };
+            queueStateByPath[q.FilePath] = state;
+        }
+
+        // 2. 服务端快照（Synced/CloudOnly/Deleting/Modified）
+        var snapshots = await db.RemoteSnapshots.ToListAsync(ct);
+
+        // 3. 本地文件/目录集合（相对路径，忽略 .cloudpan 与忽略规则）
+        HashSet<string> localFiles = new(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> localDirs = new(StringComparer.OrdinalIgnoreCase);
+        if (Directory.Exists(SyncPath.NormalizePath(_syncRoot)))
+        {
+            foreach (string fullPath in Directory.EnumerateFileSystemEntries(SyncPath.NormalizePath(_syncRoot), "*", SearchOption.AllDirectories))
+            {
+                if (SyncPath.ShouldIgnore(_syncRoot, fullPath, _ignorePatterns))
+                {
+                    continue;
+                }
+
+                string rel = SyncPath.ToRelativePath(_syncRoot, fullPath);
+                if (Directory.Exists(fullPath))
+                {
+                    localDirs.Add(rel);
+                }
+                else
+                {
+                    localFiles.Add(rel);
+                }
+            }
+        }
+
+        var results = new List<FileSyncStatusItem>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // 4a. 快照项（含 CloudOnly 远端文件——本地无副本但用户需看到状态）
+        foreach (var snap in snapshots)
+        {
+            seen.Add(snap.Path);
+            bool isDir = snap.Type == (int)FileType.Directory;
+            bool localExists = isDir ? localDirs.Contains(snap.Path) : localFiles.Contains(snap.Path);
+            int state = queueStateByPath.TryGetValue(snap.Path, out int qState) ? qState : snap.State;
+            results.Add(new FileSyncStatusItem(snap.Path, isDir, state, localExists));
+        }
+
+        // 4b. 本地有、快照无的文件/目录 → 新文件待上传（Modified/Uploading）
+        foreach (string rel in localFiles)
+        {
+            if (seen.Contains(rel))
+            {
+                continue;
+            }
+
+            seen.Add(rel);
+            int state = queueStateByPath.TryGetValue(rel, out int qState) ? qState : (int)FileState.Modified;
+            results.Add(new FileSyncStatusItem(rel, false, state, true));
+        }
+
+        foreach (string rel in localDirs)
+        {
+            if (seen.Contains(rel))
+            {
+                continue;
+            }
+
+            seen.Add(rel);
+            int state = queueStateByPath.TryGetValue(rel, out int qState) ? qState : (int)FileState.Modified;
+            results.Add(new FileSyncStatusItem(rel, true, state, true));
+        }
+
+        // 按路径排序，便于逐文件定位
+        results.Sort((a, b) => string.Compare(a.RelativePath, b.RelativePath, StringComparison.OrdinalIgnoreCase));
+        return results;
+    }
+
+    /// <summary>
+    /// 下载服务端当前版本到临时目录，返回临时文件路径（用于冲突解决时的「打开两版本对比」）。
+    /// 下载失败或服务端无此文件返回 null。
+    /// </summary>
+    public async Task<string?> DownloadRemoteToTempAsync(string relativePath, CancellationToken ct = default)
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), "CloudPanCompare");
+        Directory.CreateDirectory(tempDir);
+        string ext = Path.GetExtension(relativePath);
+        string tempPath = Path.Combine(tempDir,
+            $"{Path.GetFileNameWithoutExtension(relativePath)}.remote{DateTime.Now:yyyyMMddHHmmss}{ext}");
+
+        var result = await _api.DownloadAsync(relativePath, tempPath, ct: ct);
+        if (result == null || !File.Exists(tempPath))
+        {
+            return null;
+        }
+        _logger.LogInformation("已下载服务端版本到临时文件供对比: {Path} → {Temp}", relativePath, tempPath);
+        return tempPath;
     }
 }

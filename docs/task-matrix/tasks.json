@@ -3475,7 +3475,7 @@
       "title": "Android 新建目录去尾斜杠（服务端 TrimEnd 兜底）",
       "dimension": "function",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 6,
       "findingId": "F-78",
       "dependsOn": [],
@@ -3506,7 +3506,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "执行 2026-08-03（task-executor）：T-069 Android 新建目录去尾斜杠 + 服务端 TrimEnd 兜底。问题——Android FileListScreen 新建文件夹以 currentPath + name + '/' 尾斜杠拼接入库，服务端按 T-046 约定目录条目无尾斜杠存储（/dir 而非 /dir/），Android 与 Windows 客户端（SyncEngine.Mkdir 传无尾斜杠 item.FilePath）对同一逻辑目录产生两个 FileEntry 行，索引/匹配错配 + FullScan 幽灵差异（F-78）。修复——(1) 服务端 FileOperationService.MkdirAsync path.TrimEnd('/') 规范化（TrimEnd 空串兜底 '/'），物理目录与入库路径统一无尾斜杠，单点兜底所有客户端；(2) FileIndexService.CreateDirectoryAsync 入库前 TrimEnd('/') 兜底（防其他调用方/其他端直接带尾斜杠创建产生重复行，且 FindAsync 亦按无尾斜杠命中既有条目→重复创建返回 CONFLICT）；(3) Android FileListScreen 新建目录去掉尾斜杠拼接，并 currentPath.endsWith('/') 兜底补分隔符（进入文件夹时 currentPath 来自服务端无尾斜杠路径），与服务端/Windows mkdir 约定一致。改动文件——CloudPan.Server.Core/Files/FileOperationService.cs；CloudPan.Server.Core/FileIndex/FileIndexService.cs；CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt；CloudPan.Tests/Server/Services/FileOperationServiceTests.cs（Mkdir_创建目录_返回路径 断言改无尾斜杠并加入库断言、新增 Mkdir_两端创建同一目录_不产生两个FileEntry行、Download_目录_返回错误 改无尾斜杠路径）；CloudPan.Tests/Server/Controllers/FilesControllerIntegrationTests.cs、CloudPan.Tests/Server/Controllers/ResponseShapeIntegrationTests.cs（mkdir 返回路径断言 TrimEnd）。验证——dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test --filter FileOperation 12/12 通过；dotnet test CloudPan.Tests -c Release 306/306 通过；Android :app:compileDebugKotlin --offline BUILD SUCCESSFUL EXIT=0；验收 grep：FileOperationService.cs 行 175/178 命中 TrimEnd，FileListScreen.kt 行 382 新建目录无尾斜杠拼接。",
+      "note": "执行 2026-08-03（task-executor）：T-069 Android 新建目录去尾斜杠 + 服务端 TrimEnd 兜底。问题——Android FileListScreen 新建文件夹以 currentPath + name + '/' 尾斜杠拼接入库，服务端按 T-046 约定目录条目无尾斜杠存储（/dir 而非 /dir/），Android 与 Windows 客户端（SyncEngine.Mkdir 传无尾斜杠 item.FilePath）对同一逻辑目录产生两个 FileEntry 行，索引/匹配错配 + FullScan 幽灵差异（F-78）。修复——(1) 服务端 FileOperationService.MkdirAsync path.TrimEnd('/') 规范化（TrimEnd 空串兜底 '/'），物理目录与入库路径统一无尾斜杠，单点兜底所有客户端；(2) FileIndexService.CreateDirectoryAsync 入库前 TrimEnd('/') 兜底（防其他调用方/其他端直接带尾斜杠创建产生重复行，且 FindAsync 亦按无尾斜杠命中既有条目→重复创建返回 CONFLICT）；(3) Android FileListScreen 新建目录去掉尾斜杠拼接，并 currentPath.endsWith('/') 兜底补分隔符（进入文件夹时 currentPath 来自服务端无尾斜杠路径），与服务端/Windows mkdir 约定一致。改动文件——CloudPan.Server.Core/Files/FileOperationService.cs；CloudPan.Server.Core/FileIndex/FileIndexService.cs；CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt；CloudPan.Tests/Server/Services/FileOperationServiceTests.cs（Mkdir_创建目录_返回路径 断言改无尾斜杠并加入库断言、新增 Mkdir_两端创建同一目录_不产生两个FileEntry行、Download_目录_返回错误 改无尾斜杠路径）；CloudPan.Tests/Server/Controllers/FilesControllerIntegrationTests.cs、CloudPan.Tests/Server/Controllers/ResponseShapeIntegrationTests.cs（mkdir 返回路径断言 TrimEnd）。验证——dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test --filter FileOperation 12/12 通过；dotnet test CloudPan.Tests -c Release 306/306 通过；Android :app:compileDebugKotlin --offline BUILD SUCCESSFUL EXIT=0；验收 grep：FileOperationService.cs 行 175/178 命中 TrimEnd，FileListScreen.kt 行 382 新建目录无尾斜杠拼接。\n验收 2026-08-03（task-verifier）：标准① dotnet test --filter FileOperation 12/12 通过——Mkdir_创建目录_返回路径（/folder/ → /folder，入库无尾斜杠条目）与 Mkdir_两端创建同一目录_不产生两个FileEntry行（Android 尾斜杠/Windows 无尾斜杠第二次返回 CONFLICT，仅一个条目）均覆盖；标准② grep FileOperationService.cs 行 175/178 命中 TrimEnd('/') 兜底（含根路径空串回退 '/'），FileListScreen.kt 行 382 新建目录 fullPath 无尾斜杠拼接，Android 无尾斜杠；标准③ dotnet test CloudPan.Tests -c Release 306/306 通过 + dotnet build CloudPan.sln -c Release 0 警告 0 错误。独立裁决：三条自动标准全部通过，置 done。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -3514,7 +3514,7 @@
       "title": "行数门禁按 public 类型聚合 partial 统计，拆分 SyncEngine/MainWindow",
       "dimension": "architecture",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 6,
       "findingId": "F-64",
       "dependsOn": [],
@@ -3544,8 +3544,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "执行 2026-08-03（task-executor）：门禁改为按 public 类型聚合统计 + SyncEngine/MainWindow 查询/UI 侧拆分。\n【门禁改动】CodeQualityTests.cs 新增 所有public类型_聚合行数不超上限：按 Namespace.TypeName 聚合所有声明该类型的源文件行数（partial 跨文件累计，默认 MaxLines=400，新增 DocumentedTypeCeilings 文档化上限），partial 拆分不再绕过单类 ≤400 门禁；保留单文件 ≤400 兜底与 XML 文档测试。\n【拆分（纯结构移动不改行为）】SyncEngine：查询/读侧拆出 SyncBrowseService（GetFileBrowserAsync/GetFileSyncStatusesAsync/DownloadRemoteToTempAsync，含 FileBrowseItem/FileSyncStatusItem record）与 SyncManageService（回收站/分享/版本历史），路径工具抽 SyncPath 静态类（NormalizePath/ToLocalPath/ToRelativePath/ShouldIgnore/SafeDelete），SyncEngine 保留公开 API 委托转发（MainWindow/测试调用点不变）。删除 SyncEngine.Browse/Status/Trash/Share/Versions 五个 partial。MainWindow：冲突解决对话框拆出 ConflictResolutionDialog（非模态版本对比+白话选项，回调 MainWindow.ResolveConflict），格式化工具抽 UiFormat（FormatFileSize/FormatDataRate），删除 MainWindow.ConflictDialog.cs。\n【取舍】SyncEngine 聚合 2709→2223 行、MainWindow 2793→2548 行，核心状态机/主窗体仍 >400（共享计数器/事件/锁/控件树强耦合，纯结构移动无法拆到 400），按 producer 取舍在 DocumentedTypeCeilings 记录合理上限（SyncEngine=2300、MainWindow=2600）；其余 9 个既有超限类型（SetupForm/ServerInstaller/FileBrowserView/SettingsForm/ApiClient/SettingsPage/ServerWindow/TrayAppContext/WebSocketHandler）为 T-070 范围外，记录现状上限防膨胀。\n【验证】dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test --filter Architecture 13/13 通过；dotnet test CloudPan.Tests -c Release 307/307 通过（含 SyncEngineTests/回收站/分享/版本/冲突相关用例，拆分后行为不变）。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-071",

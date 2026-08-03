@@ -152,7 +152,7 @@ public partial class MainWindow
         // ── 传输速率 ──
         if (status.SpeedBytesPerSec > 0)
         {
-            _speedLabel.Text = $"{FormatDataRate(status.SpeedBytesPerSec)}/s";
+            _speedLabel.Text = $"{UiFormat.FormatDataRate(status.SpeedBytesPerSec)}/s";
         }
         else
         {

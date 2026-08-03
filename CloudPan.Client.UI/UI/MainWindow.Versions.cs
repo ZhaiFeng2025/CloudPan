@@ -90,7 +90,7 @@ public partial class MainWindow
                 foreach (VersionItem v in data)
                 {
                     ListViewItem lvi = new ListViewItem($"v{v.Version}") { Tag = v };
-                    lvi.SubItems.Add(FormatFileSize(v.Size));
+                    lvi.SubItems.Add(UiFormat.FormatFileSize(v.Size));
                     lvi.SubItems.Add(FormatTimestamp(v.Timestamp));
                     lvi.SubItems.Add(v.DeviceId);
                     list.Items.Add(lvi);
