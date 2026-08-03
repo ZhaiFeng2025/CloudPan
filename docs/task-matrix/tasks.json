@@ -1713,7 +1713,7 @@
       "title": "回收站文件名唯一化，移入失败不再物理删除兜底",
       "dimension": "function",
       "priority": "P1",
-      "status": "acceptance",
+      "status": "done",
       "batch": 4,
       "findingId": "F-38",
       "dependsOn": [],
@@ -1744,7 +1744,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "【T-038 执行 2026-08-03】回收站文件名唯一化，移入失败不再物理删除兜底（F-38）。\n唯一化：TrashService.MoveToTrashAsync 回收站实体名由 {yyyyMMddHHmmss}_{fileName} 改为 {yyyyMMddHHmmss}_{GUID}_{fileName}（GUID N 格式，32 位十六进制），meta 名 = 实体名 + '.json' 同步唯一化——保持客户端 SyncEngine.RestoreTrashAsync『meta 文件名 = TrashFileName + \".json\"』命名不变量；MoveToTrashAsync 返回 meta 文件名（供软删失败回滚恢复）。\n删除顺序（DB+FS 一致）：FileOperationService.DeleteAsync 由『先软删索引→再移入回收站（失败物理删除兜底）』改为『先移入回收站（失败保留原文件返回错误）→再软删索引（失败经 _trash.RestoreAsync 回滚恢复原位）』——移入失败时索引未动、不向客户端传播假删除、可直接重试；删除原 _storage.Delete/_storage.DeleteDirectory 物理删除兜底（回收站唯一兜底路径不再静默丢数据）。\n改动文件：CloudPan.Server.Core/Trash/ITrashService.cs（MoveToTrashAsync 返回 Task<string> meta 文件名）、CloudPan.Server.Core/Trash/TrashService.cs（实体名加 GUID + meta 名同步唯一化）、CloudPan.Server.Core/Files/IFileOperationService.cs（DeleteAsync 注释更新）、CloudPan.Server.Core/Files/FileOperationService.cs（DeleteAsync 调整顺序+去兜底）、CloudPan.Tests/Server/Services/TrashServiceTests.cs（新增 MoveToTrash_同秒删除两个目录同名文件_均进回收站且可分别恢复，含 meta 命名不变量断言）、CloudPan.Tests/Server/Services/FileOperationServiceTests.cs（新增 ThrowingTrashService 桩 + Delete_MoveToTrash失败_保留原文件不物理删除，方法名含 Trash 子串可被验收 --filter Trash 命中）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Trash 23/23 通过（含新增同名碰撞与移入失败两用例）；全量 dotnet test CloudPan.Tests -c Release 253/253 通过（原 251 + 新增 2）；验收 grep -n '_storage.Delete' CloudPan.Server.Core/Files/FileOperationService.cs 无匹配（exit 1）。",
+      "note": "【T-038 执行 2026-08-03】回收站文件名唯一化，移入失败不再物理删除兜底（F-38）。\n唯一化：TrashService.MoveToTrashAsync 回收站实体名由 {yyyyMMddHHmmss}_{fileName} 改为 {yyyyMMddHHmmss}_{GUID}_{fileName}（GUID N 格式，32 位十六进制），meta 名 = 实体名 + '.json' 同步唯一化——保持客户端 SyncEngine.RestoreTrashAsync『meta 文件名 = TrashFileName + \".json\"』命名不变量；MoveToTrashAsync 返回 meta 文件名（供软删失败回滚恢复）。\n删除顺序（DB+FS 一致）：FileOperationService.DeleteAsync 由『先软删索引→再移入回收站（失败物理删除兜底）』改为『先移入回收站（失败保留原文件返回错误）→再软删索引（失败经 _trash.RestoreAsync 回滚恢复原位）』——移入失败时索引未动、不向客户端传播假删除、可直接重试；删除原 _storage.Delete/_storage.DeleteDirectory 物理删除兜底（回收站唯一兜底路径不再静默丢数据）。\n改动文件：CloudPan.Server.Core/Trash/ITrashService.cs（MoveToTrashAsync 返回 Task<string> meta 文件名）、CloudPan.Server.Core/Trash/TrashService.cs（实体名加 GUID + meta 名同步唯一化）、CloudPan.Server.Core/Files/IFileOperationService.cs（DeleteAsync 注释更新）、CloudPan.Server.Core/Files/FileOperationService.cs（DeleteAsync 调整顺序+去兜底）、CloudPan.Tests/Server/Services/TrashServiceTests.cs（新增 MoveToTrash_同秒删除两个目录同名文件_均进回收站且可分别恢复，含 meta 命名不变量断言）、CloudPan.Tests/Server/Services/FileOperationServiceTests.cs（新增 ThrowingTrashService 桩 + Delete_MoveToTrash失败_保留原文件不物理删除，方法名含 Trash 子串可被验收 --filter Trash 命中）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Trash 23/23 通过（含新增同名碰撞与移入失败两用例）；全量 dotnet test CloudPan.Tests -c Release 253/253 通过（原 251 + 新增 2）；验收 grep -n '_storage.Delete' CloudPan.Server.Core/Files/FileOperationService.cs 无匹配（exit 1）。\n【验收结论 2026-08-03】task-verifier 独立裁决：通过。验收标准①『dotnet test --filter Trash』实测 23/23 通过（Failed 0 / Passed 23 / Skipped 0），含关键用例 MoveToTrash_同秒删除两个目录同名文件_均进回收站且可分别恢复（断言两文件均进回收站、实体文件名互不相同唯一化、meta 名 = TrashFileName + \".json\" 命名不变量、均可分别恢复回原位）与 Delete_MoveToTrash失败_保留原文件不物理删除（ThrowingTrashService 桩模拟 File.Move 抛 IOException，断言原文件保留、索引保持 Synced 未软删、回收站无残留）；验收标准②『grep -n ''_storage.Delete'' CloudPan.Server.Core/Files/FileOperationService.cs 无匹配』实测无匹配（exit 1），并彻底核查全文件无 .Delete/.DeleteDirectory/File.Delete/Directory.Delete 物理删除调用（仅命中审计日志枚举 SyncOperation.Delete，非物理删除）；验收标准③『dotnet test CloudPan.Tests -c Release』实测 253/253 通过（Failed 0 / Passed 253 / Skipped 0）。附加『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error。独立代码核查：TrashService.MoveToTrashAsync（TrashService.cs:239-240）实体名 = {yyyyMMddHHmmss}_{GUID}_{fileName} 唯一化、meta 名 = 实体名 + \".json\" 同步唯一化并返回 meta 文件名供软删失败回滚（:261-264）；FileOperationService.DeleteAsync（FileOperationService.cs:66-109）先移入回收站（失败 catch 返回 INTERNAL_ERROR 保留原文件、不向客户端传播假删除）→成功才软删索引→软删失败经 _trash.RestoreAsync(metaFileName) 回滚恢复原位，DB+FS 一致性闭环真实存在。三条自动标准全过，无手动项。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -1752,7 +1752,7 @@
       "title": "Android FileState 枚举对齐 C# 并诚实化契约头标注",
       "dimension": "architecture",
       "priority": "P1",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 4,
       "findingId": "F-39",
       "dependsOn": [],
@@ -1782,8 +1782,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "FileState 枚举改为显式数值对齐 C# Enums.g.cs（Synced=0/Modified=1/Deleting=2/CloudOnly=3/Downloading=4/Uploading=5，值 6 保留，Conflict=7），补 Downloading/Uploading，Conflict 由序数 4 改显式 7；Dtos.kt/CloudPanApi.kt 头部 AUTO-GENERATED from shared-spec.json v1.3.0 改为 Hand-maintained 并注明对齐基线 shared-spec v1.1.0（CloudPan.CodeGen 无 Kotlin 生成器的真实基线，不声称由标准管线生成）；枚举加 KDoc 断言数值来源 Enums.g.cs、禁止依赖 Kotlin 序数，防再漂移（Android 无 test 目录，以注释断言实现序列化数值校验）。经 Grep 全仓确认 Android 端无 FileState 枚举消费者、无 .state 数值解析处，故无其他按枚举值对齐的解析点需改动。\n改动文件：CloudPan.Android/app/src/main/java/com/cloudpan/android/data/Dtos.kt、CloudPan.Android/app/src/main/java/com/cloudpan/android/data/CloudPanApi.kt、docs/task-matrix/tasks.json（仅 T-039 状态字段）。\n验证：①grep -n 'Conflict' Dtos.kt → 第 84 行 Conflict(7) 显式值存在；②grep -rn 'AUTO-GENERATED from shared-spec.json v1.3.0' CloudPan.Android/ 无匹配；③dotnet build CloudPan.sln -c Release 0 警告 0 错误（C# 端不受影响）；④Android :app:compileDebugKotlin：本机 SDK 仅 cmdline-tools 无 platform，已用 sdkmanager 接受全部 license 并让 AGP 自动下载 Android SDK Platform 34 + Build-Tools 34.0.0，任务可运行；编译输出中 Dtos.kt/CloudPanApi.kt 无任何错误（Kotlin 编译器全文件类型检查通过本任务改动），但项目整体编译失败于预存在的 FileRepository.kt/FileListScreen.kt 既有错误（FileRepository.kt:40/45/138 Result<Response<>> 与 Result<FileTreeResponse> 类型不匹配、:103 ensureActive 未解析；FileListScreen.kt:153 loadFiles 未解析、:305/381 LinearProgressIndicator 参数不匹配）——该两文件与 HEAD 一致、未在本任务改动范围，属 v1.0 Android 基础框架原型既有问题，故验收标准③（手动 gradle 编译）需验收者按手动方式核对枚举数值对齐。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-040",

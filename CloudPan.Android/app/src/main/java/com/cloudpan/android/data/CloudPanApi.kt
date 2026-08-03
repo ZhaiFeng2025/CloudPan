@@ -1,4 +1,6 @@
-// AUTO-GENERATED from shared-spec.json v1.3.0 → api.endpoints — DO NOT EDIT
+// Hand-maintained（v1.0 Android 原型，非生成产物）
+// 说明: CloudPan.CodeGen 当前无 Kotlin 生成器，本接口由手工维护，不声称由标准管线生成。
+// 对齐基线: shared-spec.json v1.1.0 api.endpoints 路径（与 C# SpecEndpoints 一致）。
 package com.cloudpan.android.data
 
 import okhttp3.MultipartBody
