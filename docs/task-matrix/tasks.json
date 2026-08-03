@@ -3935,7 +3935,7 @@
       "title": "回收站恢复目标已存在收敛（检测→CONFLICT/改名恢复 + 白话原因）",
       "dimension": "function",
       "priority": "P2",
-      "status": "in-progress",
+      "status": "acceptance",
       "batch": 7,
       "findingId": "F-120",
       "dependsOn": [],
@@ -3966,7 +3966,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
+      "note": "执行 2026-08-03（task-executor）：T-078 回收站恢复目标已存在收敛。问题——RestoreAsync 直接 File.Move(overwrite:false)/Directory.Move，删除后同路径重建（或其他设备同步回同路径）时目标已存在 → IOException → 兜底 INTERNAL_ERROR（UserMessage『恢复文件时出现错误，请稍后重试』），无归因且恢复永久不可行。修复（对齐 T-077 重命名撞名语义：409 明确归因，不自动追加 _恢复_后缀，自动唯一化作 v1.1 增强）——TrashService.RestoreAsync 在恢复移动前检测目标（File.Exists/Directory.Exists(targetPath)）已存在 → 提前返回 409 CONFLICT（UserMessage『目标位置已有文件，请先处理或改名』），不再落 IOException 兜底 INTERNAL_ERROR；检测在版本分配前不消耗版本号，回收站条目保留可重试。客户端 SyncManageService.RestoreTrashAsync 对 409 CONFLICT 不再吞成裸 false 显示泛化『恢复失败』，抛白话可操作归因（『目标位置已有文件，请先处理或改名』，覆盖/改名/取消由用户据此决策），UI 现有 catch 直接展示。改动文件——CloudPan.Server.Core/Trash/TrashService.cs（RestoreAsync 目标已存在前置检测 :114-128，409 分支 :121-126）；CloudPan.Client.Core/Services/SyncManageService.cs（RestoreTrashAsync 新增 Conflict 归因 catch，改 46-66）；CloudPan.Tests/Server/Services/TrashServiceTests.cs（新增 Restore_目标文件已存在_返回CONFLICT而非INTERNAL_ERROR + Restore_目标目录已存在_返回CONFLICT：断言 409 + UserMessage 含『目标位置已有文件』+ 回收站条目保留 + 重建文件未被覆盖）；tasks.json。验证——dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test CloudPan.Tests -c Release --filter Trash 26/26 通过（含新增 2 条）；dotnet test CloudPan.Tests -c Release 全量 326/326 通过（原 324 + 新增 2）。AC2 grep『CONFLICT|IOException』TrashService.cs 恢复路径有 CONFLICT 分支（:124），无裸 IOException 兜底 INTERNAL_ERROR。取舍——按 producer 取舍选 409 明确归因而非自动追加 _恢复_时间戳后缀（与 T-077 同语义收敛，用户可先处理目标或改名恢复，恢复不静默改变路径）。",
       "updatedAt": "2026-08-03"
     },
     {
