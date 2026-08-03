@@ -1829,7 +1829,7 @@
       "title": "删除 QueryServerVersion 死代码，客户端 HTTP 单一入口",
       "dimension": "simplicity",
       "priority": "P1",
-      "status": "acceptance",
+      "status": "done",
       "batch": 4,
       "findingId": "F-41",
       "dependsOn": [],
@@ -1860,7 +1860,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "改动：ClientBootstrap.cs 删除 QueryServerVersion（手建 HttpClient+魔数 /api/version+手写 JSON）与 ConnectionResult.ServerVersion（全库零消费者），HealthCheck 保留 IApiClient.HealthCheckAsync 连接探测、不再版本比对，删除随之失效的 using System.Text.Json；文件 420→388 行（落 ≤400 线，T-042 拆分无需该文件）。SpecRoutes.Version 保留：契约生成常量，/api/version 端点服务端 HealthController 仍在且 spec 注册（AuthMode.Public），非客户端魔数；后续 GetServerVersionAsync 内部引用它。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过（269/269）；grep 'QueryServerVersion\\|ServerVersion' ClientBootstrap.cs 与 grep '\"/api/version\"' Client.Core 均无匹配；new HttpClient 仅存于 ApiClient（IApiClient 单一实现），客户端 HTTP 收敛为单一入口。",
+      "note": "改动：ClientBootstrap.cs 删除 QueryServerVersion（手建 HttpClient+魔数 /api/version+手写 JSON）与 ConnectionResult.ServerVersion（全库零消费者），HealthCheck 保留 IApiClient.HealthCheckAsync 连接探测、不再版本比对，删除随之失效的 using System.Text.Json；文件 420→388 行（落 ≤400 线，T-042 拆分无需该文件）。SpecRoutes.Version 保留：契约生成常量，/api/version 端点服务端 HealthController 仍在且 spec 注册（AuthMode.Public），非客户端魔数；后续 GetServerVersionAsync 内部引用它。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过（269/269）；grep 'QueryServerVersion\\|ServerVersion' ClientBootstrap.cs 与 grep '\"/api/version\"' Client.Core 均无匹配；new HttpClient 仅存于 ApiClient（IApiClient 单一实现），客户端 HTTP 收敛为单一入口。\n【验收结论 2026-08-03】task-verifier 独立裁决：3 条自动验收标准全部通过，无手动项，status → done。①『ClientBootstrap 无 QueryServerVersion/ServerVersion』实测 grep -n 于 CloudPan.Client.Core/Composition/ClientBootstrap.cs 无匹配（exit 1）；②『Client.Core 无 /api/version 字面量』实测 grep -rn 于 CloudPan.Client.Core/ 无匹配（exit 1），ApiClient 经 SpecRoutes 契约路由访问，无魔数直写；③『dotnet build 全绿』实测 dotnet build CloudPan.sln -c Release：Build succeeded，0 Warning 0 Error。佐证（requirement 1/3）：排除 bin/obj 后 Client.Core 源码 .cs 无 ServerVersion/QueryServerVersion 残留；grep 到的二进制匹配来自 CloudPan.Infrastructure/Generated/Entities.g.cs:285 契约实体常量 ServerVersion=server_version（数据库键名，合法非死代码）；new HttpClient 仅存于 ApiClient.cs（IApiClient 单一实现），客户端 HTTP 收敛单一入口。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -1868,7 +1868,7 @@
       "title": "行数门禁下调至 400，7 个超大单类拆 partial",
       "dimension": "simplicity",
       "priority": "P1",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 4,
       "findingId": "F-42",
       "dependsOn": [
@@ -1901,8 +1901,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "冲突取舍：T-042 依赖 T-041——QueryServerVersion 删除使 ClientBootstrap 420→≤400，若该文件落线则无需拆分，避免『先拆后删』双重返工。",
-      "updatedAt": null
+      "note": "冲突取舍：T-042 依赖 T-041——QueryServerVersion 删除使 ClientBootstrap 420→≤400，若该文件落线则无需拆分，避免『先拆后删』双重返工。\n执行 2026-08-03：①CodeQualityTests 阈值 1000/500→统一 400（删除 serviceControllerFiles 白名单与分层放宽，MaxLines=400，grep '1000|isExcluded' 无匹配）。②门禁口径扫描出 12 个 >400 行文件（ClientBootstrap 经 T-041 388 行无需拆），全部拆为 partial/多文件、行为不变：ServerInstaller(935)→cs360+Steps162+Install306+Process127；FileBrowserView(830)→cs367+List221+Events186+Breadcrumb80；SettingsForm(628)→cs149+AccountTab348+BandwidthTab128+SyncTab22；ServerWindow(513)→cs268+Events166+Data93；ApiClient(507)→cs209+Trash37+ShareVersion56+ChunkedUpload116+ThrottledStream114+DownloadResult8；TrayAppContext(494)→cs125+Events196+Menu88+Actions103；DesignTokens(484)→cs280+Spacing41+Effects87+Fonts81（5 个独立静态类按类分文件，无需 partial）；SettingsPage(483)→cs298+Events192（Guide60 不变）；SyncEngine.Scan(476)→Scan243+FullScan243；ChunkedUploadService(451)→cs180+Finalize269；WebSocketHandler(442)→cs240+Broadcast65+Lifecycle133；MainWindow.Conflicts(441)→Conflicts164+ConflictDialog262。③验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过 269/269（含 CodeQuality 门禁 2/2）；门禁口径扫描（含 Migrations，排除 Generated/obj/bin/Analyzer）无 >400 行文件。改动文件 37 个（12 改 + 25 新增）。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-043",

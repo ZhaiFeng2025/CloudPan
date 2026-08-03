@@ -8,9 +8,8 @@ namespace CloudPan.Tests.Architecture;
 /// </summary>
 public class CodeQualityTests
 {
-    // Phase 0 分层阈值：核心服务/控制器（含 UI 类，见 T-028）允许 ≤ 1000 行，纯数据/工具类 ≤ 500 行
-    private const int MaxServiceControllerLines = 1000;
-    private const int MaxOtherLines = 500;
+    // 单文件行数上限 400（对齐 CLAUDE.md 规则 8「单类行数 ≤ 400」，T-042 统一阈值，无分层放宽）
+    private const int MaxLines = 400;
 
     // 从测试运行目录向上查找解决方案根目录（与 ContractSourceScanTests 相同逻辑）
     private static readonly string[] ProjectDirs = FindProjectDirs();
@@ -62,33 +61,18 @@ public class CodeQualityTests
             .ToList();
 
     /// <summary>
-    /// 验证非生成源码文件行数在合理范围内（UI 层自 T-028 起纳入门禁）。
-    /// Phase 0 分层阈值：核心服务/控制器（含 UI 类）≤ 1000 行，其他文件 ≤ 500 行。
+    /// 验证非生成源码文件行数 ≤ 400（对齐 CLAUDE.md 规则 8「单类行数 ≤ 400」，T-028 起 UI 层纳入门禁，T-042 统一阈值无分层放宽）。
     /// </summary>
     [Fact]
     public void 所有非生成文件_小于行数上限()
     {
-        // 服务/控制器/UI 类文件（Phase 0 允许 ≤ 1000 行）
-        var serviceControllerFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "FilesController.cs", "Program.cs", "ApiClient.cs",
-            "SetupForm.cs", "MainWindow.cs", "SettingsForm.cs", "ServerInstaller.cs",
-            "ServerWindow.cs", "TrayAppContext.cs", "ServerTrayApp.cs",
-            "FileBrowserView.cs",
-            "WebSocketClient.cs", "WebSocketHandler.cs",
-        };
-
         List<string> violations = new List<string>();
         foreach (string file in GetSourceFiles())
         {
             int lineCount = File.ReadLines(file).Count();
-            string fileName = Path.GetFileName(file);
-            int limit = serviceControllerFiles.Contains(fileName) ? MaxServiceControllerLines
-                : MaxOtherLines;
-
-            if (lineCount > limit)
+            if (lineCount > MaxLines)
             {
-                violations.Add($"{fileName}: {lineCount} 行 (上限 {limit})");
+                violations.Add($"{Path.GetFileName(file)}: {lineCount} 行 (上限 {MaxLines})");
             }
         }
 
