@@ -3769,7 +3769,7 @@
       "title": "选择性同步排除集目录树接线加载（LoadFromPaths 调用点 + 空树不覆盖排除配置）",
       "dimension": "function",
       "priority": "P1",
-      "status": "in-progress",
+      "status": "acceptance",
       "batch": 7,
       "findingId": "F-116",
       "dependsOn": [],
