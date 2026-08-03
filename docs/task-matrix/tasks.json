@@ -3552,7 +3552,7 @@
       "title": "冲突副本保存收敛为单一领域辅助",
       "dimension": "simplicity",
       "priority": "P2",
-      "status": "in-progress",
+      "status": "acceptance",
       "batch": 6,
       "findingId": "F-88",
       "dependsOn": [],
@@ -3582,7 +3582,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "T-051 只收敛了『提交新版本』，冲突保存路径未收敛；同属 7.1 高危 DB+FS 一致性代码，最不值得双份。",
+      "note": "执行 2026-08-03（task-executor）：冲突副本保存收敛为单一领域辅助。\n【改动】新增 CloudPan.Server.Core/Files/ConflictBackupHelper.cs——SaveConflictCopyIfNeededAsync(path, baseVersion, currentVersion, content, length, lastModified, deviceId) 单点统一『冲突检测 → 冲突路径拼接（SpecConfig.ConflictSuffixPattern）→ 版本分配 → 原子写副本（AtomicWriteAsync，消除分块侧 IOFile.Copy 裸拷分叉）→ UpsertFileAsync(FileState.Conflict) → 审计日志』，未冲突返回 null，返回 ConflictSaveResult(ConflictPath, CurrentVersion, BaseVersion)。FileOperationService.HandleUploadConflictAsync 与 ChunkedUploadService.FinalizeAsync 冲突分支均改为调用该辅助（删除两处约 70 行双份实现；分块侧 temp 内容经 FileStream 供原子写）。Program.cs 注册 AddSingleton<ConflictBackupHelper>()；四个测试构造点注入辅助。ChunkedUploadServiceTests 新增 ReceiveChunk_服务端版本大于baseVersion_保存冲突副本不覆盖原文件。\n【验证】grep 'ConflictSuffixPattern|FileState.Conflict' 于 FileOperationService.cs/ChunkedUploadService.Finalize.cs 无匹配（仅经单一辅助）；dotnet build CloudPan.sln -c Release 0 错误 0 警告；dotnet test CloudPan.Tests -c Release --filter Upload 22/22 通过；dotnet test CloudPan.Tests -c Release 全量 308/308 通过。",
       "updatedAt": "2026-08-03"
     },
     {
