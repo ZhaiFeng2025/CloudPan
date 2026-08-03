@@ -129,6 +129,16 @@ public class FileOperationService : IFileOperationService
                 new DomainError(HttpErrorCode.NOT_FOUND, $"文件不存在: {oldPath}", "文件未找到"));
         }
 
+        // T-077/F-119：目标已存在检测必须发生在版本分配之前。
+        // 原实现直接 _index.MoveAsync 做 SQLite 主键 UPDATE，newPath 已有 FileEntry 时撞 PK → 异常 500，
+        // 且版本号已先被 NextVersionAsync 无谓消耗。此处提前返回 409 CONFLICT，用户可据此改名或覆盖。
+        var target = await _index.GetByPathAsync(newPath);
+        if (target != null && newPath != oldPath)
+        {
+            return new FileMoveResult(false, null, null, null,
+                new DomainError(HttpErrorCode.CONFLICT, $"目标已存在: {newPath}", "目标已存在，请选择覆盖或改名"));
+        }
+
         bool isDirectory = entry.Type == (int)FileType.Directory;
 
         // 先执行 DB 索引更新（不含审计日志），成功后再移动物理文件，最后写入审计日志

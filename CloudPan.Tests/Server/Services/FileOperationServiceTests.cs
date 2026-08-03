@@ -151,6 +151,30 @@ public class FileOperationServiceTests : Infrastructure.TestBase
         Assert.True(File.Exists(Path.Combine(SyncRoot, "new.txt")));
     }
 
+    /// <summary>
+    /// T-077/F-119：重命名目标已存在（newPath 已有另一 FileEntry）时返回 CONFLICT 而非 500——
+    /// 原实现 _index.MoveAsync 的 SQLite 主键 UPDATE 撞新路径 PK → 异常 500，且版本号已先被
+    /// NextVersionAsync 无谓分配。目标检测须发生在版本分配之前。
+    /// </summary>
+    [Fact]
+    public async Task Move_目标已存在_返回CONFLICT而非异常()
+    {
+        var (svc, index) = await CreateServiceAsync();
+        await SeedFileAsync(index, SyncRoot, "/old.txt", "source");
+        await SeedFileAsync(index, SyncRoot, "/target.txt", "existing target");
+
+        var result = await svc.MoveAsync("/old.txt", "/target.txt", 0, "dev-1");
+
+        Assert.False(result.Success);
+        Assert.Equal(HttpErrorCode.CONFLICT.Code, result.Error!.Code.Code);
+        Assert.Contains("目标已存在", result.Error!.UserMessage);
+        // 目标检测在版本分配之前 → 未消耗版本号
+        Assert.Null(result.Version);
+        // 原文件与目标文件均未被改动（DB 与 FS 一致）
+        Assert.NotNull(await index.GetByPathAsync("/old.txt"));
+        Assert.NotNull(await index.GetByPathAsync("/target.txt"));
+    }
+
     [Fact]
     public async Task Mkdir_创建目录_返回路径()
     {

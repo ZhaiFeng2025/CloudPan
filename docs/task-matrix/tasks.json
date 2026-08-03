@@ -3857,7 +3857,7 @@
       "title": "分块上传恢复兜底 Finalize 已完成窗口（record 移除后识别已完成会话）",
       "dimension": "function",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 7,
       "findingId": "F-118",
       "dependsOn": [],
@@ -3888,7 +3888,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "执行 2026-08-03（task-executor）：T-076 分块上传 Finalize 完成窗口恢复兜底。问题——Finalize 完成（会话 record 已移除、文件已落盘、索引指向新 hash/version）后客户端崩溃未收到响应而重试，GetStatusAsync(record==null) 与『从未开始』在会话维度不可区分 → 返回 Found=false → 客户端整文件重传，且重传携带的 baseVersion 已过期触发 _冲突_ 副本（版本历史污染 + 多设备收敛噪音）。修复（方案1，不改 Finalize 事务语义）——(1) GetStatusAsync 增加 fileHash 参数：record==null 时按 FileEntry 识别已完成会话（Type=File 且 CurrentHash 与客户端 fileHash 一致，OrdinalIgnoreCase）→ 返回 Found=true/IsComplete=true + 真实版本号，客户端跳过全部块写快照；否则（从未开始/内容不同）保持 Found=false 正常重传。只比 hash 不比 size（SHA-256 一致即内容逐字节一致、大小必然一致，CLAUDE.md 最简）；FileType.File 守卫排除目录条目。(2) 控制器 GetChunkStatus 增加 fileHash 查询参数透传。(3) 客户端 GetChunkStatusAsync 携带 fileHash，UploadChunkedAsync 收到 IsComplete=true 时短路返回 UploadData(真实版本) 直接写快照，不进上传循环。(4) IApiClient/MockApiClient 签名同步（不破坏旧客户端：fileHash 可选）。改动文件——CloudPan.Server.Core/ChunkedUpload/IChunkedUploadService.cs、ChunkedUploadService.cs（GetStatusAsync record==null 分支）；CloudPan.Server.Host/Controllers/FilesController.ChunkedUpload.cs；CloudPan.Client.Core/Services/IApiClient.cs、ApiClient.ChunkedUpload.cs；CloudPan.Tests/Client/Services/MockApiClient.cs；CloudPan.Tests/Server/Services/ChunkedUploadServiceTests.cs（新增 GetStatus_Finalize完成会话已移除_文件已存在且hash一致_返回已完成不重传，断言 isComplete=true+真实版本、hash 不一致保持 Found=false、未带 fileHash 兼容旧行为）；tasks.json。验证——dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test CloudPan.Tests -c Release EXIT=0（323/323 通过，ChunkedUpload 过滤 11/11 含新增 1 条）；dotnet run --project CloudPan.CodeGen -- --verify 全部一致（未改 shared-spec，路由与响应形状不变）。AC2 grep『record == null』ChunkedUploadService.cs:183 有已存在判定分支（:187-192 Type=File + CurrentHash==fileHash）。取舍——选要求方案 1（record==null 查 FileEntry 识别已完成）而非方案 2（Finalize 后保留 record 标记 Finalized）：不改 Finalize 事务边界与移除语义，改动更小；与 T-064 清理『未 Finalized』崩溃窗口互补，两个窗口（未落盘/已落盘）均闭合。",
+      "note": "执行 2026-08-03（task-executor）：T-076 分块上传 Finalize 完成窗口恢复兜底。问题——Finalize 完成（会话 record 已移除、文件已落盘、索引指向新 hash/version）后客户端崩溃未收到响应而重试，GetStatusAsync(record==null) 与『从未开始』在会话维度不可区分 → 返回 Found=false → 客户端整文件重传，且重传携带的 baseVersion 已过期触发 _冲突_ 副本（版本历史污染 + 多设备收敛噪音）。修复（方案1，不改 Finalize 事务语义）——(1) GetStatusAsync 增加 fileHash 参数：record==null 时按 FileEntry 识别已完成会话（Type=File 且 CurrentHash 与客户端 fileHash 一致，OrdinalIgnoreCase）→ 返回 Found=true/IsComplete=true + 真实版本号，客户端跳过全部块写快照；否则（从未开始/内容不同）保持 Found=false 正常重传。只比 hash 不比 size（SHA-256 一致即内容逐字节一致、大小必然一致，CLAUDE.md 最简）；FileType.File 守卫排除目录条目。(2) 控制器 GetChunkStatus 增加 fileHash 查询参数透传。(3) 客户端 GetChunkStatusAsync 携带 fileHash，UploadChunkedAsync 收到 IsComplete=true 时短路返回 UploadData(真实版本) 直接写快照，不进上传循环。(4) IApiClient/MockApiClient 签名同步（不破坏旧客户端：fileHash 可选）。改动文件——CloudPan.Server.Core/ChunkedUpload/IChunkedUploadService.cs、ChunkedUploadService.cs（GetStatusAsync record==null 分支）；CloudPan.Server.Host/Controllers/FilesController.ChunkedUpload.cs；CloudPan.Client.Core/Services/IApiClient.cs、ApiClient.ChunkedUpload.cs；CloudPan.Tests/Client/Services/MockApiClient.cs；CloudPan.Tests/Server/Services/ChunkedUploadServiceTests.cs（新增 GetStatus_Finalize完成会话已移除_文件已存在且hash一致_返回已完成不重传，断言 isComplete=true+真实版本、hash 不一致保持 Found=false、未带 fileHash 兼容旧行为）；tasks.json。验证——dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test CloudPan.Tests -c Release EXIT=0（323/323 通过，ChunkedUpload 过滤 11/11 含新增 1 条）；dotnet run --project CloudPan.CodeGen -- --verify 全部一致（未改 shared-spec，路由与响应形状不变）。AC2 grep『record == null』ChunkedUploadService.cs:183 有已存在判定分支（:187-192 Type=File + CurrentHash==fileHash）。取舍——选要求方案 1（record==null 查 FileEntry 识别已完成）而非方案 2（Finalize 后保留 record 标记 Finalized）：不改 Finalize 事务边界与移除语义，改动更小；与 T-064 清理『未 Finalized』崩溃窗口互补，两个窗口（未落盘/已落盘）均闭合。\n【验收 2026-08-03（task-verifier）】AC1 通过：dotnet test --filter ChunkedUpload 11/11 通过（0 失败），具体用例 GetStatus_Finalize完成会话已移除_文件已存在且hash一致_返回已完成不重传（CloudPan.Tests/Server/Services/ChunkedUploadServiceTests.cs:403）覆盖 Finalize 完成后 GetStatusAsync 返回 isComplete=true+真实版本、hash 不一致保持 Found=false、未带 fileHash 兼容旧行为。AC2 通过：grep -n 'record == null' CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.cs 匹配行 183（另 119 行为 GetById 无关分支），:184-198 分支含已存在判定（:191-194 fileHash 非空 + existing 非空 + Type=File + CurrentHash 与 fileHash OrdinalIgnoreCase 一致 → :196 返回 isComplete=true + 真实版本号 currentVersion；否则 :198 Found=false），非无条件 Found=false。AC3 通过：dotnet test CloudPan.Tests -c Release 323/323 通过（0 失败）；dotnet build CloudPan.sln -c Release 0 警告 0 错误。全部自动项通过，无手动项 → done。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -3896,7 +3896,7 @@
       "title": "重命名目标已存在收敛（先检测 newPath→409/改名，不先分配版本号）",
       "dimension": "function",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 7,
       "findingId": "F-119",
       "dependsOn": [],
@@ -3927,8 +3927,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "取舍：本批选 409 明确归因（对齐 clouddrive-kb『重名提示保留两者/替换』）；自动追加 _冲突_ 后缀作 v1.1 增强。",
-      "updatedAt": null
+      "note": "执行 2026-08-03（task-executor）：T-077 重命名目标已存在收敛。问题——MoveAsync 先 NextVersionAsync 分配版本号、再 _index.MoveAsync 做 SQLite 主键 UPDATE（Path 为主键），newPath 已有 FileEntry 时撞 PK → SQLite 异常 → 控制器 500，且版本号已被无谓消耗。修复（按 producer 取舍：选 409 明确归因，对齐 clouddrive-kb『重名提示保留两者/替换』；自动追加 _冲突_ 后缀作 v1.1 增强）——FileOperationService.MoveAsync 在 entry 判空后、版本分配前查询 GetByPathAsync(newPath)：存在且 newPath!=oldPath 时提前返回 409 CONFLICT（UserMessage『目标已存在，请选择覆盖或改名』），不再分配版本号；newPath==oldPath 无操作重命名排除以免误报。FileIndexService.MoveAsync 无外部调用方（仅本服务重命名流+回滚+测试），无需改动。改动文件——CloudPan.Server.Core/Files/FileOperationService.cs（:132-140 目标检测前置）；CloudPan.Tests/Server/Services/FileOperationServiceTests.cs（新增 Move_目标已存在_返回CONFLICT而非异常：断言 409 + UserMessage 含『目标已存在』+ Version 未消耗 + 源/目标索引均未动）；tasks.json。验证——dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test CloudPan.Tests -c Release --filter FileOperation 13/13 通过（含新增 1 条）；dotnet test CloudPan.Tests -c Release 全量 324/324 通过（原 323 + 新增 1）。AC2 grep『NextVersionAsync』MoveAsync 内位于目标检测（:135）之后（:145），:72/:209 为 DeleteAsync/MkdirAsync 无关。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-078",
