@@ -2320,7 +2320,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "执行者记录（T-050）：Android 删除改走回收站（软删 + 撤销 Snackbar + 回收站入口），对齐 Windows T-014。改动文件：① CloudPan.Android/app/src/main/java/com/cloudpan/android/data/CloudPanApi.kt——新增回收站三端点（GET /api/trash、POST /api/trash/restore、DELETE /api/trash/empty），路径对齐 shared-spec.json api.endpoints 与 C# SpecRoutes。② 同目录 Dtos.kt——新增 TrashItemDto/TrashListResponse，字段对齐 shared-spec api.responses.TrashItem（originalPath/trashFileName/fileSize/isDirectory/deletedAt/ageDays）。③ 同目录 FileRepository.kt——deleteFile 改为调 POST /api/files/delete（服务端软删=移入回收站+墓碑，非物理删除），成功返回 TrashItemDto? 供撤销；新增 getTrash()/restoreTrash(trashFileName)/emptyTrash()（metaFileName = TrashFileName + '.json'，对齐 SyncEngine.Trash.cs）。④ CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt——单删/批量删除确认文案白话化（『将「名称」移入回收站，可在回收站恢复』）；删除后 Snackbar『已删除，可撤销』+ 撤销动作（调 restoreTrash）；TopAppBar 新增回收站入口（DeleteSweep 图标）→ TrashDialog（列表/恢复选中/清空二次确认）。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误，C# 端不受影响）；Android :app:compileDebugKotlin 基线即失败，预存错误见下，本次改动未引入新错误。手动验收项：① 单删/批量删除走软删，确认文案白话化；② 删除后 Snackbar 出现『已删除，可撤销』，点撤销文件恢复；③ TopAppBar 回收站入口可见，列出已删文件，恢复选中/清空可用（清空有二次确认）；④ Android compileDebugKotlin 编译通过依赖修复预存问题（FileRepository.kt getFileTree/getFileTreeInFolder/createShare 的 Result<Response<T>> 包装不匹配、ensureActive 未导入；FileListScreen.kt loadFiles 局部函数前向引用、LinearProgressIndicator lambda 参数不匹配）。",
+      "note": "执行者记录（T-050）：Android 删除改走回收站（软删 + 撤销 Snackbar + 回收站入口），对齐 Windows T-014。改动文件：① CloudPan.Android/app/src/main/java/com/cloudpan/android/data/CloudPanApi.kt——新增回收站三端点（GET /api/trash、POST /api/trash/restore、DELETE /api/trash/empty），路径对齐 shared-spec.json api.endpoints 与 C# SpecRoutes。② 同目录 Dtos.kt——新增 TrashItemDto/TrashListResponse，字段对齐 shared-spec api.responses.TrashItem（originalPath/trashFileName/fileSize/isDirectory/deletedAt/ageDays）。③ 同目录 FileRepository.kt——deleteFile 改为调 POST /api/files/delete（服务端软删=移入回收站+墓碑，非物理删除），成功返回 TrashItemDto? 供撤销；新增 getTrash()/restoreTrash(trashFileName)/emptyTrash()（metaFileName = TrashFileName + '.json'，对齐 SyncEngine.Trash.cs）。④ CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt——单删/批量删除确认文案白话化（『将「名称」移入回收站，可在回收站恢复』）；删除后 Snackbar『已删除，可撤销』+ 撤销动作（调 restoreTrash）；TopAppBar 新增回收站入口（DeleteSweep 图标）→ TrashDialog（列表/恢复选中/清空二次确认）。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误，C# 端不受影响）；Android :app:compileDebugKotlin 基线即失败，预存错误见下，本次改动未引入新错误。手动验收项：① 单删/批量删除走软删，确认文案白话化；② 删除后 Snackbar 出现『已删除，可撤销』，点撤销文件恢复；③ TopAppBar 回收站入口可见，列出已删文件，恢复选中/清空可用（清空有二次确认）；④ Android compileDebugKotlin 编译通过依赖修复预存问题（FileRepository.kt getFileTree/getFileTreeInFolder/createShare 的 Result<Response<T>> 包装不匹配、ensureActive 未导入；FileListScreen.kt loadFiles 局部函数前向引用、LinearProgressIndicator lambda 参数不匹配）。验收结论（task-verifier，2026-08-03）：AC1 自动通过——grep 确认 FileRepository.kt 无物理删除调用（deleteFile 走 POST /api/files/delete 软删并返回 TrashItemDto? 供撤销），CloudPanApi 回收站三端点存在；C# 侧 dotnet build CloudPan.sln -c Release 0 警告 0 错误。AC2（手动）独立实测 compileDebugKotlin BUILD FAILED，8 个 Kotlin 错误（getFileTree/getFileTreeInFolder/createShare 类型包装、ensureActive 未解析、loadFiles 前向引用、LinearProgressIndicator 参数）经 git diff 范围+父提交 555e453 逐字对比确认全部为预存基线问题，T-050 未触及错误行、未引入新错误——AC2 在基线即不可达成，需人工判定豁免或交由 producer 重定义 AC2（如改为『本次改动不引入新编译错误』）。AC3（手动）代码路径完整（软删→TrashItem→Snackbar『已删除，可撤销』+撤销 restoreTrash 单删/批量删；回收站入口→TrashDialog 列表/恢复选中/清空二次确认；确认文案白话化『将「X」移入回收站，可在回收站恢复』）——需人工真机确认交互。自动项全过、含手动项，按 Step 3' 留 acceptance 待人工确认。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -2328,7 +2328,7 @@
       "title": "提交新版本编排收敛为单一领域辅助（Upload/ChunkedUpload 共用）",
       "dimension": "simplicity",
       "priority": "P1",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 5,
       "findingId": "F-51",
       "dependsOn": [],
@@ -2364,8 +2364,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "改动：新增 VersionCommitHelper（CloudPan.Server.Core/Versions/VersionCommitHelper.cs，单点『提交新版本』：ArchiveOldVersionAsync + CommitNewVersionInTransactionAsync + DeleteOrphanArchive，统一事务边界/回滚/孤儿存档清理）；UploadService / ChunkedUploadService.Finalize / VersionHistoryService.Restore 三处改为调用该辅助并删除各自重复编排（StoreVersionAsync/RemoveRange 仅存在于辅助，含修正 UploadService 回滚存档清理路径与 Restore 孤儿存档泄漏）；Program.cs 注册辅助（AddSingleton）；补单测 VersionCommitHelperTests（存档→裁剪→更新单事务、裁剪上限 N+1、事务失败回滚并清理孤儿存档、新建文件）。验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 285/285 通过；grep 'StoreVersionAsync|RemoveRange' UploadService.cs ChunkedUploadService.Finalize.cs 无匹配。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-052",

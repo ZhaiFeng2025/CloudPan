@@ -23,7 +23,8 @@ public class ChunkedUploadServiceTests : Infrastructure.TestBase
         var index = new FileIndexService(dbFactory);
         var version = new VersionService(dbFactory);
         var syncLog = new SyncLogService(dbFactory, NullLogger<SyncLogService>.Instance);
-        return new ChunkedUploadService(dbFactory, storage, index, version, syncLog);
+        return new ChunkedUploadService(dbFactory, storage, index, version, syncLog,
+            new VersionCommitHelper(storage, NullLogger<VersionCommitHelper>.Instance));
     }
 
     [Fact]
@@ -164,7 +165,8 @@ public class ChunkedUploadServiceTests : Infrastructure.TestBase
         var index = new FileIndexService(dbFactory);
         var version = new VersionService(dbFactory);
         var syncLog = new SyncLogService(dbFactory, NullLogger<SyncLogService>.Instance);
-        var svc = new ChunkedUploadService(dbFactory, storage, index, version, syncLog);
+        var svc = new ChunkedUploadService(dbFactory, storage, index, version, syncLog,
+            new VersionCommitHelper(storage, NullLogger<VersionCommitHelper>.Instance));
 
         string path = "/finalize.bin";
         string targetPath = Path.Combine(TempDir, "finalize.bin");

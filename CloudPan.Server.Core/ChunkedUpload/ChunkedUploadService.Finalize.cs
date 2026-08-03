@@ -85,15 +85,11 @@ public partial class ChunkedUploadService
 
         // d. 存档旧版本 + 分配版本号 + 原子写入
         //    顺序：FS 准备（存档/计算哈希，不覆盖目标）→ DB 事务（FileEntry + VersionRecord + 清理）→ 成功后原子移动
-        //    DB 失败时目标文件保持原状可恢复；catch 清理孤儿存档（FS 副作用）
+        //    DB 失败时目标文件保持原状可恢复；孤儿存档清理统一由 VersionCommitHelper 承担（FS 副作用）
 
         // —— 阶段 1：FS 准备（不覆盖目标文件，DB 失败可恢复）——
-        string? archivePath = null;
         var existingForArchive = await _index.GetByPathAsync(path);
-        if (existingForArchive != null && existingForArchive.CurrentHash != null)
-        {
-            archivePath = await _storage.StoreVersionAsync(path, existingForArchive.Version);
-        }
+        string? archivePath = await _versionCommit.ArchiveOldVersionAsync(path, existingForArchive);
 
         int newVersion = await _version.NextVersionAsync();
         string targetPath = _storage.GetAbsolutePath(path);
@@ -107,78 +103,13 @@ public partial class ChunkedUploadService
         string hash = await _storage.ComputeHashAsync(record.TempPath);
         long uploadFileSize = new FileInfo(record.TempPath).Length;
 
-        // —— 阶段 2：DB 事务（同一 DbContext：FileEntry + VersionRecord + 清理 ChunkedUpload）——
-        await using var tx = await db.Database.BeginTransactionAsync();
-        try
-        {
-            if (archivePath != null)
-            {
-                db.VersionRecords.Add(new VersionRecord
-                {
-                    FilePath = path,
-                    Version = existingForArchive!.Version,
-                    Hash = existingForArchive.CurrentHash!,
-                    Size = existingForArchive.CurrentSize,
-                    StoragePath = archivePath,
-                    Timestamp = DateTime.UtcNow.ToString("O"),
-                    DeviceId = deviceId
-                });
-
-                // 保留最近 N 个版本（N 单源：shared-spec.json → SpecConfig.MaxVersionsDefault）
-                var oldVersions = await db.VersionRecords
-                    .Where(v => v.FilePath == path)
-                    .OrderByDescending(v => v.Version)
-                    .Skip(SpecConfig.MaxVersionsDefault)
-                    .ToListAsync();
-                db.VersionRecords.RemoveRange(oldVersions);
-            }
-
-            // 更新 FileEntry（同一 DbContext，避免 _index.UpsertFileAsync 独立上下文游离于事务外）
-            var entry = await db.FileEntries.FindAsync(path);
-            if (entry != null)
-            {
-                entry.CurrentHash = hash;
-                entry.CurrentSize = uploadFileSize;
-                entry.Version = newVersion;
-                entry.LastModified = record.LastModified;
-                entry.State = (int)FileState.Synced;
-            }
-            else
-            {
-                db.FileEntries.Add(new FileEntry
-                {
-                    Path = path,
-                    Type = (int)FileType.File,
-                    CurrentHash = hash,
-                    CurrentSize = uploadFileSize,
-                    Version = newVersion,
-                    LastModified = record.LastModified,
-                    State = (int)FileState.Synced,
-                    CreatedAt = DateTime.UtcNow.ToString("O")
-                });
-            }
-
-            // 清理 ChunkedUpload 记录
-            db.ChunkedUploads.Remove(record);
-
-            await db.SaveChangesAsync();
-            await tx.CommitAsync();
-        }
-        catch
-        {
-            await tx.RollbackAsync();
-            // DB 回滚后清理孤儿存档文件（FS 副作用）
-            if (archivePath != null)
-            {
-                try
-                {
-                    IOFile.Delete(Path.Combine(
-                        _storage.GetAbsolutePath("/"), ".cloudpan", ".versions", archivePath));
-                }
-                catch { /* 尽力清理 */ }
-            }
-            throw;
-        }
+        // —— 阶段 2：DB 事务（同一 DbContext，经 VersionCommitHelper 单点提交）——
+        //    辅助统一『存档记录 + 裁剪 + upsert FileEntry』的事务边界、回滚与孤儿存档清理
+        await _versionCommit.CommitNewVersionInTransactionAsync(
+            db, path, existingForArchive, archivePath,
+            new VersionCommitState(path, hash, uploadFileSize, newVersion, record.LastModified),
+            deviceId, prune: true,
+            extraDbWork: () => db.ChunkedUploads.Remove(record));
 
         // —— 阶段 3：FS 原子覆盖（DB 已提交）——
         //    Move 失败（目标被锁等）时磁盘仍是旧内容，但索引已指向新 hash/version——若放任，客户端下轮树同步
@@ -249,16 +180,8 @@ public partial class ChunkedUploadService
             await db.SaveChangesAsync();
             await tx.CommitAsync();
 
-            // 事务提交后清理孤儿存档文件（FS 副作用，CLAUDE.md 7.3）
-            if (archivePath != null)
-            {
-                try
-                {
-                    IOFile.Delete(Path.Combine(
-                        _storage.GetAbsolutePath("/"), ".cloudpan", ".versions", archivePath));
-                }
-                catch { /* 尽力清理 */ }
-            }
+            // 事务提交后清理孤儿存档文件（FS 副作用，CLAUDE.md 7.3，统一经辅助）
+            _versionCommit.DeleteOrphanArchive(archivePath);
         }
         catch
         {

@@ -67,6 +67,8 @@ builder.Services.AddSingleton(typeof(int), httpPort); // 供 UDP 广播/设置�
 builder.Services.AddSingleton<IFileStorageService>(new FileStorageService(syncRoot));
 builder.Services.AddSingleton<IFileIndexService, FileIndexService>();
 builder.Services.AddSingleton<IVersionService, VersionService>();
+// 『提交新版本』领域辅助（T-051 收敛：Upload/ChunkedUpload/Restore 共用的一致性关键单点）
+builder.Services.AddSingleton<VersionCommitHelper>();
 builder.Services.AddSingleton<IUploadService, UploadService>();
 builder.Services.AddSingleton<ISyncLogService, SyncLogService>();
 builder.Services.AddSingleton<IWebSocketHandler, WebSocketHandler>();

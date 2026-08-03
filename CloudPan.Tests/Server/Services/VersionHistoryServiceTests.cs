@@ -17,9 +17,10 @@ public class VersionHistoryServiceTests : Infrastructure.TestBase
         var dbFactory = CreateServerDbFactory();
         var storage = new FileStorageService(TempDir);
         var version = new VersionService(dbFactory);
-        var upload = new UploadService(storage, version, dbFactory, NullLogger<UploadService>.Instance);
+        var helper = new VersionCommitHelper(storage, NullLogger<VersionCommitHelper>.Instance);
+        var upload = new UploadService(storage, version, dbFactory, NullLogger<UploadService>.Instance, helper);
         var syncLog = new SyncLogService(dbFactory, NullLogger<SyncLogService>.Instance);
-        var versions = new VersionHistoryService(dbFactory, storage, new FileIndexService(dbFactory), version, syncLog);
+        var versions = new VersionHistoryService(dbFactory, storage, new FileIndexService(dbFactory), version, syncLog, helper);
         return Task.FromResult((versions, storage, upload));
     }
 

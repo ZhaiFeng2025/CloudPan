@@ -16,19 +16,22 @@ public class VersionHistoryService : IVersionHistoryService
     private readonly IFileIndexService _index;
     private readonly IVersionService _version;
     private readonly ISyncLogService _syncLog;
+    private readonly VersionCommitHelper _versionCommit;
 
     public VersionHistoryService(
         IDbContextFactory<CloudPanDbContext> dbFactory,
         IFileStorageService storage,
         IFileIndexService index,
         IVersionService version,
-        ISyncLogService syncLog)
+        ISyncLogService syncLog,
+        VersionCommitHelper versionCommit)
     {
         _dbFactory = dbFactory;
         _storage = storage;
         _index = index;
         _version = version;
         _syncLog = syncLog;
+        _versionCommit = versionCommit;
     }
 
     /// <inheritdoc />
@@ -82,8 +85,8 @@ public class VersionHistoryService : IVersionHistoryService
                 new DomainError(HttpErrorCode.NOT_FOUND, $"文件已删除: {filePath}", "文件已删除，无法回滚历史版本"));
         }
 
-        // 1. 存档当前版本（FS）
-        string storagePath = await _storage.StoreVersionAsync(filePath, currentEntry.Version);
+        // 1. 存档当前版本（FS，经辅助——覆盖目标前存档，保证存档的是当前真实内容）
+        string? storagePath = await _versionCommit.ArchiveOldVersionAsync(filePath, currentEntry);
 
         // 2. 复制历史版本到临时文件（不覆盖目标文件——DB 失败时目标文件保持当前版本，可恢复）
         string targetPath = _storage.GetAbsolutePath(filePath);
@@ -100,51 +103,28 @@ public class VersionHistoryService : IVersionHistoryService
         string hash = await _storage.ComputeHashAsync(tmpPath);
         long size = new IOFileInfo(tmpPath).Length;
 
-        // 4. 单事务 DB 写入（存档记录 + FileEntry 更新 + 回滚记录），同一 DbContext。
-        //    DB 失败则清理 tmp、不覆盖目标文件（文件保持当前版本）；成功后再原子覆盖目标。
-        await using var tx = await db.Database.BeginTransactionAsync();
+        // 4. 单事务 DB 写入（经 VersionCommitHelper：存档记录 + FileEntry 更新 + 回滚记录）。
+        //    DB 失败则辅助回滚并清理孤儿存档，此处再清理 tmp、不覆盖目标文件（文件保持当前版本）。
         try
         {
-            db.VersionRecords.Add(new VersionRecord
-            {
-                FilePath = filePath,
-                Version = currentEntry.Version,
-                Hash = currentEntry.CurrentHash ?? "",
-                Size = currentEntry.CurrentSize,
-                StoragePath = storagePath,
-                Timestamp = DateTime.UtcNow.ToString("O"),
-                DeviceId = deviceId
-            });
-
-            // 更新 FileEntry 为新版本（同一 DbContext，避免跨上下文不一致）
-            var entry = await db.FileEntries.FindAsync(filePath);
-            if (entry != null)
-            {
-                entry.CurrentHash = hash;
-                entry.CurrentSize = size;
-                entry.Version = newVersion;
-                entry.LastModified = DateTime.UtcNow.ToString("O");
-                entry.State = (int)FileState.Synced;
-            }
-
-            db.VersionRecords.Add(new VersionRecord
-            {
-                FilePath = filePath,
-                Version = newVersion,
-                Hash = hash,
-                Size = size,
-                StoragePath = targetVersion.StoragePath, // 回滚后内容 = 历史版本文件
-                Timestamp = DateTime.UtcNow.ToString("O"),
-                DeviceId = deviceId,
-                RestoredFromVersion = version
-            });
-
-            await db.SaveChangesAsync();
-            await tx.CommitAsync();
+            await _versionCommit.CommitNewVersionInTransactionAsync(
+                db, filePath, currentEntry, storagePath,
+                new VersionCommitState(filePath, hash, size, newVersion, DateTime.UtcNow.ToString("O")),
+                deviceId, prune: false,
+                extraDbWork: () => db.VersionRecords.Add(new VersionRecord
+                {
+                    FilePath = filePath,
+                    Version = newVersion,
+                    Hash = hash,
+                    Size = size,
+                    StoragePath = targetVersion.StoragePath, // 回滚后内容 = 历史版本文件
+                    Timestamp = DateTime.UtcNow.ToString("O"),
+                    DeviceId = deviceId,
+                    RestoredFromVersion = version
+                }));
         }
         catch
         {
-            await tx.RollbackAsync();
             if (IOFile.Exists(tmpPath))
             {
                 try { IOFile.Delete(tmpPath); } catch { /* 尽力清理 */ }
