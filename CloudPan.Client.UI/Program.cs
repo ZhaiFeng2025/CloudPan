@@ -111,12 +111,13 @@ public static class Program
         watcher.Start();
         var engine = bootstrap.Provider.GetRequiredService<SyncEngine>();
         var wsClient = bootstrap.Provider.GetRequiredService<WebSocketClient>();
+        var api = bootstrap.Provider.GetRequiredService<IApiClient>(); // T-063：设置保存后向 ApiClient 下发运行时限速
         wsClient.OnConnected += OnWsConnected;
         wsClient.OnDisconnected += OnWsDisconnected;
         initForm.Close();
 
         var clientConfig = bootstrap.Provider.GetRequiredService<ClientConfig>();
-        Application.Run(new TrayAppContext(engine, wsClient, clientConfig));
+        Application.Run(new TrayAppContext(engine, wsClient, api, clientConfig));
     }
 
     /// <summary>WebSocket 连接建立：清除离线标志。</summary>

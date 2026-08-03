@@ -8,6 +8,12 @@ namespace CloudPan.Client.Core.Services;
 /// </summary>
 public interface IApiClient
 {
+    /// <summary>运行时更新上传限速（T-063，无需重启客户端）。0 = 不限速。</summary>
+    void SetUploadLimit(long bytesPerSecond);
+
+    /// <summary>运行时更新下载限速（T-063，无需重启客户端）。0 = 不限速。</summary>
+    void SetDownloadLimit(long bytesPerSecond);
+
     /// <summary>健康检查。</summary>
     Task<bool> HealthCheckAsync(CancellationToken ct = default);
 

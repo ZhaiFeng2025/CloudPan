@@ -41,6 +41,10 @@ public class MockApiClient : IApiClient
     /// <summary>模拟认证失败模式（F-34/T-034）：true 时上传一律返回 401，用于测试连续 401 触发重配引导。</summary>
     public bool AuthFailMode { get; set; }
 
+    public void SetUploadLimit(long bytesPerSecond) { }
+
+    public void SetDownloadLimit(long bytesPerSecond) { }
+
     public Task<bool> HealthCheckAsync(CancellationToken ct = default) => Task.FromResult(HealthOk);
 
     public Task EnsureHealthAsync(CancellationToken ct = default)

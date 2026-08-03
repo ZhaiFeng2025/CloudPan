@@ -116,7 +116,9 @@ public partial class SyncEngine : IDisposable
     /// <summary>最近一次完整同步完成的时间戳。</summary>
     public DateTime? LastSyncTime => _lastSyncTime;
 
-    private readonly List<string> _selectedPaths;
+    // T-063：排除集运行时可变（引用替换实现热更新，非启动快照）。
+    // 引用类型字段赋值原子，volatile 保证设置线程与同步线程间的可见性；内容不就地修改，只整体替换引用。
+    private volatile List<string> _selectedPaths;
 
     private string? _currentPhase;
 
@@ -142,6 +144,43 @@ public partial class SyncEngine : IDisposable
             _wsClient.OnFileDeleted += OnWsFileDeleted;
             _wsClient.OnFileRenamed += OnWsFileRenamed;
         }
+    }
+
+    /// <summary>
+    /// 运行时热更新排除集（T-063）：引用替换（非启动快照），方法返回后 IsPathSelected 立即读新值。
+    /// 由 UI 在保存设置后调用（UI 线程）。异步部分（清除已排除路径的排队传输项 + 触发一次全量扫描）
+    /// 以 Task.Run 承载并捕获全部异常（CLAUDE.md 7.2），无需重启客户端。
+    /// </summary>
+    public void UpdateSelectedPaths(List<string> selectedPaths)
+    {
+        // 引用替换：立即生效（后续 IsPathSelected / 扫描 / 入队拦截均读新值）
+        _selectedPaths = selectedPaths ?? new List<string> { "/" };
+        _logger.LogInformation("排除集热更新：{Count} 条选择路径即时生效", _selectedPaths.Count);
+
+        // 异步收尾：清除已排除路径的排队传输项（取消勾选目录不再继续外传）+ 触发全量扫描让新选择落地
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await using var db = await _dbFactory.CreateDbContextAsync();
+                var excluded = await db.SyncQueue
+                    .Where(q => !IsPathSelected(q.FilePath))
+                    .ToListAsync();
+                if (excluded.Count > 0)
+                {
+                    db.SyncQueue.RemoveRange(excluded);
+                    await db.SaveChangesAsync();
+                    _logger.LogInformation("排除集热更新：移除 {Count} 个已排除路径的排队传输项", excluded.Count);
+                }
+
+                // 全量扫描内部以 _syncLock 互斥，与主循环/5 分钟定时器安全并发（FileWatcherService 同款入口）
+                await FullScanAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "排除集热更新触发同步失败");
+            }
+        });
     }
 
     public async Task StartAsync(CancellationToken ct = default)

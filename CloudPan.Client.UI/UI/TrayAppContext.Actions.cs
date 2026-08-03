@@ -80,7 +80,14 @@ public partial class TrayAppContext
                 cfg.DownloadLimitBps = form.DownloadLimitBps;
                 cfg.SelectedPaths = form.SelectedPaths;
                 cfg.Save(ClientBootstrap.GetConfigPath());
-                MessageBox.Show("设置已保存。部分更改需要重启客户端后生效。",
+
+                // T-063：设置改动即时生效，无需重启客户端——限速运行时下发、排除集热更新并触发一次扫描。
+                // （Token 变更自动重连属独立链路 F-34/T-034，本轮不并入。）
+                _api.SetUploadLimit(cfg.UploadLimitBps);
+                _api.SetDownloadLimit(cfg.DownloadLimitBps);
+                _engine.UpdateSelectedPaths(cfg.SelectedPaths);
+
+                MessageBox.Show("设置已保存。",
                     "CloudPan", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }

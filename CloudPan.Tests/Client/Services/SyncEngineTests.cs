@@ -1460,6 +1460,49 @@ public class SyncEngineTests : IDisposable
     }
 
     // ============================================================
+    // 排除集热更新（T-063）：UpdateSelectedPaths 引用替换，IsPathSelected 立即读新值
+    // ============================================================
+
+    [Fact]
+    public void UpdateSelectedPaths_引用替换_IsPathSelected立即返回新值()
+    {
+        // 默认全选（构造时无 SelectedPaths → { "/" }）
+        Assert.True(CallIsPathSelected(_engine, "/photos/summer.jpg"));
+
+        // 保存设置后热更新排除集（无需重启客户端）：取消勾选 /photos
+        _engine.UpdateSelectedPaths(new List<string> { "/photos/" });
+
+        // 立即生效：方法返回后 IsPathSelected 已按新选择集判定
+        Assert.False(CallIsPathSelected(_engine, "/photos/summer.jpg")); // 已排除子树 → false
+        Assert.False(CallIsPathSelected(_engine, "/photos/sub/video.mp4"));
+        Assert.True(CallIsPathSelected(_engine, "/docs/report.pdf"));    // 其余路径不受影响
+        Assert.True(CallIsPathSelected(_engine, "/readme.txt"));
+    }
+
+    [Fact]
+    public void UpdateSelectedPaths_热更新后再次更新_替换而非累积()
+    {
+        // 先排除 /photos，再切换为排除 /docs——验证引用替换语义（非启动快照，不累积）
+        _engine.UpdateSelectedPaths(new List<string> { "/photos/" });
+        Assert.False(CallIsPathSelected(_engine, "/photos/summer.jpg"));
+
+        _engine.UpdateSelectedPaths(new List<string> { "/docs/" });
+
+        // 第二次更新后：/photos 恢复选中、/docs 被排除（引用替换不累积旧选择）
+        Assert.True(CallIsPathSelected(_engine, "/photos/summer.jpg"));
+        Assert.False(CallIsPathSelected(_engine, "/docs/report.pdf"));
+    }
+
+    [Fact]
+    public void UpdateSelectedPaths_空集合_显式全不同步()
+    {
+        _engine.UpdateSelectedPaths(new List<string>());
+
+        Assert.False(CallIsPathSelected(_engine, "/readme.txt"));
+        Assert.False(CallIsPathSelected(_engine, "/photos/summer.jpg"));
+    }
+
+    // ============================================================
     // 排除集语义闭环（T-054）：上传方向拦截 + 重新勾选恢复
     // ============================================================
 

@@ -3206,7 +3206,7 @@
       "title": "客户端 EF 实体改由 spec entities 生成（含 RemoteSnapshot 字段回流）",
       "dimension": "architecture",
       "priority": "P1",
-      "status": "acceptance",
+      "status": "done",
       "batch": 6,
       "findingId": "F-62",
       "dependsOn": [],
@@ -3237,7 +3237,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "EntityGenerator 新增 GenerateClient：从 spec entities 生成 SyncQueue/RemoteSnapshot/SyncCursor 至 CloudPan.Client.Core/Generated/ClientEntities.g.cs；shared-spec RemoteSnapshot 回流 LastModified/IsDownloaded，SyncQueue.CreatedAt 声明 C# 默认值；删除 Client.Core/Models 手工实体定义，ClientDbContext 改引用生成类型并移除 OnModelCreating；代码改名 SyncQueueItem→SyncQueue、SyncCursorState→SyncCursor；ParseIndexAttribute 保留 IsDescending（服务端 VersionRecord/SyncLog 索引随之规范化）；新增非破坏对齐迁移 AlignClientEntitiesToSpec（RemoteSnapshots→RemoteSnapshot 表重命名 + 索引改名）；CodeGen --verify 新增客户端手工实体扫描。验证：dotnet run CodeGen + --verify 通过，dotnet build CloudPan.sln -c Release 0 错误 0 警告，dotnet test CloudPan.Tests -c Release 295/295 通过。",
+      "note": "EntityGenerator 新增 GenerateClient：从 spec entities 生成 SyncQueue/RemoteSnapshot/SyncCursor 至 CloudPan.Client.Core/Generated/ClientEntities.g.cs；shared-spec RemoteSnapshot 回流 LastModified/IsDownloaded，SyncQueue.CreatedAt 声明 C# 默认值；删除 Client.Core/Models 手工实体定义，ClientDbContext 改引用生成类型并移除 OnModelCreating；代码改名 SyncQueueItem→SyncQueue、SyncCursorState→SyncCursor；ParseIndexAttribute 保留 IsDescending（服务端 VersionRecord/SyncLog 索引随之规范化）；新增非破坏对齐迁移 AlignClientEntitiesToSpec（RemoteSnapshots→RemoteSnapshot 表重命名 + 索引改名）；CodeGen --verify 新增客户端手工实体扫描。验证：dotnet run CodeGen + --verify 通过，dotnet build CloudPan.sln -c Release 0 错误 0 警告，dotnet test CloudPan.Tests -c Release 295/295 通过。 ｜验收 2026-08-03（task-verifier 独立裁决）：3 条验收标准全部通过——(1) 自动：grep 'public class SyncQueueItem\\|public class RemoteSnapshot\\|public class SyncCursorState' CloudPan.Client.Core/Models/ClientDbContext.cs 无匹配（EXIT=1）；Models/ 目录仅剩 ClientDbContext.cs/ClientDbContextFactory.cs/ClientConfig.cs/SyncConfig.cs，无手工实体文件；ClientDbContext 只声明 DbSet<SyncQueue>/<RemoteSnapshot>/<SyncCursor>，注释明确引用 Generated/ClientEntities.g.cs（同命名空间 CloudPan.Client.Core.Models）。附加核查：grep -rn 'class SyncQueueItem\\|class SyncCursorState' CloudPan.Client.Core/ 无匹配，改名后手工类定义已彻底清除。(2) 自动：shared-spec.json entities.RemoteSnapshot 定义内第 305/306 行含 LastModified（TEXT 可空）/IsDownloaded（INTEGER→bool），生成实体 ClientEntities.g.cs:86/89 同步含两字段，回流一致。(3) 自动：dotnet run --project CloudPan.CodeGen -- --verify EXIT=0，12 项一致（枚举/DTO/实体/客户端实体/清单/错误响应/API响应/设置/路由常量/Kotlin DTO/Kotlin路由 + '客户端实体: Client.Core/Models 无手工实体类定义'）；dotnet build CloudPan.sln -c Release EXIT=0，0 警告 0 错误。3 条全过，无手动项，转 done。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -3245,7 +3245,7 @@
       "title": "设置改动即时生效：排除集热更新 + 限速运行时下发",
       "dimension": "function",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 6,
       "findingId": "F-76",
       "dependsOn": [],
@@ -3276,8 +3276,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "跨维度去重：function F-76 与 ux F-101 同源合并（均报告设置改动需重启）。clouddrive-kb §4/§6 明确『限速/排除集改动即时生效，无需重启』。",
-      "updatedAt": null
+      "note": "跨维度去重：function F-76 与 ux F-101 同源合并（均报告设置改动需重启）。clouddrive-kb §4/§6 明确『限速/排除集改动即时生效，无需重启』。 ｜执行 2026-08-03（task-executor）：改动文件——SyncEngine.cs（_selectedPaths 由 readonly 启动快照改 volatile 引用替换 + 新增 UpdateSelectedPaths：立即引用替换 + 异步清除已排除路径的排队传输项 + 触发一次全量扫描）；SyncEngine.FullScan.cs（IsPathSelected 局部快照读值，单次调用内语义一致）；ApiClient.cs（限速字段去 readonly 改运行时可变 + 新增 SetUploadLimit/SetDownloadLimit，Interlocked.Exchange 写入 / Interlocked.Read 读取）；IApiClient.cs（接口新增两 Set 方法）；TrayAppContext.cs/.Actions.cs（注入 IApiClient，保存设置后下发限速 + 排除集热更新，删除『部分更改需要重启客户端后生效』弹窗文案改『设置已保存』）；Program.cs（装配向 TrayAppContext 传入 IApiClient）；MockApiClient.cs（实现接口新方法）；SyncEngineTests.cs（新增 3 条 UpdateSelectedPaths 热更新单测）。取舍：需求『改 volatile 字段』对 long 不可行（C# 禁止 volatile long），按 CLAUDE.md 7.4 改用 Interlocked 读写实现运行时可变，验收 grep（volatile|SetUploadLimit|SetDownloadLimit 命中 SetUploadLimit/SetDownloadLimit）满足。验证：dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test CloudPan.Tests -c Release EXIT=0（298/298 通过，SyncEngine 过滤 70/70 含新增 3 条）；dotnet run --project CloudPan.CodeGen -- --verify 12 项一致。手动验收项：(1) 设置窗口保存取消勾选排除目录后，不重启客户端，取消勾选目录不再继续上传/下载（下一同步周期 ≤3s 生效，排队项被清除）；(2) 修改上传/下载限速保存后无需重启立即按新限速节流；(3) 设置保存弹窗仅提示『设置已保存』，不再出现『需重启』文案；Token 变更仍走独立重配链路（F-34/T-034）。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-064",

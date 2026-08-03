@@ -298,21 +298,24 @@ public partial class SyncEngine
     /// </remarks>
     private bool IsPathSelected(string path)
     {
+        // 局部快照：读取一次引用，单次调用内语义一致（热更新替换引用不影响本次判断，T-063）
+        List<string> selectedPaths = _selectedPaths;
+
         // 空集合 = 显式全不同步（不再回退为 { "/" } 全选）
-        if (_selectedPaths.Count == 0)
+        if (selectedPaths.Count == 0)
         {
             return false;
         }
 
         // 含 "/"（全选默认值 / v1.0.0 旧版选择集恒含根节点）→ 全选
-        if (_selectedPaths.Contains("/"))
+        if (selectedPaths.Contains("/"))
         {
             return true;
         }
 
         // 排除集：命中任一排除子树 → 不同步
         string normalized = path.TrimEnd('/') + "/";
-        bool excluded = _selectedPaths.Any(sp =>
+        bool excluded = selectedPaths.Any(sp =>
         {
             string p = sp.TrimEnd('/') + "/";
             return normalized.StartsWith(p, StringComparison.OrdinalIgnoreCase)

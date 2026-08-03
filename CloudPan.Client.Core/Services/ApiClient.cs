@@ -13,8 +13,10 @@ namespace CloudPan.Client.Core.Services;
 public partial class ApiClient : IApiClient, IDisposable
 {
     private readonly HttpClient _http;
-    private readonly long _uploadLimitBps;
-    private readonly long _downloadLimitBps;
+    // T-063：限速改为运行时可变（非构造固化）。long 不能声明为 volatile（C# 限制），
+    // 读写经 Interlocked 保证 32-bit 运行时原子性（CLAUDE.md 7.4），运行中改限速立即生效。
+    private long _uploadLimitBps;
+    private long _downloadLimitBps;
     private readonly ILogger? _logger;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -53,6 +55,18 @@ public partial class ApiClient : IApiClient, IDisposable
         {
             _http.DefaultRequestHeaders.Add("X-Device-Id", deviceId);
         }
+    }
+
+    /// <summary>运行时更新上传限速（T-063，无需重启客户端）。0 = 不限速。后续传输立即按新限速节流。</summary>
+    public void SetUploadLimit(long bytesPerSecond)
+    {
+        Interlocked.Exchange(ref _uploadLimitBps, bytesPerSecond);
+    }
+
+    /// <summary>运行时更新下载限速（T-063，无需重启客户端）。0 = 不限速。后续传输立即按新限速节流。</summary>
+    public void SetDownloadLimit(long bytesPerSecond)
+    {
+        Interlocked.Exchange(ref _downloadLimitBps, bytesPerSecond);
     }
 
     /// <summary>健康检查。</summary>
@@ -110,9 +124,10 @@ public partial class ApiClient : IApiClient, IDisposable
     {
         using MultipartFormDataContent form = new MultipartFormDataContent();
         Stream fileStream = File.OpenRead(localPath);
-        if (_uploadLimitBps > 0)
+        long uploadLimit = Interlocked.Read(ref _uploadLimitBps); // T-063：运行时可变，每次传输读当前值
+        if (uploadLimit > 0)
         {
-            fileStream = new ThrottledStream(fileStream, _uploadLimitBps);
+            fileStream = new ThrottledStream(fileStream, uploadLimit);
         }
 
         StreamContent fileContent = new StreamContent(fileStream); // form 释放时自动释放 fileContent → fileStream
@@ -151,9 +166,10 @@ public partial class ApiClient : IApiClient, IDisposable
         await using (var rawStream = await response.Content.ReadAsStreamAsync(ct))
         {
             Stream downloadStream = rawStream;
-            if (_downloadLimitBps > 0)
+            long downloadLimit = Interlocked.Read(ref _downloadLimitBps); // T-063：运行时可变，每次传输读当前值
+            if (downloadLimit > 0)
             {
-                downloadStream = new ThrottledStream(rawStream, _downloadLimitBps);
+                downloadStream = new ThrottledStream(rawStream, downloadLimit);
             }
 
             await using (downloadStream)
