@@ -146,7 +146,7 @@ class FileRepository(private val settings: SettingsStore) {
      * 调 POST /api/files/delete（服务端移入回收站 + 墓碑），成功后查回收站列表返回对应条目供撤销；
      * 无匹配条目返回 null（删除成功但不可撤销）。禁止物理删除——回收站是唯一可恢复路径。
      */
-    suspend fun deleteFile(path: String): Result<TrashItemDto?> {
+    suspend fun deleteFile(path: String): Result<TrashItem?> {
         return safeCall {
             val r = api().deleteFile(mapOf("path" to path, "baseVersion" to 0))
             if (!r.isSuccessful) {
@@ -165,7 +165,7 @@ class FileRepository(private val settings: SettingsStore) {
     }
 
     /** 回收站文件列表（GET /api/trash）。 */
-    suspend fun getTrash(): Result<List<TrashItemDto>> {
+    suspend fun getTrash(): Result<List<TrashItem>> {
         return safeCall {
             val r = api().getTrash()
             if (!r.isSuccessful) {
@@ -200,7 +200,7 @@ class FileRepository(private val settings: SettingsStore) {
         }
     }
 
-    suspend fun createShare(filePath: String, password: String? = null): Result<ShareResponse> {
+    suspend fun createShare(filePath: String, password: String? = null): Result<ShareCreateResponse> {
         val body = mutableMapOf<String, Any>("filePath" to filePath)
         if (password != null) body["password"] = password
         return safeCall {
@@ -242,40 +242,18 @@ class FileRepository(private val settings: SettingsStore) {
         return safeCall {
             val response = api().searchFiles(query)
             if (response.isSuccessful) {
-                val body = response.body()
-                @Suppress("UNCHECKED_CAST")
-                val data = (body?.get("data") as? List<Map<String, Any>>) ?: emptyList()
-                data.map { map ->
-                    FileEntryDto(
-                        path = map["path"] as? String ?: "",
-                        type = (map["type"] as? Double)?.toInt() ?: 0,
-                        hash = map["hash"] as? String,
-                        size = (map["size"] as? Double)?.toLong() ?: 0L,
-                        version = (map["version"] as? Double)?.toInt() ?: 0,
-                        lastModified = map["lastModified"] as? String ?: "",
-                        state = (map["state"] as? Double)?.toInt() ?: 0
-                    )
-                }
+                // SearchResponse 由 shared-spec.json → api.responses 生成（T-061），消除 Map 松散解析
+                response.body()?.data ?: emptyList()
             } else emptyList()
         }
     }
 
-    suspend fun getDevices(): Result<List<DeviceDto>> {
+    suspend fun getDevices(): Result<List<DeviceItem>> {
         return safeCall {
             val response = api().getDevices()
             if (response.isSuccessful) {
-                val body = response.body()
-                @Suppress("UNCHECKED_CAST")
-                val data = (body?.get("data") as? List<Map<String, Any>>) ?: emptyList()
-                data.map { map ->
-                    DeviceDto(
-                        id = map["deviceId"] as? String ?: "",
-                        name = map["name"] as? String ?: "",
-                        person = map["person"] as? String,
-                        lastSeen = map["lastSeen"] as? String ?: "",
-                        online = (map["online"] as? Double)?.toInt() ?: 0
-                    )
-                }
+                // DevicesResponse 由 shared-spec.json → api.responses 生成（T-061），消除 Map 松散解析
+                response.body()?.data ?: emptyList()
             } else emptyList()
         }
     }

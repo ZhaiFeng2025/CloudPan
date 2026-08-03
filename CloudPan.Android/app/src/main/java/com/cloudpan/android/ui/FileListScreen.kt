@@ -32,7 +32,7 @@ import com.cloudpan.android.data.AppDatabase
 import com.cloudpan.android.data.FileEntryDto
 import com.cloudpan.android.data.FileRepository
 import com.cloudpan.android.data.OfflineCacheEntity
-import com.cloudpan.android.data.TrashItemDto
+import com.cloudpan.android.data.TrashItem
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -318,7 +318,7 @@ fun FileListScreen(
                     showBulkDeleteDialog = false
                     scope.launch {
                         var success = 0; var failed = 0
-                        val deletedItems = mutableListOf<TrashItemDto>()
+                        val deletedItems = mutableListOf<TrashItem>()
                         for (path in selectedPaths) {
                             val r = repository.deleteFile(path)
                             if (r.isSuccess) {
@@ -1011,7 +1011,7 @@ private fun TrashDialog(
     onDismiss: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    var items by remember { mutableStateOf<List<TrashItemDto>>(emptyList()) }
+    var items by remember { mutableStateOf<List<TrashItem>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
     var selectedMeta by remember { mutableStateOf<String?>(null) }
     var showEmptyConfirm by remember { mutableStateOf(false) }

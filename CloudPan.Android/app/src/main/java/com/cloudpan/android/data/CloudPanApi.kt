@@ -1,6 +1,6 @@
-// Hand-maintained（v1.0 Android 原型，非生成产物）
-// 说明: CloudPan.CodeGen 当前无 Kotlin 生成器，本接口由手工维护，不声称由标准管线生成。
-// 对齐基线: shared-spec.json v1.1.0 api.endpoints 路径（与 C# SpecEndpoints 一致）。
+// Retrofit interface 方法签名（@Query/@Body/@Part 参数绑定）由手工维护——
+// shared-spec.json 暂未提供结构化参数段，全量生成标注为渐进项（T-061 note）。
+// 路由注解引用 Generated/SpecRoutes.g.kt 常量，返回类型引用 Generated/Dtos.g.kt（均由 shared-spec.json 生成）。
 package com.cloudpan.android.data
 
 import okhttp3.MultipartBody
@@ -10,10 +10,10 @@ import retrofit2.http.*
 
 interface CloudPanApi {
 
-    @GET("api/health")
-    suspend fun healthCheck(): Response<Map<String, Any>>
+    @GET(SpecRoutes.Health)
+    suspend fun healthCheck(): Response<HealthResponse>
 
-    @GET("api/files/tree")
+    @GET(SpecRoutes.FilesTree)
     suspend fun getFileTree(
         @Query("sinceVersion") sinceVersion: Int = 0,
         @Query("limit") limit: Int = 5000,
@@ -21,7 +21,7 @@ interface CloudPanApi {
     ): Response<FileTreeResponse>
 
     /** 获取指定文件夹下的文件列表（T-059：支持 cursor 游标分页）。 */
-    @GET("api/files/tree")
+    @GET(SpecRoutes.FilesTree)
     suspend fun getFileTreeInFolder(
         @Query("path") folderPath: String,
         @Query("limit") limit: Int = 5000,
@@ -29,7 +29,7 @@ interface CloudPanApi {
     ): Response<FileTreeResponse>
 
     @Multipart
-    @POST("api/files/upload")
+    @POST(SpecRoutes.FilesUpload)
     suspend fun uploadFile(
         @Part file: MultipartBody.Part,
         @Part("path") path: RequestBody,
@@ -37,53 +37,53 @@ interface CloudPanApi {
         @Part("lastModified") lastModified: RequestBody
     ): Response<UploadResponse>
 
-    @GET("api/files/download")
+    @GET(SpecRoutes.FilesDownload)
     suspend fun downloadFile(
         @Query("path") path: String
     ): Response<okhttp3.ResponseBody>
 
-    @POST("api/files/delete")
+    @POST(SpecRoutes.FilesDelete)
     suspend fun deleteFile(
         @Body request: Map<String, @JvmSuppressWildcards Any>
-    ): Response<Map<String, Any>>
+    ): Response<DeleteResponse>
 
-    @POST("api/files/move")
+    @POST(SpecRoutes.FilesMove)
     suspend fun moveFile(
         @Body request: Map<String, @JvmSuppressWildcards Any>
-    ): Response<Map<String, Any>>
+    ): Response<MoveResponse>
 
-    @POST("api/files/mkdir")
+    @POST(SpecRoutes.FilesMkdir)
     suspend fun createFolder(
         @Body request: Map<String, @JvmSuppressWildcards Any>
-    ): Response<Map<String, Any>>
+    ): Response<MkdirResponse>
 
-    @GET("api/files/search")
+    @GET(SpecRoutes.FilesSearch)
     suspend fun searchFiles(
         @Query("q") query: String,
         @Query("limit") limit: Int = 50
-    ): Response<Map<String, Any>>
+    ): Response<SearchResponse>
 
-    @POST("api/shares")
+    @POST(SpecRoutes.Shares)
     suspend fun createShare(
         @Body request: Map<String, @JvmSuppressWildcards Any>
-    ): Response<ShareResponse>
+    ): Response<ShareCreateResponse>
 
-    @GET("api/devices")
-    suspend fun getDevices(): Response<Map<String, Any>>
+    @GET(SpecRoutes.Devices)
+    suspend fun getDevices(): Response<DevicesResponse>
 
     // ---- 回收站（T-050，对齐 Windows T-014：删除走软删进回收站，可恢复/清空）----
 
     /** 回收站文件列表（GET /api/trash）。 */
-    @GET("api/trash")
+    @GET(SpecRoutes.Trash)
     suspend fun getTrash(): Response<TrashListResponse>
 
     /** 恢复回收站文件（POST /api/trash/restore，metaFileName 为回收站元数据文件名）。 */
-    @POST("api/trash/restore")
+    @POST(SpecRoutes.TrashRestore)
     suspend fun restoreTrash(
         @Body request: Map<String, @JvmSuppressWildcards Any>
-    ): Response<Map<String, Any>>
+    ): Response<TrashRestoreResponse>
 
     /** 清空回收站（DELETE /api/trash/empty）。 */
-    @DELETE("api/trash/empty")
-    suspend fun emptyTrash(): Response<Map<String, Any>>
+    @DELETE(SpecRoutes.TrashEmpty)
+    suspend fun emptyTrash(): Response<TrashEmptyResponse>
 }

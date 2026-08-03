@@ -21,7 +21,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cloudpan.android.BuildConfig
-import com.cloudpan.android.data.DeviceDto
+import com.cloudpan.android.data.DeviceItem
 import com.cloudpan.android.data.FileRepository
 import com.cloudpan.android.data.SettingsStore
 import com.cloudpan.android.worker.PhotoBackupWorker
@@ -37,7 +37,7 @@ fun SettingsScreen(
     var serverUrl by remember { mutableStateOf(settings.serverUrl) }
     var token by remember { mutableStateOf(settings.token) }
     var statusMessage by remember { mutableStateOf("") }
-    var devices by remember { mutableStateOf<List<DeviceDto>>(emptyList()) }
+    var devices by remember { mutableStateOf<List<DeviceItem>>(emptyList()) }
     var backupInfo by remember { mutableStateOf("") }
     var wifiOnly by remember { mutableStateOf(settings.wifiOnly) }
     var chargingOnly by remember { mutableStateOf(settings.chargingOnly) }

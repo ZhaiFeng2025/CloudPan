@@ -18,6 +18,8 @@ public static class Program
     private const string SharedOutputDir = "CloudPan.Contract/Generated";
     // 持久化实体依赖 EF Core 特性（[Index]），归属基础设施层 → CloudPan.Infrastructure/Generated
     private const string ServerOutputDir = "CloudPan.Infrastructure/Generated";
+    // Android Kotlin 契约产物 → CloudPan.Android/.../data/Generated（package com.cloudpan.android.data）
+    private const string AndroidOutputDir = "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/Generated";
 
     public static int Main(string[] args)
     {
@@ -59,6 +61,9 @@ public static class Program
                 ["API响应"]  = (SharedOutputDir, "ApiResponses.g.cs",      ApiResponseGenerator.Generate(spec)),
                 ["设置"]     = (SharedOutputDir, "Settings.g.cs",          SettingsGenerator.Generate(spec)),
                 ["路由常量"] = (SharedOutputDir, "SpecRoutes.g.cs",        ApiClientGenerator.Generate(spec)),
+                // Android Kotlin 契约产物（package com.cloudpan.android.data，纳入 --verify）
+                ["Kotlin DTO"] = (AndroidOutputDir, "Dtos.g.kt",           KotlinDtoGenerator.Generate(spec)),
+                ["Kotlin路由"] = (AndroidOutputDir, "SpecRoutes.g.kt",     KotlinApiGenerator.Generate(spec)),
                 // Controller 骨架仅作参考，实际业务逻辑需手写，不再自动生成
             };
 
