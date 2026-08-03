@@ -271,17 +271,21 @@ fun FileListScreen(
     // 外部刷新触发
     LaunchedEffect(refreshTrigger) { if (refreshTrigger > 0) loadFiles() }
 
-    // T-091：手动上传结果 Snackbar 反馈（成功/失败白话提示），展示后回调清除状态
+    // T-091：手动上传结果 Snackbar 反馈（成功/失败白话提示），展示后回调清除状态；
+    // 上传中分支不清除状态，保证 FAB 进度指示与防重复点击在上传期间持续生效
     LaunchedEffect(uploadState) {
         val state = uploadState ?: return@LaunchedEffect
         when (state) {
             is UploadUiState.Uploading -> Unit
-            is UploadUiState.Success ->
+            is UploadUiState.Success -> {
                 snackbarHostState.showSnackbar("已上传「${state.fileName}」")
-            is UploadUiState.Failed ->
+                onUploadStateHandled()
+            }
+            is UploadUiState.Failed -> {
                 snackbarHostState.showSnackbar("上传失败：「${state.fileName}」${state.message}")
+                onUploadStateHandled()
+            }
         }
-        onUploadStateHandled()
     }
 
     // ---- 对话框 ----
