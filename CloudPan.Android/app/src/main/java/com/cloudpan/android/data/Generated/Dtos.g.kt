@@ -1,5 +1,5 @@
 // AUTO-GENERATED from shared-spec.json
-// 版本: 1.3.0  日期: 2026-08-03
+// 版本: 1.5.0  日期: 2026-08-03
 // 源: shared-spec.json → enums + entities.apiMapping + api.responses + api.errorResponse
 // 请勿手工编辑 — 重新生成: dotnet run --project CloudPan.CodeGen
 
@@ -214,6 +214,7 @@ data class ChunkStatusData(
     @SerializedName("receivedChunks") val receivedChunks: List<Int>,
     @SerializedName("totalChunks") val totalChunks: Int,
     @SerializedName("isComplete") val isComplete: Boolean,
+    @SerializedName("version") val version: Int,
     @SerializedName("deviceId") val deviceId: String?,
     @SerializedName("createdAt") val createdAt: String?
 )

@@ -80,6 +80,7 @@ public partial class ChunkedUploadService : IChunkedUploadService
                 record.BaseVersion = baseVersion;
                 record.LastModified = lastModified ?? DateTime.UtcNow.ToString("O");
                 record.ReceivedChunks = "[]";
+                record.Finalized = false;
                 record.CreatedAt = DateTime.UtcNow.ToString("O");
                 SafeDeleteTemp(record.TempPath);
             }
@@ -102,7 +103,8 @@ public partial class ChunkedUploadService : IChunkedUploadService
                     TempPath = tempPath,
                     BaseVersion = baseVersion,
                     LastModified = lastModified ?? DateTime.UtcNow.ToString("O"),
-                    CreatedAt = DateTime.UtcNow.ToString("O")
+                    CreatedAt = DateTime.UtcNow.ToString("O"),
+                    Finalized = false
                 };
                 db.ChunkedUploads.Add(record);
             }
@@ -171,13 +173,44 @@ public partial class ChunkedUploadService : IChunkedUploadService
         await using var db = await _dbFactory.CreateDbContextAsync();
         var record = await db.ChunkedUploads.FindAsync(path);
 
+        // 当前服务端版本号（客户端 isComplete 恢复路径写入快照用，无索引记录为 0）
+        var existing = await _index.GetByPathAsync(path);
+        int currentVersion = existing?.Version ?? 0;
+
         if (record == null)
         {
-            return new ChunkStatusResult(false, null, Array.Empty<int>(), 0, false, null, null);
+            return new ChunkStatusResult(false, null, Array.Empty<int>(), 0, false, currentVersion, null, null);
         }
 
         var received = JsonSerializer.Deserialize<List<int>>(record.ReceivedChunks) ?? new List<int>();
+
+        // 崩溃窗口兜底（T-064）：位图声称全块已收但 Finalize 从未完成（文件未落盘）→ 该会话无效，
+        // 返回 Found=false 让客户端从头重传，消除『isComplete 当成功 → 队列项移除 → 新文件静默丢失』。
+        // 此处只读不删除：记录由启动清扫 CleanupIncompleteSessionsAsync 清理，避免与进行中的 Finalize 并发（CLAUDE.md 7.4）。
+        if (received.Count == record.TotalChunks && !record.Finalized)
+        {
+            return new ChunkStatusResult(false, null, Array.Empty<int>(), 0, false, currentVersion, null, null);
+        }
+
         return new ChunkStatusResult(true, record.FilePath, received, record.TotalChunks,
-            received.Count == record.TotalChunks, record.DeviceId, record.CreatedAt);
+            received.Count == record.TotalChunks, currentVersion, record.DeviceId, record.CreatedAt);
+    }
+
+    /// <inheritdoc />
+    public async Task CleanupIncompleteSessionsAsync()
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var records = await db.ChunkedUploads.ToListAsync();
+        foreach (var record in records)
+        {
+            var received = JsonSerializer.Deserialize<List<int>>(record.ReceivedChunks) ?? new List<int>();
+            // 崩溃窗口：全块已收但未 Finalized（文件从未落盘）→ 清除记录与临时文件，客户端下次重传
+            if (received.Count == record.TotalChunks && !record.Finalized)
+            {
+                SafeDeleteTemp(record.TempPath);
+                db.ChunkedUploads.Remove(record);
+            }
+        }
+        await db.SaveChangesAsync();
     }
 }

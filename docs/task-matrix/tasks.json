@@ -3276,7 +3276,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "跨维度去重：function F-76 与 ux F-101 同源合并（均报告设置改动需重启）。clouddrive-kb §4/§6 明确『限速/排除集改动即时生效，无需重启』。 ｜执行 2026-08-03（task-executor）：改动文件——SyncEngine.cs（_selectedPaths 由 readonly 启动快照改 volatile 引用替换 + 新增 UpdateSelectedPaths：立即引用替换 + 异步清除已排除路径的排队传输项 + 触发一次全量扫描）；SyncEngine.FullScan.cs（IsPathSelected 局部快照读值，单次调用内语义一致）；ApiClient.cs（限速字段去 readonly 改运行时可变 + 新增 SetUploadLimit/SetDownloadLimit，Interlocked.Exchange 写入 / Interlocked.Read 读取）；IApiClient.cs（接口新增两 Set 方法）；TrayAppContext.cs/.Actions.cs（注入 IApiClient，保存设置后下发限速 + 排除集热更新，删除『部分更改需要重启客户端后生效』弹窗文案改『设置已保存』）；Program.cs（装配向 TrayAppContext 传入 IApiClient）；MockApiClient.cs（实现接口新方法）；SyncEngineTests.cs（新增 3 条 UpdateSelectedPaths 热更新单测）。取舍：需求『改 volatile 字段』对 long 不可行（C# 禁止 volatile long），按 CLAUDE.md 7.4 改用 Interlocked 读写实现运行时可变，验收 grep（volatile|SetUploadLimit|SetDownloadLimit 命中 SetUploadLimit/SetDownloadLimit）满足。验证：dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test CloudPan.Tests -c Release EXIT=0（298/298 通过，SyncEngine 过滤 70/70 含新增 3 条）；dotnet run --project CloudPan.CodeGen -- --verify 12 项一致。手动验收项：(1) 设置窗口保存取消勾选排除目录后，不重启客户端，取消勾选目录不再继续上传/下载（下一同步周期 ≤3s 生效，排队项被清除）；(2) 修改上传/下载限速保存后无需重启立即按新限速节流；(3) 设置保存弹窗仅提示『设置已保存』，不再出现『需重启』文案；Token 变更仍走独立重配链路（F-34/T-034）。",
+      "note": "跨维度去重：function F-76 与 ux F-101 同源合并（均报告设置改动需重启）。clouddrive-kb §4/§6 明确『限速/排除集改动即时生效，无需重启』。 ｜执行 2026-08-03（task-executor）：改动文件——SyncEngine.cs（_selectedPaths 由 readonly 启动快照改 volatile 引用替换 + 新增 UpdateSelectedPaths：立即引用替换 + 异步清除已排除路径的排队传输项 + 触发一次全量扫描）；SyncEngine.FullScan.cs（IsPathSelected 局部快照读值，单次调用内语义一致）；ApiClient.cs（限速字段去 readonly 改运行时可变 + 新增 SetUploadLimit/SetDownloadLimit，Interlocked.Exchange 写入 / Interlocked.Read 读取）；IApiClient.cs（接口新增两 Set 方法）；TrayAppContext.cs/.Actions.cs（注入 IApiClient，保存设置后下发限速 + 排除集热更新，删除『部分更改需要重启客户端后生效』弹窗文案改『设置已保存』）；Program.cs（装配向 TrayAppContext 传入 IApiClient）；MockApiClient.cs（实现接口新方法）；SyncEngineTests.cs（新增 3 条 UpdateSelectedPaths 热更新单测）。取舍：需求『改 volatile 字段』对 long 不可行（C# 禁止 volatile long），按 CLAUDE.md 7.4 改用 Interlocked 读写实现运行时可变，验收 grep（volatile|SetUploadLimit|SetDownloadLimit 命中 SetUploadLimit/SetDownloadLimit）满足。验证：dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test CloudPan.Tests -c Release EXIT=0（298/298 通过，SyncEngine 过滤 70/70 含新增 3 条）；dotnet run --project CloudPan.CodeGen -- --verify 12 项一致。手动验收项：(1) 设置窗口保存取消勾选排除目录后，不重启客户端，取消勾选目录不再继续上传/下载（下一同步周期 ≤3s 生效，排队项被清除）；(2) 修改上传/下载限速保存后无需重启立即按新限速节流；(3) 设置保存弹窗仅提示『设置已保存』，不再出现『需重启』文案；Token 变更仍走独立重配链路（F-34/T-034）。 ｜验收 2026-08-03（task-verifier）：3 条自动验收标准独立执行全部通过——(1) dotnet test CloudPan.Tests -c Release --filter SyncEngine：70/70 通过（含 UpdateSelectedPaths 热更新单测）；(2) grep 'volatile|SetUploadLimit|SetDownloadLimit' CloudPan.Client.Core/Services/ApiClient.cs：命中 SetUploadLimit/SetDownloadLimit（限速运行时可变；long 不能 volatile，按 CLAUDE.md 7.4 以 Interlocked 实现，满足契约关键字）；(3) dotnet test CloudPan.Tests -c Release：298/298 通过 + dotnet build CloudPan.sln -c Release：0 错误 0 警告。手动标准代码路径核对通过：SyncEngine.UpdateSelectedPaths（引用替换 + 清 SyncQueue 已排除项 + 触发 FullScanAsync，Task.Run 全异常捕获符合 7.2）；ApiClient Interlocked.Exchange 写入/Interlocked.Read 读取 + ThrottledStream 按需创建（每传输读当前值）；TrayAppContext.Actions.cs:86-90 保存设置后下发限速+排除集热更新，弹窗改『设置已保存。』，『部分更改需要重启客户端后生效』文案已删除（残留需重启文案仅属 Token 独立链路 SettingsForm.cs:79/AccountTab.cs:171/Program.cs:98，需求明确不并入）。【需人工确认：①设置窗口保存取消勾选排除目录后不重启客户端，取消勾选目录不再继续上传/下载（下一同步周期 ≤3s 生效，排队项清除）；②修改上传/下载限速保存后无需重启立即按新限速节流（传输中流按旧限速属预期）；③设置保存弹窗仅提示『设置已保存』，无『需重启』文案。】",
       "updatedAt": "2026-08-03"
     },
     {
@@ -3284,7 +3284,7 @@
       "title": "分块上传恢复路径返回真实版本号并兜底 isComplete 未落盘会话",
       "dimension": "function",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 6,
       "findingId": "F-75",
       "dependsOn": [],
@@ -3315,8 +3315,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "执行 2026-08-03（task-executor）：改动文件——shared-spec.json（v1.3.0→v1.5.0：ChunkStatusData 新增 version:int、ChunkedUpload 新增 Finalized 布尔列）+ 重跑 CloudPan.CodeGen 再生成 Entities.g.cs/ApiResponses.g.cs/ClientEntities.g.cs/Contract 各 g.cs/Kotlin DTO（仅版本头 + 新字段）；IChunkedUploadService.cs（ChunkStatusResult 新增 Version + CleanupIncompleteSessionsAsync）；ChunkedUploadService.cs（GetStatusAsync 返回服务端当前版本号、isComplete&&未Finalized 视为无会话只读不删、建/重置会话置 Finalized=false、新增启动清扫）；ChunkedUploadService.Finalize.cs（FinalizeAsync 阶段2事务内置 Finalized=true 后移除会话）；FilesController.ChunkedUpload.cs（GetChunkStatus 映射 version）；DatabaseInitializer.cs（启动清扫崩溃会话，非致命）；ApiClient.ChunkedUpload.cs（兜底 UploadData 填状态响应版本，不再填 0）；EF 迁移 AddChunkedUploadFinalized（手工收窄为仅加列，去除 EF 自动生成的索引重建——属模型快照与 InitialCreate 手写 SQL 既有基线差异，且会在 EnsureCreated 时代旧库上因索引已存在而失败，见迁移文件注释）+ 同步还原快照与 Designer 索引基线；MigrationsTests.cs（多迁移断言 + 旧库模拟无 Finalized 列 + 补列断言）；ChunkedUploadServiceTests.cs（新增 2 条：全块已收未 Finalized 视为无会话清扫后允许重传 / isComplete 已 Finalized 返回真实版本号）。验证：dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test CloudPan.Tests -c Release EXIT=0（300/300 通过，ChunkedUpload 过滤 13/13、Migrations 4/4）；dotnet run --project CloudPan.CodeGen -- --verify 12 项一致；grep 'new UploadData(remotePath, 0\\|version.*= 0' CloudPan.Client.Core/Services/ApiClient.ChunkedUpload.cs 无匹配。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-065",

@@ -3,9 +3,13 @@
   "$id": "cloudpan-shared-spec",
   "title": "CloudPan 共享定义",
   "description": "所有枚举、实体、端点、字段名、错误码、配置值的唯一事实来源。所有代码和文档引用本文件，禁止各自重复定义。",
-  "version": "1.3.0",
+  "version": "1.5.0",
   "date": "2026-08-03",
   "_changelog": [
+    { "version": "1.5.0", "date": "2026-08-03", "changes": [
+      "api.responses.ChunkStatusData 新增 version: int（服务端当前版本号），断点续传恢复路径不再兜底 version=0（T-064）",
+      "entities.ChunkedUpload 新增 Finalized 布尔列：Finalize 完成标记，崩溃窗口（位图已收全块但未落盘）会话在重启时清除并允许客户端重传（T-064）"
+    ]},
     { "version": "1.3.0", "date": "2026-08-03", "changes": [
       "api.endpoints 注册 WebSocket 端点 /ws（GET, auth=message）；SpecRoutes 生成 WebSocket 常量，Program.cs 与 WebSocketClient 改引用，删除手拼 /ws",
       "服务端 Controller 全部路由字面量改引用 SpecRoutes 生成常量，类级 [Route] 前缀移除，路由单一事实来源为契约（T-058）"
@@ -355,7 +359,8 @@
         { "name": "TempPath",       "type": "TEXT",    "nullable": false, "role": "",     "description": "合并前的临时文件路径（.tmp）" },
         { "name": "BaseVersion",    "type": "INTEGER", "nullable": false, "role": "",     "description": "上传基准版本号" },
         { "name": "LastModified",   "type": "TEXT",    "nullable": false, "role": "",     "description": "文件最后修改时间" },
-        { "name": "CreatedAt",      "type": "TEXT",    "nullable": false, "role": "IDX",  "description": "首块到达时间。用于清理超时未完成的上传" }
+        { "name": "CreatedAt",      "type": "TEXT",    "nullable": false, "role": "IDX",  "description": "首块到达时间。用于清理超时未完成的上传" },
+        { "name": "Finalized",      "type": "INTEGER", "nullable": false, "role": "",     "csharpType": "bool", "default": "false", "description": "Finalize 已完成（文件已落盘）标记，默认 false；崩溃窗口下会话 isComplete=true 但未 Finalized → 重启时清除并允许客户端重传" }
       ],
       "indexes": [
         "idx_chunk_device  ON ChunkedUpload(DeviceId)",
@@ -470,7 +475,7 @@
       },
       "ChunkStatusData": {
         "description": "分块上传进度查询 data",
-        "fields": ["filePath: string?", "path: string?", "receivedChunks: int[]", "totalChunks: int", "isComplete: bool", "deviceId: string?", "createdAt: string?"]
+        "fields": ["filePath: string?", "path: string?", "receivedChunks: int[]", "totalChunks: int", "isComplete: bool", "version: int", "deviceId: string?", "createdAt: string?"]
       },
       "TrashItem": {
         "description": "回收站条目（列表展示用）",

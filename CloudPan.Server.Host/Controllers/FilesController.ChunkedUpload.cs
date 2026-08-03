@@ -100,7 +100,7 @@ public partial class FilesController
         if (!status.Found)
         {
             return Ok(new ChunkStatusResponse(
-                new ChunkStatusData(null, path, Array.Empty<int>(), 0, false, null, null)));
+                new ChunkStatusData(null, path, Array.Empty<int>(), 0, false, status.Version, null, null)));
         }
 
         return Ok(new ChunkStatusResponse(
@@ -110,6 +110,7 @@ public partial class FilesController
                 status.ReceivedChunks?.ToArray() ?? Array.Empty<int>(),
                 status.TotalChunks,
                 status.IsComplete,
+                status.Version,
                 status.DeviceId,
                 status.CreatedAt)));
     }

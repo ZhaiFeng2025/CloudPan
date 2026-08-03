@@ -32,6 +32,8 @@ public partial class ApiClient
         // 查询服务端进度（断点续传）
         var status = await GetChunkStatusAsync(remotePath, ct);
         var receivedChunks = status?.Data?.ReceivedChunks ?? Array.Empty<int>();
+        // 服务端当前版本号：isComplete 恢复路径（全块已收）下写入快照用，避免兜底 version=0 引发整文件无谓重下载（T-064）
+        int serverVersion = status?.Data?.Version ?? 0;
 
         await using var fileStream = File.OpenRead(localPath);
 
@@ -86,7 +88,8 @@ public partial class ApiClient
         }
 
         // 所有块上传完毕（理论上服务端会在最后一块完成时返回 complete）
-        return new UploadResponse(new UploadData(remotePath, 0, fileHash, fileSize, false));
+        // 兜底填服务端当前版本而非 0：快照不被置 0，避免下轮同步将整文件视为已变更而重复下载（T-064）
+        return new UploadResponse(new UploadData(remotePath, serverVersion, fileHash, fileSize, false));
     }
 
     /// <summary>查询分块上传进度。</summary>

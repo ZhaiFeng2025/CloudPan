@@ -3,6 +3,7 @@ using CloudPan.Infrastructure.Models;
 using CloudPan.Infrastructure.Persistence;
 using CloudPan.Infrastructure.Security;
 using CloudPan.Infrastructure.Storage;
+using CloudPan.Server.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -143,6 +144,19 @@ public static class DatabaseInitializer
         catch (Exception ex)
         {
             logger.LogWarning(ex, "重置设备在线状态失败（非致命）");
+        }
+
+        // 清除崩溃窗口残留的分块上传会话（位图已收全块但 Finalize 未完成 → 文件从未落盘），
+        // 否则客户端恢复路径把 isComplete 当成功移除队列项 → 新文件静默丢失上传（T-064）。
+        // 仅在启动时执行（无进行中的 Finalize，无并发风险）；失败不阻塞启动。
+        try
+        {
+            var chunkedUpload = scope.ServiceProvider.GetRequiredService<IChunkedUploadService>();
+            chunkedUpload.CleanupIncompleteSessionsAsync().GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "清除残留分块上传会话失败（非致命）");
         }
 
         // WAL checkpoint（PASSIVE，失败不截断）

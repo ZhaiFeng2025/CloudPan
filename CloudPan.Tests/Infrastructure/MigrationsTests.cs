@@ -52,11 +52,17 @@ public class MigrationsTests : IDisposable
         using CloudPanDbContext db = CreateServerDb(dbPath);
         db.Database.Migrate();
 
-        Assert.Contains("InitialCreate", db.Database.GetAppliedMigrations().Single());
+        var applied = db.Database.GetAppliedMigrations().ToList();
+        Assert.Contains(applied, m => m.Contains("InitialCreate"));
+        Assert.Contains(applied, m => m.Contains("AddChunkedUploadFinalized"));
         List<string> tables = TableNames(db);
         Assert.Contains("__EFMigrationsHistory", tables);
         foreach (string t in new[] { "FileEntry", "VersionRecord", "Device", "Share", "SyncLog", "ChunkedUpload", "AppConfig" })
             Assert.Contains(t, tables);
+        // T-064：ChunkedUpload 已补 Finalized 列
+        Assert.True(db.Database.SqlQueryRaw<int>(
+                "SELECT COUNT(*) FROM pragma_table_info('ChunkedUpload') WHERE name='Finalized';")
+            .ToList().First() > 0);
     }
 
     [Fact]
@@ -79,6 +85,8 @@ public class MigrationsTests : IDisposable
             db.SaveChanges();
             // 模拟旧库缺失后期新增的表（原 EnsureCreated 不补建，见 F-08/function 审查）
             db.Database.ExecuteSqlRaw("DROP TABLE Share;");
+            // 模拟旧库无 Finalized 列：EnsureCreated 按当前模型建表含新列，移除以还原旧库形态（T-064 迁移补列）
+            db.Database.ExecuteSqlRaw("ALTER TABLE ChunkedUpload DROP COLUMN Finalized;");
         }
 
         // 阶段 2：升级——Migrate 幂等：已有表跳过（数据保留）、缺失表补建、记录迁移历史
@@ -90,12 +98,18 @@ public class MigrationsTests : IDisposable
         // 阶段 3：验证
         using (CloudPanDbContext db = CreateServerDb(dbPath))
         {
-            Assert.Contains("InitialCreate", db.Database.GetAppliedMigrations().Single());
+            var applied = db.Database.GetAppliedMigrations().ToList();
+            Assert.Contains(applied, m => m.Contains("InitialCreate"));
+            Assert.Contains(applied, m => m.Contains("AddChunkedUploadFinalized"));
             // 种子数据保留
             Assert.Equal("服务端", db.Devices.Single(d => d.Id == "server").Name);
             Assert.Equal("0", db.AppConfigs.Single(c => c.Key == "global_version").Value);
             // 缺失表已补建
             Assert.Contains("Share", TableNames(db));
+            // T-064：旧库升级后 ChunkedUpload 已补 Finalized 列
+            Assert.True(db.Database.SqlQueryRaw<int>(
+                    "SELECT COUNT(*) FROM pragma_table_info('ChunkedUpload') WHERE name='Finalized';")
+                .ToList().First() > 0);
         }
     }
 

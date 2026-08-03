@@ -15,9 +15,9 @@ public sealed record ChunkConflictOutcome(string Path, int CurrentVersion, int B
 /// <summary>分块上传错误。</summary>
 public sealed record ChunkErrorOutcome(DomainError Error) : ChunkUploadOutcome;
 
-/// <summary>分块上传进度查询结果。Found=false 表示无进行中的会话。</summary>
+/// <summary>分块上传进度查询结果。Found=false 表示无进行中的会话。Version=服务端当前版本号（客户端恢复路径写入快照用，无文件为 0）。</summary>
 public sealed record ChunkStatusResult(
-    bool Found, string? FilePath, IReadOnlyList<int>? ReceivedChunks, int TotalChunks, bool IsComplete, string? DeviceId, string? CreatedAt);
+    bool Found, string? FilePath, IReadOnlyList<int>? ReceivedChunks, int TotalChunks, bool IsComplete, int Version, string? DeviceId, string? CreatedAt);
 
 /// <summary>
 /// 分块上传领域服务。封装分块会话管理、块写入、位图更新、合并校验与 Finalize
@@ -32,4 +32,10 @@ public interface IChunkedUploadService
 
     /// <summary>查询分块上传进度。</summary>
     Task<ChunkStatusResult> GetStatusAsync(string path);
+
+    /// <summary>
+    /// 重启清扫：清除 isComplete=true 但未 Finalized 的崩溃会话（位图已收全块但文件从未落盘）。
+    /// 在服务启动时调用（此时无进行中的 Finalize，无并发风险，CLAUDE.md 7.4）。
+    /// </summary>
+    Task CleanupIncompleteSessionsAsync();
 }

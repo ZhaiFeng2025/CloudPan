@@ -105,11 +105,17 @@ public partial class ChunkedUploadService
 
         // —— 阶段 2：DB 事务（同一 DbContext，经 VersionCommitHelper 单点提交）——
         //    辅助统一『存档记录 + 裁剪 + upsert FileEntry』的事务边界、回滚与孤儿存档清理
+        //    标记 Finalized 与移除会话同事务提交：事务成功即代表 Finalize 完成（文件落盘在阶段 3，
+        //    若阶段 2 提交后崩溃，会话已移除，索引指向新版本；客户端重传按哈希差异收敛，不丢上传）。
         await _versionCommit.CommitNewVersionInTransactionAsync(
             db, path, existingForArchive, archivePath,
             new VersionCommitState(path, hash, uploadFileSize, newVersion, record.LastModified),
             deviceId, prune: true,
-            extraDbWork: () => db.ChunkedUploads.Remove(record));
+            extraDbWork: () =>
+            {
+                record.Finalized = true;
+                db.ChunkedUploads.Remove(record);
+            });
 
         // —— 阶段 3：FS 原子覆盖（DB 已提交）——
         //    Move 失败（目标被锁等）时磁盘仍是旧内容，但索引已指向新 hash/version——若放任，客户端下轮树同步

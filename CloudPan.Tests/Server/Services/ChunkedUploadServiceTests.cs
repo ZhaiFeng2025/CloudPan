@@ -237,6 +237,113 @@ public class ChunkedUploadServiceTests : Infrastructure.TestBase
         }
     }
 
+    [Fact]
+    public async Task GetStatus_全块已收未Finalized_视为无会话_清扫后允许重传()
+    {
+        // T-064 崩溃窗口：位图先落（isComplete=true）但 Finalize 从未运行（Finalized=false）→ 文件未落盘。
+        // 客户端恢复路径若把 isComplete 当成功会移除队列项 → 新文件静默丢失；应视为无会话并允许重传。
+        var dbFactory = CreateServerDbFactory();
+        var storage = new FileStorageService(TempDir);
+        var index = new FileIndexService(dbFactory);
+        var version = new VersionService(dbFactory);
+        var syncLog = new SyncLogService(dbFactory, NullLogger<SyncLogService>.Instance);
+        var svc = new ChunkedUploadService(dbFactory, storage, index, version, syncLog,
+            new VersionCommitHelper(storage, NullLogger<VersionCommitHelper>.Instance));
+
+        string path = "/crash-window.bin";
+        byte[] bytes = CreateContent(SpecConfig.ChunkSize + 100);
+        string hash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+
+        // 接收块 0，建立会话
+        using var s0 = new MemoryStream(bytes, 0, SpecConfig.ChunkSize);
+        await svc.ReceiveChunkAsync(path, 0, 2, hash, 0, null, "dev-1", s0);
+
+        string tempPath;
+        await using (var db = await dbFactory.CreateDbContextAsync())
+        {
+            var record = await db.ChunkedUploads.FindAsync(path);
+            Assert.NotNull(record);
+            tempPath = record.TempPath;
+            // 模拟崩溃窗口：位图已收全块（isComplete=true）但 Finalize 从未完成（Finalized=false）
+            record.ReceivedChunks = "[0,1]";
+            record.Finalized = false;
+            await db.SaveChangesAsync();
+        }
+
+        // 客户端恢复路径查询：崩溃会话视为无会话（Found=false）→ 客户端从头重传
+        var status = await svc.GetStatusAsync(path);
+        Assert.False(status.Found);
+
+        // GetStatus 只读不删（避免与进行中的 Finalize 并发，CLAUDE.md 7.4），记录由启动清扫清除
+        await using (var verify = await dbFactory.CreateDbContextAsync())
+        {
+            Assert.NotNull(await verify.ChunkedUploads.FindAsync(path));
+        }
+        await svc.CleanupIncompleteSessionsAsync();
+        await using (var verify = await dbFactory.CreateDbContextAsync())
+        {
+            Assert.Null(await verify.ChunkedUploads.FindAsync(path));
+        }
+        Assert.False(File.Exists(tempPath));
+
+        // 客户端重传（全新会话）→ 合并成功，SHA-256 一致
+        using var r0 = new MemoryStream(bytes, 0, SpecConfig.ChunkSize);
+        await svc.ReceiveChunkAsync(path, 0, 2, hash, 0, null, "dev-1", r0);
+        using var r1 = new MemoryStream(bytes, SpecConfig.ChunkSize, 100);
+        var out1 = await svc.ReceiveChunkAsync(path, 1, 2, hash, 0, null, "dev-1", r1);
+        var completed = Assert.IsType<ChunkCompletedOutcome>(out1);
+        Assert.Equal(hash, completed.Hash);
+    }
+
+    [Fact]
+    public async Task GetStatus_isComplete已Finalized_返回真实版本号()
+    {
+        // T-064：isComplete=true 且 Finalized=true 的会话（文件已落盘）→ 恢复路径返回服务端当前版本号，
+        // 客户端不再以 version=0 兜底（避免快照被置 0 引发整文件无谓重下载）。
+        var dbFactory = CreateServerDbFactory();
+        var storage = new FileStorageService(TempDir);
+        var index = new FileIndexService(dbFactory);
+        var version = new VersionService(dbFactory);
+        var syncLog = new SyncLogService(dbFactory, NullLogger<SyncLogService>.Instance);
+        var svc = new ChunkedUploadService(dbFactory, storage, index, version, syncLog,
+            new VersionCommitHelper(storage, NullLogger<VersionCommitHelper>.Instance));
+
+        string path = "/finalized.bin";
+        string targetPath = Path.Combine(TempDir, "finalized.bin");
+        byte[] content = CreateContent(500);
+        string hash = Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
+        string lastModified = DateTime.UtcNow.AddHours(-1).ToString("O");
+        int fileVersion = await version.NextVersionAsync();
+        File.WriteAllBytes(targetPath, content);
+        await index.UpsertFileAsync(path, FileType.File, hash, content.Length, lastModified, fileVersion, FileState.Synced);
+
+        // 手工构造已 Finalized 的会话记录（模拟 Finalize 完成、文件已落盘但记录尚未清理的形态）
+        await using (var db = await dbFactory.CreateDbContextAsync())
+        {
+            db.ChunkedUploads.Add(new ChunkedUpload
+            {
+                FilePath = path,
+                DeviceId = "dev-1",
+                FileHash = hash,
+                TotalChunks = 2,
+                ReceivedChunks = "[0,1]",
+                TempPath = Path.Combine(TempDir, "finalized.bin.chunk.tmp"),
+                BaseVersion = 0,
+                LastModified = lastModified,
+                CreatedAt = DateTime.UtcNow.ToString("O"),
+                Finalized = true
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var status = await svc.GetStatusAsync(path);
+
+        Assert.True(status.Found);
+        Assert.True(status.IsComplete);
+        Assert.Equal(fileVersion, status.Version);
+        Assert.Equal(2, status.TotalChunks);
+    }
+
     /// <summary>生成确定性字节内容（模式填充，非随机，便于断言与哈希复现）。</summary>
     private static byte[] CreateContent(int length)
     {
