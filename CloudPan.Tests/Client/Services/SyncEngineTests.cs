@@ -48,11 +48,18 @@ public class SyncEngineTests : IDisposable
     /// <summary>冲突测试事件处理器（Dispose 中退订，满足 CP300 事件订阅可退订规则）。</summary>
     private Action<ConflictInfo>? _conflictHandler;
 
+    /// <summary>重配引导测试事件处理器（Dispose 中退订，满足 CP300 事件订阅可退订规则）。</summary>
+    private Action? _reconfigHandler;
+
     public void Dispose()
     {
         if (_conflictHandler != null)
         {
             _engine.ConflictDetected -= _conflictHandler;
+        }
+        if (_reconfigHandler != null)
+        {
+            _engine.ReconfigurationRequired -= _reconfigHandler;
         }
         try { Directory.Delete(_tempDir, recursive: true); } catch { }
     }
@@ -505,6 +512,37 @@ public class SyncEngineTests : IDisposable
         await using var dbFinal = await _dbFactory.CreateDbContextAsync();
         int remaining = await dbFinal.SyncQueue.CountAsync(q => q.FilePath == "/concurrent-edit.txt");
         Assert.Equal(1, remaining);
+    }
+
+    // ============================================================
+    // 连续 401 触发重配引导测试（F-34/T-034）
+    // ============================================================
+
+    [Fact]
+    public async Task 持续401_达到阈值_触发重配引导一次()
+    {
+        // 三个待上传文件：上传全部返回 401 → 连续认证失败达到阈值 → ReconfigurationRequired 触发一次
+        _api.AuthFailMode = true;
+        for (int i = 0; i < 3; i++)
+        {
+            string name = $"auth-{i}.txt";
+            await File.WriteAllTextAsync(Path.Combine(_syncRoot, name), "content");
+            await _engine.EnqueueLocalChangeAsync($"/{name}", SyncOperation.Upload);
+        }
+
+        int reconfigCount = 0;
+        _reconfigHandler = () => reconfigCount++;
+        _engine.ReconfigurationRequired += _reconfigHandler;
+
+        var method = typeof(SyncEngine).GetMethod("ProcessQueueAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+        Task? task = (Task?)method!.Invoke(_engine, [CancellationToken.None]);
+        Assert.NotNull(task);
+        await task;
+
+        // 恰好越过阈值触发一次；计数继续增长不再重复触发
+        Assert.Equal(1, reconfigCount);
     }
 
     // ============================================================

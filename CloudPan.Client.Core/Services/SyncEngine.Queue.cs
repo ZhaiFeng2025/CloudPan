@@ -83,7 +83,10 @@ public partial class SyncEngine
                     SyncOperation op = (SyncOperation)item.Operation;
                     _logger.LogError($"传输异常 [{item.RetryCount}/{MaxRetryCount}]: {item.FilePath} — {ex.Message}");
                     // F-31：不再透出原始异常字符串，转为白话归因 + 下一步
-                    ErrorOccurred?.Invoke(item.FilePath, ErrorAttribution.FromException(ex), op);
+                    ErrorAttribution attribution = ErrorAttribution.FromException(ex);
+                    ErrorOccurred?.Invoke(item.FilePath, attribution, op);
+                    // F-34：连续 401（Token/服务端配置变更）达到阈值 → 触发重配引导，而非静默离线
+                    TrackAuthFailure(attribution.RequiresReconfiguration);
 
                     // 阶梯退避：200ms→400ms→...→2000ms 后保持 2000ms
                     int backoffMs = GetBackoffDelay(item.RetryCount);
@@ -98,6 +101,12 @@ public partial class SyncEngine
                     if (success && item.FileSize.HasValue)
                     {
                         Interlocked.Add(ref _completedBytes, item.FileSize.Value);
+                    }
+
+                    // 单项传输成功 → 重置连续认证失败计数
+                    if (success)
+                    {
+                        TrackAuthFailure(false);
                     }
 
                     db.SyncQueue.Remove(item);

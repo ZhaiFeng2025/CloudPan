@@ -25,6 +25,9 @@ public class TrayAppContext : ApplicationContext
     private readonly System.Collections.Concurrent.ConcurrentQueue<string> _recentActivity = new(); // 最近同步活动（托盘文本）
     private volatile bool _isPaused;
 
+    /// <summary>重配引导已提示过（F-34/T-034）：防 HTTP 队列与 WebSocket 双重 401 同时弹两次；连接恢复/重配成功后重置。</summary>
+    private volatile bool _reconfigPromptShown;
+
     public TrayAppContext(SyncEngine engine, WebSocketClient wsClient)
     {
         _engine = engine;
@@ -91,6 +94,8 @@ public class TrayAppContext : ApplicationContext
         wsClient.OnConnected += OnWsConnected;
         // 认证失败
         wsClient.OnPermanentFailure += OnWsPermanentFailure;
+        // F-34/T-034：连续 401（Token 或服务端配置已变更）→ 重配引导
+        engine.ReconfigurationRequired += OnReconfigurationRequired;
         // 状态更新
         engine.StatusChanged += OnStatusChanged;
     }
@@ -162,6 +167,8 @@ public class TrayAppContext : ApplicationContext
     /// <summary>WebSocket 重连成功：恢复在线状态。</summary>
     private void OnWsConnected()
     {
+        // 连接恢复（Token 已有效）→ 允许未来再次触发重配引导
+        _reconfigPromptShown = false;
         _syncCtx?.Post(_ =>
         {
             _trayIcon.Icon = _normalIcon;
@@ -170,17 +177,59 @@ public class TrayAppContext : ApplicationContext
         }, null);
     }
 
-    /// <summary>认证失败：提示 Token 无效。</summary>
+    /// <summary>认证失败（WebSocket 侧持续 401）：统一走重配引导（F-34/T-034）。</summary>
     private void OnWsPermanentFailure()
     {
         _syncCtx?.Post(_ =>
         {
             _trayIcon.Icon = SystemIcons.Error;
-            _trayIcon.Text = "CloudPan — Token 无效，请重新配置";
-            _trayIcon.ShowBalloonTip(5000, "CloudPan",
-                "Token 认证失败已达上限。请检查 Token 是否正确或服务端是否已重新生成。",
-                ToolTipIcon.Error);
+            _trayIcon.Text = "CloudPan — 需要重新配置";
+            ShowReconfigurationPrompt();
         }, null);
+    }
+
+    /// <summary>连续 401（同步引擎 HTTP 路径）→ 重配引导（F-34/T-034）。</summary>
+    private void OnReconfigurationRequired()
+    {
+        _syncCtx?.Post(_ => ShowReconfigurationPrompt(), null);
+    }
+
+    /// <summary>重配引导：提示「Token 或服务端配置已变更」，用户确认后打开配置页（SetupForm）。</summary>
+    private void ShowReconfigurationPrompt()
+    {
+        if (_reconfigPromptShown)
+        {
+            return;
+        }
+        _reconfigPromptShown = true;
+
+        DialogResult result = MessageBox.Show(
+            "云盘服务的连接钥匙（Token）或服务端配置已变更，当前连接已失效。\n\n" +
+            "是否立即打开配置页面，重新配置家庭服务器地址与连接钥匙？",
+            "CloudPan — 需要重新配置",
+            MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+        if (result == DialogResult.Yes && StartupFlow.ShowSetupAndSave())
+        {
+            _reconfigPromptShown = false;
+            MessageBox.Show("配置已更新，客户端将自动重启以应用新配置。",
+                "CloudPan", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            RestartApplication();
+        }
+    }
+
+    /// <summary>重启客户端进程（新实例启动后退出当前实例），使重新配置后的连接参数生效。</summary>
+    private void RestartApplication()
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(Application.ExecutablePath);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"重启客户端失败: {ex.Message}");
+            return;
+        }
+        Exit();
     }
 
     /// <summary>同步状态更新：更新托盘文本/图标并记录日志。</summary>
@@ -335,6 +384,7 @@ public class TrayAppContext : ApplicationContext
             _trayIcon.Dispose();
             _normalIcon.Dispose();
             _mainWindow.Dispose();
+            _engine.ReconfigurationRequired -= OnReconfigurationRequired; // 退订重配引导事件（CP300）
             _engine.Dispose();     // 释放 SyncEngine（取消 WS 事件订阅、释放 _syncLock、_fileWatcher）
             _wsClient.Dispose();   // 释放 WebSocketClient（Socket、信号量、事件委托）
         }

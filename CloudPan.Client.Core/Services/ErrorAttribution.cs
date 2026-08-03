@@ -14,10 +14,17 @@ public sealed class ErrorAttribution
     /// <summary>建议的下一步动作；无特定建议时为空字符串。</summary>
     public string NextStep { get; }
 
-    public ErrorAttribution(string message, string nextStep = "")
+    /// <summary>
+    /// 是否需要重新配置连接（F-34/T-034）：401/认证失效类错误为 true。
+    /// 客户端据其判断「持续收到 401 = 服务端 Token 或同步根配置已变更」，触发重配引导而非静默离线。
+    /// </summary>
+    public bool RequiresReconfiguration { get; }
+
+    public ErrorAttribution(string message, string nextStep = "", bool requiresReconfiguration = false)
     {
         Message = message;
         NextStep = nextStep;
+        RequiresReconfiguration = requiresReconfiguration;
     }
 
     /// <summary>
@@ -70,7 +77,7 @@ public sealed class ErrorAttribution
         switch (exception)
         {
             case HttpRequestException http when http.StatusCode == HttpStatusCode.Unauthorized:
-                return (100, new ErrorAttribution("登录凭证已失效，无法连接云盘服务", "请打开设置，重新配置云盘地址与 Token"));
+                return (100, new ErrorAttribution("登录凭证已失效，无法连接云盘服务", "请打开设置，重新配置云盘地址与 Token", requiresReconfiguration: true));
             case UnauthorizedAccessException:
                 return (90, new ErrorAttribution("没有访问权限，无法读写文件", "请检查同步文件夹的访问权限设置"));
             case IOException io when IsDiskFull(io):

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Net;
 using CloudPan.Client.Core.Models;
 using CloudPan.Contract;
 using Microsoft.EntityFrameworkCore;
@@ -93,6 +94,11 @@ public partial class SyncEngine : IDisposable
     /// <summary>等待用户决策的冲突文件。Key 为相对路径。</summary>
     private readonly ConcurrentDictionary<string, ConflictInfo> _pendingConflicts = new();
 
+    // 连续 401（认证失效）计数：达到阈值触发 ReconfigurationRequired 重配引导（F-34/T-034）。
+    // 计数在同步线程（StartAsync 循环 + 队列消费）单线程访问，仍用 Interlocked 保证并发安全（CLAUDE.md 7.4）。
+    private const int AuthFailureThreshold = 3;
+    private int _consecutiveAuthFailures;
+
     public event Action<string>? StatusChanged;
     public event Action<SyncStatus>? QueueProgressChanged;
     public event Action<ConflictInfo>? ConflictDetected;
@@ -100,6 +106,11 @@ public partial class SyncEngine : IDisposable
     public event Action<string>? ConflictResolved;
     /// <summary>同步错误事件。参数：(filePath, 白话归因, operationType)，归因由 ErrorAttribution 生成。</summary>
     public event Action<string, ErrorAttribution, SyncOperation>? ErrorOccurred;
+    /// <summary>
+    /// 连续收到 401（Token 或服务端配置已变更）时触发，UI 据此提示重新配置并打开配置页（F-34/T-034）。
+    /// 仅在计数恰好越过阈值时触发一次；成功后重置，下次故障可再次触发。
+    /// </summary>
+    public event Action? ReconfigurationRequired;
 
     /// <summary>进度状态变更事件（详细信息）。</summary>
     /// <summary>最近一次完整同步完成的时间戳。</summary>
@@ -182,10 +193,15 @@ public partial class SyncEngine : IDisposable
 
                     // 5 分钟兜底全量扫描由 FileWatcherService 定时器统一触发（单通道，避免与主循环重复扫描）
                     _lastSyncTime = DateTime.UtcNow;
+
+                    // 本周期正常结束 → 重置连续认证失败计数（下次 401 可再次触发重配引导）
+                    TrackAuthFailure(false);
                 }
-                catch (HttpRequestException)
+                catch (HttpRequestException ex)
                 {
                     NotifyStatus("连接失败—等待重试");
+                    // 扫描路径（树查询等）的 401 在此收敛——服务端 Token/同步根已变更时不再静默离线
+                    TrackAuthFailure(ex.StatusCode == HttpStatusCode.Unauthorized);
                 }
                 catch (TaskCanceledException)
                 {
@@ -194,6 +210,7 @@ public partial class SyncEngine : IDisposable
                 catch (Exception ex)
                 {
                     _logger.LogError($"同步周期异常: {ex.Message}");
+                    TrackAuthFailure(false);
                 }
 
                 // 每 30 秒检测一次连接状态
@@ -239,6 +256,25 @@ public partial class SyncEngine : IDisposable
         _currentPhase = status;
         StatusChanged?.Invoke(status);
         EmitProgress();
+    }
+
+    /// <summary>
+    /// 累计连续认证失败（401）：是则计数，达到阈值触发 ReconfigurationRequired；否则（成功/非 401 错误）重置。
+    /// 阈值触发后计数继续增长不再重复触发，待成功后重置才允许下一次触发。
+    /// </summary>
+    private void TrackAuthFailure(bool isAuthFailure)
+    {
+        if (isAuthFailure)
+        {
+            if (Interlocked.Increment(ref _consecutiveAuthFailures) == AuthFailureThreshold)
+            {
+                ReconfigurationRequired?.Invoke();
+            }
+        }
+        else
+        {
+            Interlocked.Exchange(ref _consecutiveAuthFailures, 0);
+        }
     }
 
     public void Dispose()

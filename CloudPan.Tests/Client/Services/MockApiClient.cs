@@ -32,6 +32,9 @@ public class MockApiClient : IApiClient
 
     public bool HealthOk { get; set; } = true;
 
+    /// <summary>模拟认证失败模式（F-34/T-034）：true 时上传一律返回 401，用于测试连续 401 触发重配引导。</summary>
+    public bool AuthFailMode { get; set; }
+
     public Task<bool> HealthCheckAsync(CancellationToken ct = default) => Task.FromResult(HealthOk);
 
     public Task<FileTreeResponse?> GetFileTreeAsync(int sinceVersion, int limit = 5000, string? subPath = null, string? cursor = null, CancellationToken ct = default)
@@ -60,6 +63,12 @@ public class MockApiClient : IApiClient
     {
         UploadCalls.TryGetValue(remotePath, out int count);
         UploadCalls[remotePath] = count + 1;
+
+        // 模拟认证失败（F-34/T-034）：持续 401 → 客户端应触发重配引导
+        if (AuthFailMode)
+        {
+            throw new HttpRequestException("Token 无效（模拟 401）", null, System.Net.HttpStatusCode.Unauthorized);
+        }
 
         // 模拟服务端冲突检测：baseVersion > 0 且服务端当前版本 > baseVersion → 409
         // （对齐 FilesController.Upload / ChunkedUploadService.FinalizeAsync 语义，供并发编辑冲突测试使用）
@@ -249,5 +258,6 @@ public class MockApiClient : IApiClient
         Shares.Clear();
         VersionHistory.Clear();
         HealthOk = true;
+        AuthFailMode = false;
     }
 }

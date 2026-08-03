@@ -81,4 +81,23 @@ public class ErrorAttributionTests
         Assert.Contains("未知错误", attribution.Message);
         Assert.DoesNotContain("the original english message", attribution.Message);
     }
+
+    [Fact]
+    public void HttpRequestException_401_标记需要重新配置()
+    {
+        // F-34/T-034：401 归因标记 RequiresReconfiguration，供同步引擎判断「持续 401 = 服务端已变更」触发重配引导
+        ErrorAttribution attribution = ErrorAttribution.FromException(
+            new HttpRequestException("Unauthorized", null, HttpStatusCode.Unauthorized));
+
+        Assert.True(attribution.RequiresReconfiguration);
+    }
+
+    [Fact]
+    public void HttpRequestException_非401错误_不标记需要重新配置()
+    {
+        ErrorAttribution attribution = ErrorAttribution.FromException(
+            new HttpRequestException("Not Found", null, HttpStatusCode.NotFound));
+
+        Assert.False(attribution.RequiresReconfiguration);
+    }
 }
