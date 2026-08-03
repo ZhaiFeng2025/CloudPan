@@ -9,7 +9,8 @@ namespace CloudPan.Tests.Architecture;
 public class CodeQualityTests
 {
     // 单类聚合行数上限 400（对齐 CLAUDE.md 规则 8「单类行数 ≤ 400」，T-042 统一阈值，无分层放宽；
-    // T-070 起按 public 类型聚合所有 partial 文件统计，partial 拆分不再绕过门禁）。
+    // T-070 起按 public 类型聚合所有 partial 文件统计，partial 拆分不再绕过门禁；
+    // T-081 起豁免表改为过渡期登记并设持续下降约束，见 Exemptions）。
     private const int MaxLines = 400;
 
     // 从测试运行目录向上查找解决方案根目录（与 ContractSourceScanTests 相同逻辑）
@@ -63,42 +64,77 @@ public class CodeQualityTests
 
     // ────────────────────────────────────────────────────────────
     // T-070：按 public 类型聚合 partial 文件行数
+    // T-081：豁免表改为「过渡期登记」，设持续下降约束（拆除永久豁免）
     // ────────────────────────────────────────────────────────────
 
+    // 豁免基线：T-070 审查登记的豁免类型总数。门禁断言豁免总数只减不增——
+    // 新增类型无豁免必须拆到 ≤400，禁止以登记方式把违规合法化。
+    private const int ExemptionBaselineCount = 11;
+
+    // T-070 基线聚合行数：SyncEngine=2223、MainWindow=2548。T-081 门禁断言其聚合行数必须低于
+    // 该基线（本任务已拆出 SyncProgressTracker / GlowDot+ProgressBarWithText 达成：2158/2380），
+    // 保证豁免上限随批次只降不升，规则 8 对最大类型重新获得约束力。
+    private const int SyncEngineT070Baseline = 2223;
+    private const int MainWindowT070Baseline = 2548;
+
+    /// <summary>过渡期豁免登记条目：类型 + 当前过渡上限 + 下降目标 + 达 ≤400 截止任务/批次 + 理由。</summary>
+    /// <remarks>
+    /// 每个豁免必须满足：TargetCeiling &lt; Ceiling（存在下降计划，上限只降不升）、Deadline 非空
+    /// （达 ≤400 的截止任务/批次引用）。新增登记必须注释理由与截止任务；类型达到 ≤400 后从表移除。
+    /// </remarks>
+    private sealed record TypeExemption(
+        string TypeKey,        // "Namespace.TypeName"
+        int Ceiling,           // 当前过渡上限（> 400，随批次只降不升）
+        int TargetCeiling,     // 下降目标（必须 < Ceiling，下一批次里程碑）
+        string Deadline,       // 达 ≤400 的截止任务/批次引用
+        string Reason);        // 豁免理由（新增登记必填）
+
     /// <summary>
-    /// 文档化聚合行数上限（键 = "Namespace.TypeName"，缺省 400）。
-    /// T-070 取舍：既有大型类型中，核心状态机/窗体等因强耦合（共享可变状态、事件、控件）无法在
-    /// 「纯结构移动不改行为」约束下拆到 400，按 producer 取舍记录合理上限；SyncEngine 查询侧
-    /// （浏览/状态/回收站/分享/版本）已拆入 SyncQueryService，MainWindow 冲突对话框拆入
-    /// ConflictResolutionDialog。新增类型无条目时一律按 MaxLines=400 强制执行。
+    /// 过渡期豁免登记（T-081）。既有大型类型因强耦合（共享可变状态/事件/锁/控件树）无法在
+    /// 「纯结构移动不改行为」约束下拆到 400，按 producer 取舍登记过渡上限并附持续下降计划；
+    /// 新增类型无条目时一律按 MaxLines=400 强制执行。
     /// </summary>
-    private static readonly Dictionary<string, int> DocumentedTypeCeilings = new()
+    private static readonly TypeExemption[] Exemptions =
     {
-        // 客户端同步状态机核心：队列/传输/全量扫描/增量同步强耦合（共享计数器/事件/锁/排除集），
-        // T-070 已将查询侧拆出（SyncBrowseService/SyncManageService，2709→2223 聚合行），
-        // 核心状态机仍无法在「纯结构移动不改行为」下拆到 400，按 producer 取舍记录合理上限。
-        ["CloudPan.Client.Core.Services.SyncEngine"] = 2300,
-        // 客户端主窗体：WinForms 控件树 + 事件绑定天然聚合，
-        // T-070 已将冲突对话框/格式化工具拆出（ConflictResolutionDialog/UiFormat，2793→2548 聚合行），
-        // 主窗体本身仍无法拆到 400，按 producer 取舍记录合理上限。
-        ["CloudPan.Client.UI.MainWindow"] = 2600,
-        // ── 以下为 T-070 范围外的既有大型类型（非本任务拆分对象），记录现状上限防止继续膨胀 ──
-        // T-075：同步根路径安全校验下沉为共享静态方法（SetupForm/SettingsForm 复用）使聚合 1074→1091，上限上调记录新现状
-        ["CloudPan.Client.UI.SetupForm"] = 1095,
-        ["CloudPan.Client.UI.FileBrowserView"] = 854,
-        // T-075：保存前同步根路径安全校验 + saveHint 统一重启提示使聚合 731→741，上限上调记录新现状
-        ["CloudPan.Client.UI.SettingsForm"] = 745,
-        ["CloudPan.Client.UI.TrayAppContext"] = 522,
-        ["CloudPan.Client.Core.Services.ApiClient"] = 562,
-        ["CloudPan.Server.UI.ServerInstaller"] = 861,
-        ["CloudPan.Server.UI.SettingsPage"] = 549,
-        ["CloudPan.Server.UI.ServerWindow"] = 525,
-        ["CloudPan.Server.Core.WebSocketHandler"] = 464,
+        // 客户端同步状态机核心：队列/传输/全量扫描/增量同步强耦合（共享计数器/事件/锁/排除集）。
+        // T-070 拆查询侧（SyncBrowseService/SyncManageService，2709→2223）；T-081 拆出进度跟踪
+        // （SyncProgressTracker，聚合 2227→2158，上限 2300→2200）。核心仍 >400，登记过渡上限。
+        new("CloudPan.Client.Core.Services.SyncEngine", 2200, 2050, "批次 8：拆出传输/队列逻辑后 ≤400",
+            "客户端同步状态机核心：队列/传输/全量扫描/增量同步强耦合，纯结构移动无法拆到 400。"),
+        // 客户端主窗体：WinForms 控件树 + 事件绑定天然聚合。
+        // T-070 拆冲突对话框/格式化工具（ConflictResolutionDialog/UiFormat，2793→2548）；T-081 提升
+        // GlowDot/ProgressBarWithText 为顶层控件类（聚合 2548→2380，上限 2600→2500）。主窗体仍 >400。
+        new("CloudPan.Client.UI.MainWindow", 2500, 2350, "批次 8：按视图区域继续拆分后 ≤400",
+            "客户端主窗体：WinForms 控件树 + 事件绑定天然聚合，纯结构移动无法拆到 400。"),
+        // ── T-070 范围外的既有大型类型（T-081 不拆分），记录现状上限防膨胀并登记下降计划 ──
+        new("CloudPan.Client.UI.SetupForm", 1095, 950, "批次 9：同步根路径校验等下沉后 ≤400",
+            "T-075：同步根路径安全校验下沉为共享静态方法（SetupForm/SettingsForm 复用）使聚合 1074→1091。"),
+        new("CloudPan.Client.UI.FileBrowserView", 854, 700, "批次 9：多选/批量视图拆分后 ≤400",
+            "T-070 范围外既有大型类型，记录现状上限防膨胀。"),
+        new("CloudPan.Client.UI.SettingsForm", 745, 650, "批次 9：保存前校验下沉后 ≤400",
+            "T-075：保存前同步根路径安全校验 + saveHint 统一重启提示使聚合 731→741。"),
+        new("CloudPan.Client.UI.TrayAppContext", 522, 460, "批次 9：托盘菜单/逻辑拆分后 ≤400",
+            "T-070 范围外既有大型类型，记录现状上限防膨胀。"),
+        new("CloudPan.Client.Core.Services.ApiClient", 562, 500, "批次 9：分块上传/端点收敛后 ≤400",
+            "T-070 范围外既有大型类型，记录现状上限防膨胀。"),
+        new("CloudPan.Server.UI.ServerInstaller", 861, 700, "批次 9：安装步骤拆分后 ≤400",
+            "T-070 范围外既有大型类型，记录现状上限防膨胀。"),
+        new("CloudPan.Server.UI.SettingsPage", 549, 480, "批次 9：设置页分区块后 ≤400",
+            "T-070 范围外既有大型类型，记录现状上限防膨胀。"),
+        new("CloudPan.Server.UI.ServerWindow", 525, 460, "批次 9：服务端窗口视图拆分后 ≤400",
+            "T-070 范围外既有大型类型，记录现状上限防膨胀。"),
+        new("CloudPan.Server.Core.WebSocketHandler", 464, 430, "批次 9：WS 消息分发拆分后 ≤400",
+            "T-070 范围外既有大型类型，记录现状上限防膨胀。"),
     };
+
+    /// <summary>豁免登记按类型键索引（供聚合行数门禁查上限）。</summary>
+    private static readonly Dictionary<string, TypeExemption> ExemptionLookup =
+        Exemptions.ToDictionary(e => e.TypeKey);
 
     /// <summary>
     /// 验证每个 public 类型的聚合行数（所有声明它的源文件行数之和）不超上限。
-    /// T-070：将门禁从「单文件 ≤400」改为「public 类型聚合 ≤400」，partial 跨文件拆分不再绕过门禁。
+    /// T-070：将门禁从「单文件 ≤400」改为「public 类型聚合 ≤400」，partial 跨文件拆分不再绕过门禁；
+    /// T-081：豁免上限由过渡期登记 Exemptions 提供，无登记类型一律 MaxLines=400 强制执行。
     /// </summary>
     [Fact]
     public void 所有public类型_聚合行数不超上限()
@@ -106,7 +142,7 @@ public class CodeQualityTests
         List<string> violations = new List<string>();
         foreach (var (typeKey, lineCount) in AggregateLinesByPublicType())
         {
-            int ceiling = DocumentedTypeCeilings.TryGetValue(typeKey, out int documented) ? documented : MaxLines;
+            int ceiling = ExemptionLookup.TryGetValue(typeKey, out TypeExemption? exemption) ? exemption.Ceiling : MaxLines;
             if (lineCount > ceiling)
             {
                 violations.Add($"{typeKey}: {lineCount} 行 (上限 {ceiling})");
@@ -116,6 +152,57 @@ public class CodeQualityTests
         if (violations.Count > 0)
         {
             Assert.Fail($"发现超过聚合行数上限的 public 类型（partial 跨文件累计）:\n{string.Join("\n", violations.OrderByDescending(v => v))}");
+        }
+    }
+
+    /// <summary>
+    /// T-081：豁免表持续下降约束——豁免总数只减不增、每项必有下降计划（TargetCeiling &lt; Ceiling）、
+    /// 截止任务与理由非空、SyncEngine/MainWindow 聚合行数较 T-070 基线下降。杜绝豁免只增不减、上限只升不降。
+    /// </summary>
+    [Fact]
+    public void 豁免表_持续下降约束()
+    {
+        List<string> failures = new List<string>();
+        Dictionary<string, int> aggregate = AggregateLinesByPublicType();
+
+        // 1) 豁免总数只减不增（基线 11，新增类型须拆到 ≤400 不得豁免）
+        if (Exemptions.Length > ExemptionBaselineCount)
+        {
+            failures.Add($"豁免总数 {Exemptions.Length} 超过基线 {ExemptionBaselineCount}——禁止新增豁免，新类型须拆到 ≤400");
+        }
+
+        // 2) 每个豁免必须存在下降计划（TargetCeiling < Ceiling）、达 ≤400 截止任务与理由（新增登记必填）
+        foreach (TypeExemption ex in Exemptions)
+        {
+            if (ex.TargetCeiling >= ex.Ceiling)
+            {
+                failures.Add($"{ex.TypeKey}: TargetCeiling({ex.TargetCeiling}) 未小于 Ceiling({ex.Ceiling})——每个豁免必须存在下降计划");
+            }
+            if (string.IsNullOrWhiteSpace(ex.Deadline))
+            {
+                failures.Add($"{ex.TypeKey}: 缺少达 ≤400 的截止任务/批次引用");
+            }
+            if (string.IsNullOrWhiteSpace(ex.Reason))
+            {
+                failures.Add($"{ex.TypeKey}: 缺少豁免理由");
+            }
+        }
+
+        // 3) SyncEngine/MainWindow 聚合行数较 T-070 基线下降（上限只降不升，防止豁免合法化违规）
+        if (aggregate.TryGetValue("CloudPan.Client.Core.Services.SyncEngine", out int syncLines)
+            && syncLines >= SyncEngineT070Baseline)
+        {
+            failures.Add($"SyncEngine 聚合 {syncLines} 行未低于 T-070 基线 {SyncEngineT070Baseline}");
+        }
+        if (aggregate.TryGetValue("CloudPan.Client.UI.MainWindow", out int mwLines)
+            && mwLines >= MainWindowT070Baseline)
+        {
+            failures.Add($"MainWindow 聚合 {mwLines} 行未低于 T-070 基线 {MainWindowT070Baseline}");
+        }
+
+        if (failures.Count > 0)
+        {
+            Assert.Fail("豁免表持续下降约束被破坏:\n" + string.Join("\n", failures));
         }
     }
 

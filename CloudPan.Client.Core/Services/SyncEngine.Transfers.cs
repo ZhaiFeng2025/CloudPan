@@ -27,7 +27,7 @@ public partial class SyncEngine
         }
 
         string lastModified = File.GetLastWriteTimeUtc(localPath).ToString("O");
-        NotifyStatus($"上传 ({_queueCompleted + 1}/{_totalFileCount}): {Path.GetFileName(item.FilePath)}");
+        NotifyStatus($"上传 ({_progress.ProgressLabel()}): {Path.GetFileName(item.FilePath)}");
 
         // m-08: 上传前记录文件 Hash，用于检测上传过程中文件是否被修改
         string? preUploadHash = null;
@@ -186,7 +186,7 @@ public partial class SyncEngine
             catch (Exception ex) { _logger.LogWarning(ex, "获取磁盘信息失败"); }
         }
 
-        NotifyStatus($"下载 ({_queueCompleted + 1}/{_totalFileCount}): {Path.GetFileName(item.FilePath)}");
+        NotifyStatus($"下载 ({_progress.ProgressLabel()}): {Path.GetFileName(item.FilePath)}");
 
         var result = await _api.DownloadAsync(item.FilePath, localPath, ct: ct);
 

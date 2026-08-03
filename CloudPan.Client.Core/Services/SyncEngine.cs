@@ -58,25 +58,11 @@ public partial class SyncEngine : IDisposable
     // 队列优先级阈值（单源：shared-spec.json → SpecConfig.QueuePriorityThreshold）
     private const int QueuePriorityThreshold = SpecConfig.QueuePriorityThreshold;
 
-    // 跟踪字段
-    private DateTime? _lastSyncTime;
-
     private volatile bool _running;
     private volatile bool _paused;
 
-    // 文件级追踪（long 字段通过 Interlocked 安全读写，防止 x86 上撕裂）
-    private int _queueCompleted;
-    private long _completedBytes;
-    private long _totalQueueBytes;
-    private string? _currentFileName;
-    private int _totalFileCount;
-
-    // 速率估算（非原子类型通过 _rateLock 保护）
-    private readonly object _rateLock = new();
-    private DateTime _lastRateTime = DateTime.UtcNow;
-    private long _lastRateBytes;
-    private double _currentRateBytesPerSecond;
-    private bool _firstRateSample = true;
+    // 进度跟踪（T-081 拆分为 SyncProgressTracker：队列/字节计数、速率估算、阶段与上次同步时间均在跟踪器内）
+    private readonly SyncProgressTracker _progress;
 
     // 增量同步并发锁（禁止多个 IncrementalSyncAsync 并发执行，防重复入队）
     private readonly SemaphoreSlim _syncLock = new(1, 1);
@@ -115,13 +101,11 @@ public partial class SyncEngine : IDisposable
 
     /// <summary>进度状态变更事件（详细信息）。</summary>
     /// <summary>最近一次完整同步完成的时间戳。</summary>
-    public DateTime? LastSyncTime => _lastSyncTime;
+    public DateTime? LastSyncTime => _progress.LastSyncTime;
 
     // T-063：排除集运行时可变（引用替换实现热更新，非启动快照）。
     // 引用类型字段赋值原子，volatile 保证设置线程与同步线程间的可见性；内容不就地修改，只整体替换引用。
     private volatile List<string> _selectedPaths;
-
-    private string? _currentPhase;
 
     private readonly List<System.Text.RegularExpressions.Regex> _ignorePatterns;
 
@@ -143,6 +127,9 @@ public partial class SyncEngine : IDisposable
         _wsClient = wsClient;
         _browse = new SyncBrowseService(_api, _dbFactory, _logger, _syncRoot, _ignorePatterns);
         _manage = new SyncManageService(_api, _dbFactory, _logger, _syncRoot);
+        _progress = new SyncProgressTracker();
+        // 转发进度事件：外部订阅者仍订阅 SyncEngine.QueueProgressChanged，行为不变（具名方法，Dispose 退订）
+        _progress.QueueProgressChanged += OnProgressChanged;
 
         // 订阅 WebSocket 推送事件（具名方法，Dispose 中取消订阅防止事件源持有本引擎引用导致泄漏）
         if (_wsClient != null)
@@ -209,7 +196,7 @@ public partial class SyncEngine : IDisposable
             // 处理上传队列（本地新增/修改的变更）
             NotifyStatus("首次同步 — 处理上传队列...");
             await DrainQueueAsync(ct);
-            _lastSyncTime = DateTime.UtcNow;
+            _progress.SetLastSyncTime(DateTime.UtcNow);
         }
         catch (Exception ex)
         {
@@ -238,7 +225,7 @@ public partial class SyncEngine : IDisposable
                     }
 
                     // 5 分钟兜底全量扫描由 FileWatcherService 定时器统一触发（单通道，避免与主循环重复扫描）
-                    _lastSyncTime = DateTime.UtcNow;
+                    _progress.SetLastSyncTime(DateTime.UtcNow);
 
                     // 本周期正常结束 → 重置连续认证失败计数（下次 401 可再次触发重配引导）
                     TrackAuthFailure(false);
@@ -299,9 +286,9 @@ public partial class SyncEngine : IDisposable
 
     private void NotifyStatus(string status)
     {
-        _currentPhase = status;
+        _progress.SetPhase(status);
         StatusChanged?.Invoke(status);
-        EmitProgress();
+        _progress.Emit();
     }
 
     /// <summary>
@@ -323,6 +310,9 @@ public partial class SyncEngine : IDisposable
         }
     }
 
+    /// <summary>转发进度事件：SyncProgressTracker.QueueProgressChanged → SyncEngine.QueueProgressChanged（具名方法，Dispose 退订）。</summary>
+    private void OnProgressChanged(SyncStatus status) => QueueProgressChanged?.Invoke(status);
+
     public void Dispose()
     {
         _running = false;
@@ -333,6 +323,7 @@ public partial class SyncEngine : IDisposable
             _wsClient.OnFileDeleted -= OnWsFileDeleted;
             _wsClient.OnFileRenamed -= OnWsFileRenamed;
         }
+        _progress.QueueProgressChanged -= OnProgressChanged;
         _syncLock.Dispose();
         _fileWatcher?.Dispose();
     }

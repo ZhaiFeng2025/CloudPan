@@ -4008,7 +4008,7 @@
       "title": "DesignTokens 死令牌清理（0 引用效果/颜色/FontSpec）",
       "dimension": "simplicity",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 7,
       "findingId": "F-122",
       "dependsOn": [],
@@ -4039,7 +4039,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "执行 2026-08-03（task-executor）：T-080 DesignTokens 死令牌清理。问题——CloudPanEffects 阴影/圆角/时长/透明度令牌、CloudPanFonts 的 FontSpec 结构与 8 个预设、CloudPanColors 的 8 个颜色令牌全库 0 引用（grep 逐一核实），属装饰令牌，违背『令牌即唯一来源』承诺——改令牌时无法区分真实使用与装饰。修复——逐令牌 grep 确认引用数后删除 0 引用令牌：CloudPanEffects 删 ShadowInfo 结构 + ShadowSm/Md/Lg/Xl/Elevated、CornerRadiusNone/Sm/Lg/Round、DurationInstant/Fast/Slow/Emphasis、OverlayAlpha/DisabledOpacity/HoverOpacity，仅保留 CornerRadiusMd（消费点 ServerWindow.Events.cs:121,127 SetRoundedRegion）与 DurationNormal（消费点 ServerInstaller.Steps.cs:144 定时器 Interval），均注释消费者；CloudPanFonts 删 FontSpec 结构 + 8 预设（Title/Subtitle/Body/BodyBold/BodySmall/Caption/Monospace/Button）+ SizeTitle（删除后 0 引用），保留 FontFamily/FontFamilyMono/SizeSubtitle/SizeBodyMin/SizeBody/SizeBodySmall/SizeCaption/SizeMono（均有消费者，注释代表性消费点）；CloudPanColors 删 InfoBlue/TextLink/BorderFocus/BackgroundHover/BackgroundOverlay/SeparatorGray/DisabledBg/DisabledText 8 个 0 引用颜色（公开属性+PalettePairs+Light/Dark 组共 8×4 处），保留 25 个有消费者颜色，同步修正 PalettePairs 顺序注释与测试注释（32 对→25 对）；删除后全库 .cs 仅剩说明性注释提及已删令牌名，无任何代码引用。改动文件——CloudPan.Infrastructure/Design/DesignTokens.Effects.cs（87→18 行）；DesignTokens.Fonts.cs（81→29 行）；DesignTokens.cs（280→251 行）；CloudPan.Tests/Infrastructure/Design/DesignTokensThemeTests.cs（注释 32→25 对）；tasks.json。验证——dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet build CloudPan.sln -c Debug EXIT=0（刷新 bin 产物使 AC grep 不含旧令牌元数据）；dotnet test CloudPan.Tests -c Release 326/326 通过；dotnet test --filter Architecture 13/13 通过；AC1 原文 grep『InfoBlue|FontSpec|ShadowSm|CornerRadiusRound|DurationSlow|DisabledBg』CloudPan.Client.UI/CloudPan.Server.UI/CloudPan.Server.Core/CloudPan.Client.Core 0 匹配（EXIT=1）。",
+      "note": "执行 2026-08-03（task-executor）：T-080 DesignTokens 死令牌清理。问题——CloudPanEffects 阴影/圆角/时长/透明度令牌、CloudPanFonts 的 FontSpec 结构与 8 个预设、CloudPanColors 的 8 个颜色令牌全库 0 引用（grep 逐一核实），属装饰令牌，违背『令牌即唯一来源』承诺——改令牌时无法区分真实使用与装饰。修复——逐令牌 grep 确认引用数后删除 0 引用令牌：CloudPanEffects 删 ShadowInfo 结构 + ShadowSm/Md/Lg/Xl/Elevated、CornerRadiusNone/Sm/Lg/Round、DurationInstant/Fast/Slow/Emphasis、OverlayAlpha/DisabledOpacity/HoverOpacity，仅保留 CornerRadiusMd（消费点 ServerWindow.Events.cs:121,127 SetRoundedRegion）与 DurationNormal（消费点 ServerInstaller.Steps.cs:144 定时器 Interval），均注释消费者；CloudPanFonts 删 FontSpec 结构 + 8 预设（Title/Subtitle/Body/BodyBold/BodySmall/Caption/Monospace/Button）+ SizeTitle（删除后 0 引用），保留 FontFamily/FontFamilyMono/SizeSubtitle/SizeBodyMin/SizeBody/SizeBodySmall/SizeCaption/SizeMono（均有消费者，注释代表性消费点）；CloudPanColors 删 InfoBlue/TextLink/BorderFocus/BackgroundHover/BackgroundOverlay/SeparatorGray/DisabledBg/DisabledText 8 个 0 引用颜色（公开属性+PalettePairs+Light/Dark 组共 8×4 处），保留 25 个有消费者颜色，同步修正 PalettePairs 顺序注释与测试注释（32 对→25 对）；删除后全库 .cs 仅剩说明性注释提及已删令牌名，无任何代码引用。改动文件——CloudPan.Infrastructure/Design/DesignTokens.Effects.cs（87→18 行）；DesignTokens.Fonts.cs（81→29 行）；DesignTokens.cs（280→251 行）；CloudPan.Tests/Infrastructure/Design/DesignTokensThemeTests.cs（注释 32→25 对）；tasks.json。验证——dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet build CloudPan.sln -c Debug EXIT=0（刷新 bin 产物使 AC grep 不含旧令牌元数据）；dotnet test CloudPan.Tests -c Release 326/326 通过；dotnet test --filter Architecture 13/13 通过；AC1 原文 grep『InfoBlue|FontSpec|ShadowSm|CornerRadiusRound|DurationSlow|DisabledBg』CloudPan.Client.UI/CloudPan.Server.UI/CloudPan.Server.Core/CloudPan.Client.Core 0 匹配（EXIT=1）。验收 2026-08-03（task-verifier）：独立复核 3 条 AC 全过——AC1 实际执行 grep『InfoBlue|FontSpec|ShadowSm|CornerRadiusRound|DurationSlow|DisabledBg』CloudPan.Client.UI/CloudPan.Server.UI/CloudPan.Server.Core/CloudPan.Client.Core 得 EXIT=1 无匹配（含 bin/obj 产物，无旧令牌元数据残留）；AC2 dotnet build CloudPan.sln -c Release Build succeeded 0 警告 0 错误；AC3 dotnet test CloudPan.Tests -c Release --filter Architecture 13/13 通过 0 失败。实读 DesignTokens.Effects.cs（22 行，仅 CornerRadiusMd/DurationNormal 且各注释消费点）、DesignTokens.Fonts.cs（仅 8 个字号常量，各注释代表性消费点）、DesignTokens.cs（PalettePairs 25 对，删 8 色）确认死令牌已删；反向核证保留令牌确有消费者（CornerRadiusMd：ServerWindow.Events.cs:121,127；DurationNormal：ServerInstaller.Steps.cs:144；抽样颜色令牌两端 UI 20 文件 40 处引用）。无手动项，结论：通过 → done。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -4047,7 +4047,7 @@
       "title": "行数门禁豁免表设持续下降约束（拆除永久豁免 + 巨型类拆分里程碑）",
       "dimension": "architecture",
       "priority": "P2",
-      "status": "todo",
+      "status": "in-progress",
       "batch": 7,
       "findingId": "F-123",
       "dependsOn": [],
@@ -4079,7 +4079,7 @@
       "attempts": 0,
       "statusReason": null,
       "note": null,
-      "updatedAt": null
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-082",

@@ -37,9 +37,9 @@ public partial class SyncEngine
         }
 
         // 计算总队列字节数和文件数（每次重新计算，避免外部新增项导致进度倒缩）
-        await RecalcQueueTotals(db);
+        await _progress.RecalcTotals(db);
 
-        EmitProgress();
+        _progress.Emit();
 
         // 定时进度报告（确保长传输期间至少每秒一次）
         using CancellationTokenSource progressCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -47,7 +47,7 @@ public partial class SyncEngine
         {
             while (!progressCts.Token.IsCancellationRequested)
             {
-                try { await Task.Delay(1000, progressCts.Token); EmitProgress(); }
+                try { await Task.Delay(1000, progressCts.Token); _progress.Emit(); }
                 catch (OperationCanceledException) { /* 取消是预期的 */ }
                 catch (Exception ex) { _logger.LogWarning(ex, "进度报告异常"); }
             }
@@ -70,8 +70,8 @@ public partial class SyncEngine
                 }
 
                 // 设置当前传输文件名
-                _currentFileName = Path.GetFileName(item.FilePath);
-                EmitProgress();
+                _progress.SetCurrentFile(Path.GetFileName(item.FilePath));
+                _progress.Emit();
 
                 bool success = false;
 
@@ -110,7 +110,7 @@ public partial class SyncEngine
                 {
                     if (success && item.FileSize.HasValue)
                     {
-                        Interlocked.Add(ref _completedBytes, item.FileSize.Value);
+                        _progress.AddCompletedBytes(item.FileSize.Value);
                     }
 
                     // 单项传输成功 → 重置连续认证失败计数
@@ -120,7 +120,7 @@ public partial class SyncEngine
                     }
 
                     db.SyncQueue.Remove(item);
-                    Interlocked.Increment(ref _queueCompleted);
+                    _progress.IncrementCompleted();
                     if (item.RetryCount >= MaxRetryCount)
                     {
                         SyncOperation op = (SyncOperation)item.Operation;
@@ -131,7 +131,7 @@ public partial class SyncEngine
                 }
 
                 await db.SaveChangesAsync();
-                EmitProgress();
+                _progress.Emit();
             }
         }
         finally
@@ -144,17 +144,9 @@ public partial class SyncEngine
         int remainingAfter = await db.SyncQueue.CountAsync();
         if (remainingAfter == 0)
         {
-            _currentFileName = null;
-            EmitProgress();
+            _progress.SetCurrentFile(null);
+            _progress.Emit();
         }
-    }
-
-    /// <summary>从数据库重新计算队列总数和总字节数，避免外部新增项导致的进度倒缩。</summary>
-    private async Task RecalcQueueTotals(ClientDbContext db)
-    {
-        int remaining = await db.SyncQueue.CountAsync();
-        _totalFileCount = remaining + Volatile.Read(ref _queueCompleted);
-        Interlocked.Exchange(ref _totalQueueBytes, await db.SyncQueue.SumAsync(q => q.FileSize ?? 0));
     }
 
     /// <summary>
@@ -175,54 +167,6 @@ public partial class SyncEngine
 
             await Task.Delay(200, ct);
         }
-    }
-
-    /// <summary>计算并发出当前进度状态。</summary>
-    private void EmitProgress()
-    {
-        // 速率估算（通过 _rateLock 保护非原子类型的读写）
-        long speedBps;
-        lock (_rateLock)
-        {
-            if (!_firstRateSample)
-            {
-                var now = DateTime.UtcNow;
-                double elapsed = (now - _lastRateTime).TotalSeconds;
-                long deltaBytes = Interlocked.Read(ref _completedBytes) - _lastRateBytes;
-
-                if (elapsed >= 1.0 && deltaBytes > 0)
-                {
-                    _currentRateBytesPerSecond = deltaBytes / elapsed;
-                    _lastRateTime = now;
-                    _lastRateBytes = Interlocked.Read(ref _completedBytes);
-                }
-                else if (elapsed >= 3.0)
-                {
-                    _currentRateBytesPerSecond = 0;
-                }
-            }
-            else
-            {
-                _firstRateSample = false;
-                _lastRateTime = DateTime.UtcNow;
-                _lastRateBytes = Interlocked.Read(ref _completedBytes);
-            }
-            speedBps = (long)_currentRateBytesPerSecond;
-        }
-
-        long completedBytes = Interlocked.Read(ref _completedBytes);
-        SyncStatus status = new SyncStatus(
-            Phase: _currentPhase ?? "同步中",
-            CompletedFiles: _queueCompleted,
-            TotalFiles: _totalFileCount,
-            CurrentFile: _currentFileName,
-            BytesTransferred: completedBytes,
-            TotalBytes: Interlocked.Read(ref _totalQueueBytes) + completedBytes,
-            SpeedBytesPerSec: speedBps,
-            LastSyncTime: _lastSyncTime
-        );
-
-        QueueProgressChanged?.Invoke(status);
     }
 
     /// <summary>
