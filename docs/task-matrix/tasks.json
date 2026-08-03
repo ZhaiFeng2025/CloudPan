@@ -4047,7 +4047,7 @@
       "title": "行数门禁豁免表设持续下降约束（拆除永久豁免 + 巨型类拆分里程碑）",
       "dimension": "architecture",
       "priority": "P2",
-      "status": "in-progress",
+      "status": "acceptance",
       "batch": 7,
       "findingId": "F-123",
       "dependsOn": [],
@@ -4078,7 +4078,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
+      "note": "执行 2026-08-03（task-executor）：T-081 行数门禁豁免表持续下降约束。\n【约束机制】CloudPan.Tests/Architecture/CodeQualityTests.cs：DocumentedTypeCeilings（Dictionary<string,int> 永久上限）改为过渡期登记 TypeExemption[]（TypeKey/Ceiling/TargetCeiling/Deadline/Reason），每个豁免必须 TargetCeiling &lt; Ceiling（下降计划）+ Deadline（达 ≤400 截止任务/批次）+ Reason（理由，新增登记必填）。新增 豁免表_持续下降约束 断言：①豁免总数 ≤ 基线 11（只减不增，新类型须拆到 ≤400 不得豁免）；②每项 TargetCeiling &lt; Ceiling；③SyncEngine/MainWindow 聚合行数必须低于 T-070 基线（2223/2548）。聚合门禁改从 Exemptions 查上限，无登记类型一律 MaxLines=400。\n【拆类（纯结构移动不改行为）】SyncEngine：进度/速率跟踪拆出 SyncProgressTracker（internal 类，Queue.cs 的 EmitProgress/RecalcQueueTotals + SyncEngine.cs 的队列/字节计数、速率估算、阶段与上次同步时间字段全部迁入），SyncEngine 保留公开事件 QueueProgressChanged 并经具名方法 OnProgressChanged 转发（Dispose 退订，行为不变），聚合 2227→2158，上限 2300→2200。MainWindow：GlowDot/ProgressBarWithText 从 private 嵌套类提升为顶层 internal 类（新增 MainWindowCustomControls.cs，删除 MainWindow.Controls.cs），聚合 2548→2380，上限 2600→2500。\n【持续下降路线图】9 个 T-070 范围外类型（SetupForm/FileBrowserView/SettingsForm/TrayAppContext/ApiClient/ServerInstaller/SettingsPage/ServerWindow/WebSocketHandler）记录现状上限（不变）并登记下降计划（TargetCeiling &lt; Ceiling + 批次 9 截止），随批次逐步下调直至 ≤400，规则 8 对最大类型重新获得约束力。\n【验证】dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test CloudPan.Tests -c Release --filter Architecture 14/14 通过（13 原 + 1 新增 豁免表_持续下降约束）；dotnet test CloudPan.Tests -c Release 全量 327/327 通过（原 326 + 1 新增，SyncEngine 进度拆类无回归）。改动文件——CloudPan.Tests/Architecture/CodeQualityTests.cs；CloudPan.Client.Core/Services/SyncProgressTracker.cs（新增）；SyncEngine.cs / SyncEngine.Queue.cs / SyncEngine.Transfers.cs；CloudPan.Client.UI/UI/MainWindowCustomControls.cs（新增）/ MainWindow.Controls.cs（删除）；tasks.json。",
       "updatedAt": "2026-08-03"
     },
     {
