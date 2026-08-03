@@ -2,121 +2,97 @@
   {
     "dimension": "function",
     "severity": "P1",
-    "location": "CloudPan.Server.Core/FileIndex/FileIndexService.cs:121-171; CloudPan.Client.Core/Services/SyncEngine.Scan.cs:129; SyncEngine.Changes.cs:21",
-    "problem": "服务端删除直接 RemoveRange 物理移除 FileEntry 行，无墓碑；FileState.Deleting 全服务端从未设置。客户端增量拉取 GetFileTreeAsync(sinceVersion) 只查现存行，已删除路径不会出现在树里；ApplyRemoteChangesAsync 的 Deleting 分支是死代码；WS file_deleted 的 path 参数在 OnWsFileDeleted 被忽略。客户端对服务端已删除文件永远保留本地副本。",
-    "why": "双向同步缺删除方向，设备间永久分歧；被删文件在另一设备编辑后会以 baseVersion=0 重传复活。",
-    "suggestion": "服务端删除改软删除/墓碑（Deleting 状态保留后再物理清理），客户端按 path 处理删除事件或树中 Deleting 项。"
+    "location": "CloudPan.Client.Core/Services/ApiClient.ThrottledStream.cs:44-76,78-92; CloudPan.Client.Core/Services/ApiClient.cs:127-131,166-179",
+    "problem": "限速流在配额耗尽/首次调用时返回 0，被 CopyToAsync 当作 EOF 提前终止 → 限速下载/上传被截断。ThrottledStream.ReadAsync 中 allowed = (int)Math.Min(count, maxBytes - _bytesThisTick)，当 elapsed 极小（构造后立即 CopyToAsync，同一 tick 内）或 _bytesThisTick 追上 maxBytes（每秒配额耗尽）时 allowed<=0 → await Task.Delay(10); return 0（ThrottledStream.cs:71-72,44-46）。而 CopyToAsync 覆写循环 while ((bytesRead = await ReadAsync(...)) > 0)（78-92）把返回 0 当 EOF 直接退出。UploadAsync（ApiClient.cs:127-131）与 DownloadAsync（166-179）均经此流。结果：用户设置任意限速后，大文件（>限速值/秒的任意文件）下载在配额边界截断 → DownloadAsync 哈希校验失败 → 10 次阶梯退避重试全部截断 → 下载永久失败；上传截断 → multipart 不完整 → 服务端解析异常或保存不完整文件。T-063 刚把限速做成运行时热更新（SetUploadLimit/SetDownloadLimit），但限速流本体有确定性 bug，限速功能整体不可用。",
+    "why": "限速是 clouddrive-kb 第 6 节声明功能（限速：改动即时生效，无需重启，T-063 已接线运行时下发），也是 v1.0 声明功能之一。限速一旦开启，所有超过 1 秒配额的文件传输必截断，家庭场景低带宽限制下常态触发，主路径完全失效——合理功能设计对声明功能的主路径可用判据直接违反。",
+    "suggestion": "把 if (allowed <= 0) { await Task.Delay(10); return 0; } 改为 await Task.Delay(10) 后重新计算配额并重试读取（返回 0 只应在底层流 EOF 时发生）；或在 CopyToAsync 覆写循环内把节流等待与真正 EOF 区分开（节流时 sleep 重试读而非 return 0）。并补限速流单测覆盖限速下载 10MB 文件完整到达。"
   },
   {
     "dimension": "function",
     "severity": "P1",
-    "location": "CloudPan.Client.Core/Services/SyncEngine.Changes.cs:142-148; SyncEngine.Transfers.cs:32; CloudPan.Server.Host/Controllers/FilesController.cs:96-103",
-    "problem": "全库 grep 确认 BaseVersion 只为 Download 队列项赋值；Upload 入队项恒为 null，ProcessUploadAsync 传 ?? 0，服务端 if (baseVersion > 0) 因此跳过冲突检测，HandleUploadConflictAsync 实际不可达。",
-    "why": "声明功能冲突处理对最常见的双设备并发编辑失效，变 last-writer-wins 静默覆盖，用户得不到冲突提示。",
-    "suggestion": "上传入队时记录 BaseVersion = snapshot.Version，复用服务端现有 409 冲突流程。"
-  },
-  {
-    "dimension": "function",
-    "severity": "P1",
-    "location": "CloudPan.Server.Host/Controllers/ShareController.cs:177-220",
-    "problem": "SharePage 检查了 ExpiresAt，但 ShareDownload 端点只校验密码与下载次数，漏了过期检查，过期分享经 /share/{id}/download 仍可下载。",
-    "why": "分享过期/撤销是安全边界承诺，过期继续可下载等于功能与安全同时失效。",
-    "suggestion": "ShareDownload 补上与 SharePage 一致的过期判断，过期返回错误。"
+    "location": "CloudPan.Client.UI/UI/SelectiveSyncPanel.cs:115,196-232; CloudPan.Client.UI/UI/SettingsForm.SyncTab.cs:10-21",
+    "problem": "选择性同步排除集目录树从未被加载：SelectiveSyncPanel.LoadFromPaths(IEnumerable<string>) 定义了方法（115 行）但全库无任何调用点；SettingsForm.BuildSyncTab 仅 _syncPanel.SelectedPaths = selectedPaths（setter 只把配置应用到已有节点勾选态，树本身为空）。因此用户打开 设置→选择性同步 看到的恒是空状态提示『尚未从服务端加载目录列表』，永远无法勾选/取消勾选任何目录。且 SelectedPaths getter 在树空（root==null）时返回 { '/' } 全选默认值（26-31 行），用户保存设置后 cfg.SelectedPaths 被覆盖为全选——此前手工配置的排除集（如排除 /Private）被静默清空，隐私目录重新开始同步。",
+    "why": "选择性同步/排除集是 T-047/T-054 刚落地的声明功能（知识库『勾选目录树，改动即时生效』），且排除集语义（IsPathSelected 引擎侧）逻辑完整，但 UI 载体（目录树）从未接线 LoadFromPaths，功能对用户完全不可操作，且保存设置会静默丢失用户既有排除配置——功能为家庭用户服务判据与不过度设计但必须可用直接冲突。",
+    "suggestion": "在 SettingsForm 打开时异步加载服务端目录树（经 SyncEngine/新增查询接口拉 /api/tree 目录路径）后调用 LoadFromPaths 填充树；或至少在树为空时禁用保存并明确提示尚未加载。同时修复 SelectedPaths getter：树空且已有排除配置时不应返回全选默认覆盖。"
   },
   {
     "dimension": "function",
     "severity": "P2",
-    "location": "CloudPan.Client.UI/Program.cs:291-302,490-496; Client.Core/Models/ClientDbContext.cs:8-10",
-    "problem": "客户端 DB 用 EnsureCreated()，无 Migrations；PRAGMA quick_check 只查物理一致性不查 schema。客户端新增列/表时（spec 已加 SyncQueue.TargetPath），旧库 quick_check 通过但 EF 查询报 no such column 崩溃，且不会触发重建提示。",
-    "why": "无升级路径的本地持久化阻碍长期演进，v1.0 后第一次加列即炸。",
-    "suggestion": "引入 EF Migrations，或 EnsureCreated 前做 schema 版本比对并给受控重建流程。"
+    "location": "CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.cs:183-199; CloudPan.Client.Core/Services/ApiClient.ChunkedUpload.cs:33-46,88-92",
+    "problem": "分块上传崩溃恢复在 Finalize 完成（record 已移除）后返回 Found=false，客户端整文件重传并可能生成冲突副本。FinalizeAsync 成功后 db.ChunkedUploads.Remove(record) 移除会话（Finalize.cs:91-92），此后 GetStatusAsync 走 record==null 分支返回 ChunkStatusResult(false, null, empty, 0, false, currentVersion, ...)（183-185 行）——与『从未开始』不可区分。客户端 GetChunkStatusAsync 收到 Found=false + receivedChunks 空 → 循环认为所有块均未收 → 从头重传全部块（ChunkedUpload.cs:40-46）；最后一块 Finalize 时 baseVersion=客户端快照旧版本 < 服务端 currentVersion → SaveConflictCopyIfNeededAsync 生成 _冲突_ 副本（Finalize.cs:44-58）。即 T-064 只覆盖了 isComplete 未落盘窗口（record 仍在时返回 Found=false），未覆盖 Finalize 已完成、record 已移除窗口——崩溃后恢复反而产生冲突副本噪音与整文件重传。",
+    "why": "断点续传是知识库点名的大文件边界；T-064 的修复目标是崩溃恢复不重传/不丢数据，但完成窗口被遗漏导致正常崩溃恢复退化为整文件重传+冲突副本，违反失败可恢复与多设备收敛判据，浪费带宽并污染版本历史。",
+    "suggestion": "GetStatusAsync 在 record==null 时按 currentVersion 查询 FileEntry：若文件已存在（Version>0）且存在 Completed 会话标记（或 FileEntry.LastModified/hash 与客户端 fileHash 一致）→ 返回 isComplete=true + Version，让客户端跳过全部块并直接写快照；否则（从未开始）保持 Found=false。或 Finalize 完成时保留会话 record 但标记 Finalized=true（不移除），客户端据此识别。"
   },
   {
     "dimension": "function",
     "severity": "P2",
-    "location": "CloudPan.Server.Host/Hosting/DatabaseInitializer.cs:44-63",
-    "problem": "兼容层仅补建 Device 表；EnsureCreated 对已存在旧库不补建后期新增的 Share/ChunkedUpload/SyncLog 等表，alpha 用户升级后访问相关端点抛 no such table 500。",
-    "why": "服务端升级路径同样脆弱，DB 与代码 schema 不一致逐步浮现为偶发 500。",
-    "suggestion": "兼容层按契约一次性补齐缺表/缺列，或迁移到 EF Migrations。"
+    "location": "CloudPan.Server.Core/Files/FileOperationService.cs:115-170; CloudPan.Server.Core/FileIndex/FileIndexService.cs:194-229",
+    "problem": "重命名目标路径已存在时无收敛路径：FileOperationService.MoveAsync 未先检测 newPath 是否存在（115-170 行无任何 target 检查），FileIndexService.MoveAsync 直接 UPDATE FileEntry SET Path=new WHERE Path=old（204-206）——SQLite 主键唯一约束在 new 已有行时抛异常 → 逃逸到 GlobalExceptionMiddleware 返回 500（服务暂时不可用）。跨设备同目录/同名文件碰撞（另一设备已把同名文件上传到 newPath）是双设备家庭场景常态，用户看到 500 而非重命名后名称已存在引导，且 Move 已先于 DB 变更分配了新版本号，索引/版本状态已局部前进。",
+    "why": "重命名是资源管理器最高频操作，目标已存在是常见竞争（另一设备并发创建同名）；返回 500 而非明确 CONFLICT/覆盖确认违反 clouddrive-kb 重名时提示保留两者/替换/比较版本，不静默覆盖，且版本号被无谓消耗。",
+    "suggestion": "MoveAsync 开始前查询 newPath 是否存在：存在则返回 409 CONFLICT（带目标已存在，请选择覆盖或改名）或自动追加 _冲突_/时间戳后缀收敛（对齐 ConflictBackupHelper 命名）；且不要在检测前先 NextVersionAsync 分配版本号。"
   },
   {
     "dimension": "function",
     "severity": "P2",
-    "location": "CloudPan.Server.Host/Controllers/ThumbnailsController.cs:56-62,104-115",
-    "problem": "缩略图缓存 key 仅 path+width 哈希，文件更新后返回旧缩略图（无失效机制）；未命中时请求线程同步 SkiaSharp 解码全尺寸原图，相册网格并发数千张无队列/去重/限流，CPU 拉满。",
-    "why": "海量小文件（相册）是知识库点名的边界场景；旧图误导+大图解码拖垮服务器。",
-    "suggestion": "缓存 key 加入文件 version/hash；缩略图生成走受限并发队列并限制并发数。"
-  },
-  {
-    "dimension": "function",
-    "severity": "P2",
-    "location": "CloudPan.Server.Core/FileIndex/FileIndexService.cs:196-200",
-    "problem": "SQLite REPLACE(Path,'/a/','/b/') 前缀替换会替换行内所有匹配段。移动 /photos → /backup/photos 时，/photos/photos/img.jpg 变成 /backup/photos/backup/photos/img.jpg（应为 /backup/photos/photos/img.jpg）。",
-    "why": "目录重命名是 v1.0 声明功能，嵌套同名目录是真实场景；索引路径错乱导致客户端新文件重传+原文件消失。",
-    "suggestion": "用按长度裁剪的字符串拼接（newPath + 剩余后缀）而非 REPLACE。"
-  },
-  {
-    "dimension": "function",
-    "severity": "P2",
-    "location": "CloudPan.Server.Host/Controllers/FilesController.ChunkedUpload.cs:175-184",
-    "problem": "服务端先把 chunk 追加到临时文件，再更新 ReceivedChunks JSON，两步间若崩溃则临时文件已有该块字节但列表未记录；客户端重发同块→临时文件重复字节→合并后 SHA-256 校验永久失败，大文件同步卡死。",
-    "why": "断点续传是分块上传核心卖点，崩溃恢复路径不收敛会让大文件无法完成同步。",
-    "suggestion": "块数据写入先持久化记录再落盘（或按块索引 seek 定位写入并原子更新位图），保证幂等；或合并前用已接收块集合+文件长度交叉校验。"
-  },
-  {
-    "dimension": "function",
-    "severity": "P2",
-    "location": "CloudPan.Server.Host/Controllers/FilesController.ChunkedUpload.cs:365-374",
-    "problem": "FinalizeChunkedUploadAsync 中 DB 事务提交后单独执行 IOFile.Move 覆盖目标；若 Move 失败（文件被锁），DB 索引已指向新 hash/version，磁盘文件仍是旧内容，临时文件被删。客户端 snapshot 已更新为新 hash（与本地一致），因此永不重传，该文件成为索引与内容不一致的毒化状态，下载哈希校验必失败。",
-    "why": "违反 CLAUDE.md 7.1 的 DB+FS 一致性要求，失败恢复路径不收敛。",
-    "suggestion": "Move 失败时将 FileEntry 回滚到旧 hash/version（或事务内先落盘再提交），确保索引永远反映真实内容。"
-  },
-  {
-    "dimension": "function",
-    "severity": "P2",
-    "location": "CloudPan.Contract/Generated/Settings.g.cs vs CloudPan.Server.UI/SettingsPage.cs:13-190 + CloudPan.Server.Host/Program.cs:72",
-    "problem": "SpecSettings.Keys/ServerSettingDef 已由 CodeGen 生成，但 SettingsPage 完全手工写死三个设置项（键名/标签/端口校验），未引用 SpecSettings；ISettingsService/SettingsService 注册了但生产代码从未使用（仅测试引用），token_hash 由 TokenService 直写。契约与实现脱节。",
-    "why": "违反 CLAUDE.md 规则 0（契约即代码），改 spec 不驱动 UI，后续加设置项会两处漂移。",
-    "suggestion": "SettingsPage 改为遍历 SpecSettings.All 生成表单；运行时设置统一走 ISettingsService。"
-  },
-  {
-    "dimension": "function",
-    "severity": "P2",
-    "location": "CloudPan.Client.Core/Services/SyncEngine.Scan.cs:347-355",
-    "problem": "FullScanCoreAsync 第 3 步枚举本地文件时没有 CloudOnly 检查：CloudOnly 快照被 continue 跳过（不进 matchedLocalFiles），于是本地仍存在的已取消勾选文件被当作新文件入队上传；上传后 ProcessUploadAsync 又把快照置回 Synced。此后任何远端版本变更→打回 CloudOnly→下次扫描重传→振荡，选择性同步对曾同步过再取消的目录失效。",
-    "why": "选择性同步是竞品标配；此 bug 让用户取消勾选后目录仍被同步，浪费带宽与版本。",
-    "suggestion": "第 3 步枚举时跳过 State==CloudOnly 的快照对应本地文件；取消勾选时可选地清理本地副本。"
-  },
-  {
-    "dimension": "function",
-    "severity": "P2",
-    "location": "CloudPan.Server.UI/SettingsPage.cs:388-411",
-    "problem": "修改同步根后新目录创建全新 DB + 全新 Token；已配置的 Windows 客户端仍指向旧目录且持旧 Token → 全部 401/失联。设置页警告了旧数据不迁移、重启生效，但未引导所有客户端需重新配置新地址/新 Token，用户切完根目录后所有设备静默断连。",
-    "why": "家庭场景改同步根是低频但真实操作；失败路径（客户端重配置）无引导，体验割裂。",
-    "suggestion": "保存时提示并列出影响面（所有设备需重配+新 Token），或提供迁移旧库选项（复制 .cloudpan）。"
+    "location": "CloudPan.Server.Core/Trash/TrashService.cs:126-154; CloudPan.Client.Core/Services/SyncManageService.cs:46-59",
+    "problem": "回收站恢复目标路径已存在无收敛路径：TrashService.RestoreAsync 直接 File.Move(trashFile, targetPath, overwrite:false)（133 行）或 Directory.Move（126 行），目标存在时抛 IOException → catch 返回 INTERNAL_ERROR 恢复文件时出现错误，请稍后重试。用户不知道是重名冲突，也无覆盖/改名恢复选项，恢复永久不可行直到手动改名；客户端 RestoreTrashAsync 只透传布尔（SyncManageService.cs:46-59），用户无从获得具体原因。",
+    "why": "回收站恢复是删除撤销主路径（删除进回收站后 5 秒撤销 Snackbar 依赖恢复），目标被同名文件重建（删除后立即重新创建同一路径）是常见场景；错误信息含糊、无重试分支违反失败可见可重试、错误信息=原因+下一步判据。",
+    "suggestion": "恢复前检测目标是否存在：存在则返回 CONFLICT 错误体（提示覆盖/改名选择）或自动追加 _恢复_时间戳 后缀恢复（对齐 MoveToTrash 唯一化命名）；客户端据此展示可操作选项而非失败提示。"
   },
   {
     "dimension": "function",
     "severity": "P3",
-    "location": "CloudPan.Server.Host/Hosting/UdpDiscoveryHostedService.cs:29-31",
-    "problem": "UDP 发现响应 serverInfo JSON 硬编码 version=0.2.0，与实际 v1.0/v1.1 不符；host 用 Environment.MachineName，部分家庭网络无法解析主机名时发现失败。",
-    "why": "硬编码陈旧版本误导客户端；主机名解析失败影响发现。",
-    "suggestion": "版本从 SpecConfig/程序集读取；host 优先使用本机局域网 IP。"
+    "location": "CloudPan.Client.Core/Services/SyncEngine.Transfers.cs:292-321",
+    "problem": "ProcessDeleteAsync 只对 404 容错（300-303 行视为已删），对 409（删除时该文件恰被其他设备修改/上传，服务端版本 > baseVersion，FileOperationService.DeleteAsync.cs:56-67 返回 CONFLICT）未处理：HttpRequestException(409) 逃逸到 ProcessQueueAsync 泛化 catch（Queue.cs:89-107），经 10 次阶梯退避后以已达最大重试次数丢弃——本地文件保留、快照保留、删除从未生效，用户无删除冲突提示或重试入口。",
+    "why": "删除与并发编辑撞车是双设备家庭场景常见竞争；静默失败而非冲突提示违背 clouddrive-kb 冲突处理给出选项而非静默与失败可见可重试判据，用户以为已删除实际未删。",
+    "suggestion": "ProcessDeleteAsync 对 409 转入冲突流程（加入 _pendingConflicts 提示文件已被其他设备修改，是否仍删除？）或明确返回失败并标记删除失败项可重试。"
   },
   {
     "dimension": "function",
     "severity": "P3",
-    "location": "CloudPan.Client.Core/Services/SyncEngine.cs:87; SyncEngine.Queue.cs:212-219 vs shared-spec.json config.maxRetryCount/retryBackoffMs",
-    "problem": "客户端 MaxRetryCount=20 与 spec maxRetryCount=10 不一致，退避序列也不一致，重试参数与契约漂移。",
-    "why": "同一常量双源必然漂移，违反契约单一事实来源。",
-    "suggestion": "客户端重试上限与退避序列从 SpecConfig 读取，消除双源。"
+    "location": "CloudPan.Client.Core/Services/SyncEngine.Transfers.cs:173-187,367-380; CloudPan.Client.Core/Services/SyncEngine.Conflicts.cs:53-58,91-96",
+    "problem": "磁盘空间前置检查只在 item.FileSize.HasValue && > 50MB 时触发（Transfers.cs:173）。CloudOnly 按需下载 DownloadPathAsync 入队的队列项未设 FileSize（367-380 行），KeepRemote/KeepBoth 冲突解决入队的下载项亦未设 FileSize（Conflicts.cs:53-58,91-96），三者均跳过磁盘检查——大文件按需下载（视频/镜像）在低磁盘下直接写满磁盘，后续同步停摆且无预警。",
+    "why": "断网/磁盘满是知识库边界清单点名的场景；按需下载是家庭用户取回视频/照片的主路径，磁盘写满会使整个同步引擎进入失败循环，违背失败可恢复判据。",
+    "suggestion": "DownloadPathAsync 与冲突解决入队时从 RemoteSnapshots 读取 FileSize 一并写入队列项，或改为下载前无条件检查磁盘空间（低水位 100MB，与 FullSyncAsync.cs:23 一致）。"
   },
   {
     "dimension": "function",
     "severity": "P3",
-    "location": "CloudPan.Client.UI/UI/SelectiveSyncPanel.cs:20-30",
-    "problem": "paths.Count == 0 ? new List<string>{\"/\"} : paths 使取消全选后仍全量同步，用户无法表达不同步任何目录。",
-    "why": "选择性同步缺少显式全不同步状态，空集合隐式回退为全选。",
-    "suggestion": "提供显式同步全部/同步无状态，而不是空集合隐式回退。"
+    "location": "CloudPan.Client.Core/Services/SyncEngine.Conflicts.cs:62-99; CloudPan.Contract/SyncIgnoreParser.cs:13-22; CloudPan.Server.Core/Files/ConflictBackupHelper.cs:52-66",
+    "problem": "KeepBoth 冲突解决把本地文件备份为 {path}.conflict.{yyyyMMddHHmmss}（Conflicts.cs:67），与服务端冲突副本命名契约 _冲突_yyyyMMdd_HHmmss（ConflictBackupHelper.cs:55 经 SpecConfig.ConflictSuffixPattern）不一致，且该 .conflict. 后缀不在内置忽略规则（SyncIgnoreParser.cs:13-22 仅 .cloudpan/*.tmp/~*）——FileSystemWatcher 立即触发 Created → 备份文件被当作新文件上传服务端，形成本地+云端双备份并制造版本历史噪音，用户看到的冲突副本两种命名风格并存，无法辨认保留两者到底保留了哪个版本。",
+    "why": "冲突处理是 v1.0 声明功能；两端冲突副本命名不一致 + 备份被误同步上传制造双份内容与版本噪音，用户对保留两者的结果困惑，违反冲突处理给出选项而非静默判据。",
+    "suggestion": "统一使用 SpecConfig.ConflictSuffixPattern 生成本地备份名，并把冲突备份后缀加入内置忽略规则或按冲突副本语义明确同步（二选一并一致化）。"
+  },
+  {
+    "dimension": "function",
+    "severity": "P3",
+    "location": "CloudPan.Client.UI/UI/MainWindow.cs:111; CloudPan.Client.Core/Services/SyncBrowseService.cs:63,81,93",
+    "problem": "文件浏览主视图每 5 秒全量刷新：GetFileBrowserAsync 每次 db.RemoteSnapshots.ToListAsync() 全量加载所有快照（SyncBrowseService.cs:81）+ 对同步根 Directory.EnumerateFileSystemEntries(AllDirectories) 全盘枚举（:93，含逐文件 ShouldIgnore 正则），再按当前目录前缀过滤。目录数万级（相册/大仓库）时单次刷新可达数秒，与全量扫描/增量同步争抢磁盘 IO，且 5 秒轮询在隐藏到托盘时虽停（MainWindow.cs:187），前台浏览主入口即用户第一操作面持续卡顿。",
+    "why": "海量小文件（相册数千照片）是知识库边界清单点名场景；浏览视图是用户第一操作面，每 5 秒一次全树扫描制造可见卡顿，违背浏览体验流畅、海量小文件吞吐判据。",
+    "suggestion": "快照查询按当前目录前缀裁剪（RemoteSnapshots.Where(Path.StartsWith(prefix))），本地枚举按当前目录裁剪并缓存到本地目录变更为止；仅对当前目录增量轮询，根目录才全量。"
+  },
+  {
+    "dimension": "function",
+    "severity": "P3",
+    "location": "CloudPan.Client.Core/Services/SyncManageService.cs:81-148",
+    "problem": "DeleteForTrashAsync 删除目录时只清本地快照（按前缀 RemoveRange 快照，99-111 行），未按路径前缀移除 SyncQueue 中该目录子路径的待处理下载/重命名项：残留下载项在服务端已移入回收站后 404 重试（浪费流量 + 弹出错误归因），残留重命名项对已墓碑路径 Move → 500 重试；上传项虽因本地递归删除后 !File.Exists 自愈（Transfers.cs:23-27），但下载/重命名路径无此兜底，删除-传输互相打架。",
+    "why": "目录删除（含批量删除进回收站）是家庭用户整理相册的常用操作；残留队列项制造 404/500 错误噪音与无谓流量，违背删除进回收站且可恢复/可撤销、失败可见的干净语义。",
+    "suggestion": "DeleteForTrashAsync 删除目录时按前缀（path + '/'）同时移除 SyncQueue 中全部 Upload/Download/Delete/Rename 队列项（对齐 Server SoftDelete 前缀语义与 DeleteLocalCopyAsync 的精确路径处理）。"
+  },
+  {
+    "dimension": "function",
+    "severity": "P3",
+    "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt:149-165",
+    "problem": "Android 删除请求 baseVersion 恒为 0（mapOf(path to path, baseVersion to 0)，151 行），而服务端 DeleteAsync 仅在 baseVersion > 0 && entry.Version > baseVersion 时做乐观并发冲突检测（FileOperationService.cs:56）——Android 端删除永远不触发冲突检测，文件恰被其他设备并发修改/上传时仍被静默删除进回收站（Windows 客户端经快照版本号做了并发保护）。批量删除（FileListScreen.kt:322-328）逐个 baseVersion=0，同样无保护。",
+    "why": "多设备并发是知识库边界清单点名场景；Android 是家庭第二设备主力，删除无并发保护导致另一设备刚上传的新内容被静默移入回收站，违背冲突处理给出选项而非静默判据。",
+    "suggestion": "Android 端删除前查询本地最新版本号（或请求时携带文件当前 version），baseVersion 传真实值以触发服务端 409 冲突路径；或由服务端对 baseVersion=0 的删除也提示风险。"
+  },
+  {
+    "dimension": "function",
+    "severity": "P3",
+    "location": "CloudPan.Server.Core/Versions/VersionHistoryService.cs:38-48; CloudPan.Server.Core/Thumbnails/ThumbnailService.cs:136-169",
+    "problem": "版本存档（.cloudpan/.versions）与缩略图缓存（.cloudpan/.thumbnails）无存储回收机制：VersionRecord 裁剪（CommitNewVersionInTransactionAsync prune:true 只删 DB 记录，不删 .versions 物理文件；PurgeExpiredTombstones 删 VersionRecord 亦不同步删存档文件），缩略图 key 含版本/hash 每次内容变化生成新文件旧文件残留（ThumbnailService.cs:161-168）。家庭长期使用后两个目录无限增长，磁盘被版本历史与缩略图占满。",
+    "why": "磁盘满/存储增长是家庭长期使用必现问题；版本保留期与缩略图缓存本应按保留策略清理（Dropbox/坚果云 30 天参照），当前只裁剪 DB 不裁剪 FS，存储只增不减，违背默认值合理、可长期运行判据。",
+    "suggestion": "PurgeExpiredTombstones/PurgeExpiredAsync 裁剪时同步删除对应 StoragePath 存档物理文件（孤儿文件清理）；缩略图按 LRU/创建时间定期清理或全量重建；补存储回收后台任务（IHostedService）。"
   }
 ]

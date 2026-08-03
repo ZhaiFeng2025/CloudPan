@@ -2,121 +2,121 @@
   {
     "dimension": "ux",
     "severity": "P1",
-    "location": "CloudPan.Client.UI/UI/MainWindow.cs:107-397（整窗布局）",
-    "problem": "Windows 主窗口是状态指示+进度条+日志 ListBox 的同步状态机/日志中心，完全没有网盘产品形态：无文件浏览/文件树、无搜索、无列表/网格切换、无上传入口、无分享、无回收站、无版本历史、无每文件状态图标。90% 面积是等宽字体的最近活动日志列表（MainWindow.cs:305-312）。",
-    "why": "家庭主力设备是台式机，Windows 客户端本应是核心网盘界面，却把用户丢进开发向日志里。clouddrive-kb §1-§6 的网盘形态在 Win 端基本全缺，老人小孩无法浏览/找到/保存文件，直接偏离家庭网盘使命。",
-    "suggestion": "以文件浏览为主视图（面包屑+列表/网格+排序+搜索），同步状态降级为顶部一条汇总；日志移入可折叠侧栏或设置页。"
-  },
-  {
-    "dimension": "ux",
-    "severity": "P1",
-    "location": "CloudPan.Client.UI/UI/TrayAppContext.cs:296（仅设置入口，无分享/版本）",
-    "problem": "分享（创建/撤销/密码/过期）与版本历史（列表/回滚）服务端 API 完整（shared-spec.json /api/shares、/api/versions、/share/{id}），但 Windows 与 Android 客户端均无任何 UI 入口，家庭用户只能 curl 才能用。",
-    "why": "v1.0 宣称分享链接、版本历史是完整功能却触达不到——违背零困惑与宣称即可用，且是 API 已就绪、纯 UI 缺口的低成本高价值项。",
-    "suggestion": "在文件/同步界面加分享（≤3 步：选文件→权限/密码/过期→复制链接）与文件详情面板内的版本历史入口。"
-  },
-  {
-    "dimension": "ux",
-    "severity": "P1",
-    "location": "CloudPan.Android/.../FileListScreen.kt:210-258（删除确认后直接 deleteFile）",
-    "problem": "删除不进回收站：Windows 端 SyncEngine 本地删除→同步删除，Android 端确认后直接调用 repository.deleteFile。服务端 /api/trash 三端点（列表/恢复/清空）存在，但两端客户端均无删除→回收站→可恢复/可撤销交互。",
-    "why": "家庭用户误删照片/文档不可逆是灾难级事故，直接违反 clouddrive-kb §3 删除进回收站而非物理删除与 Nielsen 3 用户控制与自由。",
-    "suggestion": "客户端删除默认走回收站 API，提供最近删除入口 + 撤销 Snackbar，而不是物理删除。"
-  },
-  {
-    "dimension": "ux",
-    "severity": "P1",
-    "location": "CloudPan.Client.UI/UI/MainWindow.cs:129-155（全局状态灯，无文件级状态）",
-    "problem": "clouddrive-kb §4 要求的每文件同步状态图标（✓已同步/↻同步中/!冲突/✗失败/☁仅云端）在 Windows 端完全缺失，只有全局指示灯+日志文本。FileState 枚举（Synced/Conflict/CloudOnly 等）服务端齐全但客户端不展示。",
-    "why": "核心零等待焦虑场景：老人把文件放进同步目录后，无法知道这个文件保存好了没，只能看全局进度条猜。",
-    "suggestion": "在文件浏览视图中为每行渲染状态图标（图标+颜色双通道），并在同步根 Explorer 集成（可选 P3）。"
-  },
-  {
-    "dimension": "ux",
-    "severity": "P1",
-    "location": "CloudPan.Client.UI/UI/DesignTokens.cs:34（TextMuted 150,150,150）与 :201（SizeCaption 8.5f）",
-    "problem": "TextMuted 在白色背景对比度约 2.96:1，远低于 WCAG 1.4.3 的 4.5:1，却用于大量辅助说明/状态提示（MainWindow _speedLabel、welcome guideLabel、SetupForm 提示行）；同时 SizeCaption=8.5pt 极小字号，SizeBody=12f 小于建议的正文 14px。",
-    "why": "老人/弱视用户路径直接受阻，违反 WCAG 2.1 AA 硬性标准与老人小孩零门槛目标——字太小、色太浅是家庭场景最常见的放弃点。",
-    "suggestion": "TextMuted 加深至 ≥4.5:1（如 #757575 附近），Caption 提至 10pt，正文统一 14pt，并建立正文最小字号审计。"
-  },
-  {
-    "dimension": "ux",
-    "severity": "P1",
-    "location": "CloudPan.Client.UI/UI/DesignTokens.cs 与 CloudPan.Server.UI/DesignTokens.cs（diff 确认字节级 IDENTICAL，均声明 namespace CloudPan.Shared）",
-    "problem": "两端设计令牌是两份手工拷贝（254 行完全相同），注释声称从 shared-spec.json designTokens.theme 契约生成，但 shared-spec.json 中根本不存在 designTokens 段——是虚假的契约声明。",
-    "why": "违反 CLAUDE.md 规则 0（契约驱动，唯一事实来源）与规则 8（基础设施单一实现）；两端独立演进必然漂移，改色/加令牌一处生效不了。",
-    "suggestion": "令牌移入 Contract（或 Infrastructure）单一文件 + CodeGen 从 shared-spec.json 新增 designTokens 段生成 .g.cs，两端引用同一类型。"
+    "location": "CloudPan.Client.UI/UI/TrayAppContext.Actions.cs:71-91（OpenSettings 保存块）与 SettingsForm.cs:79（saveHint「提示：Token 修改需重启客户端后生效」）、ClientBootstrap.cs:96-100/FileWatcherService.cs:23（同步根仅启动期固化）",
+    "problem": "设置里修改「服务端地址」或「同步文件夹」后，保存块只更新 cfg 持久化 + 限速下发 + 排除集热更新，Program.SyncRoot / FileWatcherService 监视目录 / ApiClient 基址 / WebSocket 连接仍用启动时旧值；saveHint 只提示「Token 修改需重启客户端后生效」，地址与同步根完全没有重启提示——用户改完文件夹看到「设置已保存」以为立即生效，实际新文件夹从不同步、旧地址仍被请求，直到下次重启。且 SettingsForm 的同步根没有复用 SetupForm 的 ValidateFolderSafety（可存根目录/系统目录/网络盘）。",
+    "why": "直接违反 ux-kb 零困惑与 clouddrive-kb §6「改动即时生效」：家庭用户会误以为改的目录正在同步（数据安全误解：新文件放进去以为已备份，实际没有），比「需重启」明示更危险；地址改了仍连旧服务端更让人困惑。",
+    "suggestion": "地址/同步根/Token 三类统一处理：要么全链路运行时热更新（重建 ApiClient/WebSocket/FileWatcher），要么对三类变更统一弹「需要重启后生效」提示并禁用立即生效承诺；至少把 saveHint 改为覆盖地址+同步根，并在保存时对同步根复用 ValidateFolderSafety 做路径安全校验。"
   },
   {
     "dimension": "ux",
     "severity": "P2",
-    "location": "CloudPan.Client.UI/UI/MainWindow.cs:1257-1414（ShowConflictResolution）",
-    "problem": "冲突处理模态 ShowDialog 逐个弹出（托盘 OnConflictDetected→ShowConflictWarning→ShowDialog 排队），批量冲突时弹窗轰炸且阻塞主窗口；选项仅保留本地/保留远程/保留两者，缺 clouddrive-kb §4 要求的查看版本对比；文案含本地/远程等术语。",
-    "why": "冲突是家庭场景最困惑的时刻，老人面对模态弹窗与专业二选一不知所措，违反零困惑与 Nielsen 9。",
-    "suggestion": "冲突改为非模态通知中心聚合处理，加入查看两个版本差异（打开两个文件），选项配白话解释与安全默认值。"
+    "location": "CloudPan.Client.UI/UI/FileBrowserView.cs:304-320（ListView 未设 MultiSelect/CheckBoxes）、FileBrowserView.Events.cs:90-96（SelectedItems[0] 仅取单选）、工具栏（FileBrowserView.cs:204-282 无批量入口、无右键菜单）",
+    "problem": "Windows 文件列表仍无多选批量操作：ListView 单选，所有动作（删除/分享/版本/下载）只作用于第一个选中项；无批量删除/批量下载；无右键上下文菜单（clouddrive-kb §3 的预览/分享/重命名/删除菜单全缺），Win 端操作入口只有工具栏一排按钮。",
+    "why": "家庭照片清理「一次删几十张」是高频路径，逐张操作违反 clouddrive-kb §3 多选+批量 ≤3 步；Android 已有多选批量删除，两端能力落差直接暴露在家庭成员面前。",
+    "suggestion": "ListView 开启 MultiSelect（可选 CheckBoxes 常显），多项选中时工具栏显示「批量删除（进回收站）」；补充右键上下文菜单（预览/下载/分享/删除/版本历史），重命名/移动/复制列为 v1.1。"
   },
   {
     "dimension": "ux",
     "severity": "P2",
-    "location": "CloudPan.Client.UI/UI/SetupForm.cs:59-191（三字段单页表单）",
-    "problem": "首次配置虽为三字段（地址+Token+同步根），但字段标签服务端地址/家庭 Token/同步文件夹与粘贴 64 字符家庭 Token 提示充满技术术语；Token 需从另一台设备托盘右键复制，对非技术用户不可行；局域网搜索不自动触发（SetupForm.cs:880 注释不再在窗口加载时自动触发），需手动点搜索局域网。",
-    "why": "首次配置是产品第一印象，术语+跨设备复制 64 位 hex + 手动搜索三步叠加，老人/小孩无法独立完成，违反零学习成本与 clouddrive-kb §6 3 步内完成、有引导与默认值。",
-    "suggestion": "开机自动触发 UDP 搜索并填充本机服务端；Token 改为配对码/二维码（/pair 页已支持浏览器打开，可加二维码）；文案白话化（家庭服务器地址/连接钥匙/要保存的文件夹）。"
+    "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/SettingsScreen.kt:232-234（statusMessage = 连接失败: ${exceptionOrNull()?.message}）、FileListScreen.kt:187/205/237/300/446（搜索失败/加载失败/加载更多失败/删除失败/下载失败 均 ${e.message}）、MainActivity.kt:55-66（上传 scope.launch 无 try/catch）",
+    "problem": "Android 端所有失败反馈直接透出底层异常英文原文（连接失败: 连不上 raw HttpClientException、SocketTimeoutException 等），家庭用户看到英文技术报错；更糟的是 MainActivity 上传文件在 scope.launch 内无任何 try/catch——异常直接冒泡到 rememberCoroutineScope → 应用崩溃，且上传成功也无任何提示（成功静默，失败崩溃），无进度反馈。",
+    "why": "ux-kb 零困惑要求错误 = 白话原因 + 下一步；手机端是家庭照片主入口，上传失败崩溃比 Windows 端错误更伤体验；对比 Windows 已有 ErrorAttribution 白话归因，Android 完全缺位，跨端体验断裂。",
+    "suggestion": "为 Android 建 ErrorAttribution 等价层（按状态码/连接异常映射「原因+下一步」白话），所有 result.onFailure 走白话；MainActivity 上传包 try/catch + 成功/失败 Snackbar + 上传中进度指示，禁止未捕获异常。"
   },
   {
     "dimension": "ux",
     "severity": "P2",
-    "location": "CloudPan.Client.UI 与 CloudPan.Server.UI 全部窗口（无主题检测）",
-    "problem": "深色模式完全缺失：全库无 SystemTheme/SystemParameters 检测、无令牌级 dark 值切换，Windows 11 深色系统下应用仍强制白底。",
-    "why": "visual-design-kb §6 要求令牌级深色切换；家庭夜间/客厅大屏使用白底刺眼，且深色是网盘产品成熟度标配。",
-    "suggestion": "令牌增加深色组，跟随系统主题在令牌层整体切换（避免硬编码反色）。"
+    "location": "CloudPan.Client.UI/UI/MainWindow.Share.cs:239（statusLabel = 生成失败: {ex.Message}）、MainWindow.Versions.cs:169（回滚失败: {ex.Message}）、MainWindow.Status.cs:233（无法打开同步文件夹…原因: {ex.Message}）、StartupFlow.cs:15（崩溃对话框直接展示 e.Exception.Message）",
+    "problem": "Windows 端仍有 4 处以上把原始异常字符串直接弹给用户：分享生成失败、版本回滚失败、打开文件夹失败、未处理崩溃对话框均透出英文异常（如 SocketException: A connection attempt failed…），与已落地的 ErrorAttribution 白话归因（MainWindow.Errors 已用）并存且规则不统一。",
+    "why": "同一产品内「部分错误白话、部分错误英文原文」让家庭用户对系统专业性产生割裂认知；崩溃对话框第一屏就是英文技术栈，老人直接懵——违背 ux-kb 零困惑「错误 = 原因 + 下一步」。",
+    "suggestion": "统一走 ErrorAttribution.FromException（或共享白话归因），弹窗/状态文案一律「白话原因 + 下一步」；崩溃对话框改为「CloudPan 遇到问题需要重启」+ 可选的详细日志查看，不默认展示英文原始异常。"
   },
   {
     "dimension": "ux",
     "severity": "P2",
-    "location": "CloudPan.Client.UI/UI/SettingsForm.cs:444,461（Color.White）；SelectiveSyncPanel.cs:77,82（Color.White/Color.Gray）",
-    "problem": "残留硬编码散色值，绕过令牌（应使用 TextOnPrimary/BackgroundWhite/TextMuted）。",
-    "why": "违反 visual-design-kb §1 禁止硬编码散色值，令牌体系形同虚设处会随主题/深色改动失效。",
-    "suggestion": "全库 grep Color.FromArgb/Color.White/Color.Gray 逐一替换为令牌；后续由 Analyzer 或 CodeGen 校验阻止。"
+    "location": "CloudPan.Client.UI/UI/TrayAppContext.Menu.cs:52-61（「分享当前文件…」「版本历史…」恒可点）与 MainWindow.Share.cs:302-307、MainWindow.Versions.cs:186-193（无选中仅 AddLog 到默认折叠日志侧栏）",
+    "problem": "托盘菜单「分享当前文件…」「版本历史…」恒为可点状态，但无选中文件时点击只显示主窗并把「请先在文件浏览中选中一个文件…」写进默认折叠的日志侧栏——用户看到窗口打开却毫无可见反馈，形成死端；窗口隐藏到托盘期间 SelectedItem 还可能来自过期会话。",
+    "why": "Nielsen 5 错误预防要求禁用无效操作、Nielsen 1 要求即时反馈；「从托盘点分享」是家庭高频入口，点下去无声扑空直接打击信心。",
+    "suggestion": "无有效选中时禁用这两项（或先弹一次性白话提示选中文件），有选中才可点；分享/版本改为直接对最近浏览的选中文件做上下文操作，避免依赖主窗记忆。"
   },
   {
     "dimension": "ux",
     "severity": "P2",
-    "location": "CloudPan.Client.UI/UI/MainWindow.cs:182-236（四个平级按钮组）",
-    "problem": "主界面无唯一主行动点——打开文件夹/暂停/冲突/重试四个平级按钮并排，无一突出；按钮高度 26-34px，CloudPanSpacing.MinTouchSize=44 定义了却从未使用。",
-    "why": "visual-design-kb §2 要求每页有且仅有一个主行动点；四平级按钮让老人不知道该按哪个，触控目标过小。",
-    "suggestion": "明确主行动点（如打开文件夹或上传），其余降为次级/文字按钮；统一按钮高度 ≥44。"
+    "location": "CloudPan.Server.UI/ServerWindow.cs:91-109（设备右键菜单「查看详情」「强制断开」）与 ServerWindow.Data.cs:47（item.SubItems.Add(\"-\") 同步文件数恒占位）",
+    "problem": "服务端管理窗设备列表右键菜单「查看详情」「强制断开」点击后弹「功能开发中」占位对话框——未完成功能暴露为可点死端；同时「同步文件数」列恒为硬编码 \"-\" 占位，从未查询真实数据。家庭用户在管理窗看到两个半成品痕迹叠加。",
+    "why": "可点但无用的菜单违反错误预防与产品成熟度；恒空统计列让用户怀疑产品未完成，损伤「正式发布版」的信任（clouddrive-kb §6 设备管理信息可读）。",
+    "suggestion": "v1.0 要么实现（断开设备 = 撤销其 Token/置离线，服务端已有 Devices 表与 Token 轮换），要么隐藏这两个菜单项并删除「同步文件数」列，禁止留「开发中」占位与恒空列。"
   },
   {
     "dimension": "ux",
     "severity": "P2",
-    "location": "CloudPan.Client.UI/UI/MainWindow.cs:449-461（完成仅写日志一行，无通知）",
-    "problem": "日常每次同步完成后无汇总反馈——只有日志列表里一行✅ 上传完成；无托盘/气泡/横幅确认你放进去的都保存好了；也无拖拽上传入口（welcome 文案仅提示把文件放入同步目录，MainWindow.cs:356）。",
-    "why": "零等待焦虑核心：用户需要操作完成后的确定性确认；放进文件夹=上传的隐喻虽好但缺闭环反馈。",
-    "suggestion": "同步完成弹出 3-5s 气泡已保存 N 个文件；支持把文件拖到窗口即导入同步根。"
+    "location": "CloudPan.Client.UI/UI/MainWindow.Versions.cs:95（lvi.SubItems.Add(v.DeviceId)）",
+    "problem": "版本历史对话框「设备」列仍直接展示原始 DeviceId（32 位 GUID hex 字符串），未映射为人类可读设备名；服务端设备列表已显示 Name，客户端版本历史未取用，同屏「版本/大小/修改时间」都是白话唯此列是技术标识。",
+    "why": "家庭用户面对 GUID 串无意义（这是哪个设备改的？），回滚决策需要理解版本来源；违反 ux-kb 零困惑与视觉一致性。",
+    "suggestion": "拉版本历史时携带设备名映射（/api/devices 已有 Name），或按 DeviceId 叠加注册名；不可映射时显示「其他设备」而非原始 GUID。"
   },
   {
     "dimension": "ux",
     "severity": "P2",
-    "location": "CloudPan.Android/.../FileListScreen.kt:485-850（单层列表 + TopAppBar）",
-    "problem": "Android 缺 clouddrive-kb §7 要求的底部导航（文件/相册/共享/我的）与照片墙网格视图；上传为单文件 picker 无批量/队列/暂停；无回收站/分享入口。下拉刷新（PullRefreshIndicator）与离线缓存、照片备份 Worker（15 分钟轮询）为亮点已具备。",
-    "why": "手机是家庭照片核心场景，照片墙+底部导航是家庭相册使用的第一入口；当前单文件列表形态对拍照多的家庭不可用。",
-    "suggestion": "v1.1 增加底部导航（文件/相册/设置）+ 照片网格墙 + 批量上传队列；优先做照片墙。"
-  },
-  {
-    "dimension": "ux",
-    "severity": "P2",
-    "location": "CloudPan.Server.Host/Controllers/ShareController.cs:159-169（/share/{id} HTML）",
-    "problem": "分享接收页是内联裸 HTML：仅文件名+大小+下载按钮，无图片/文档预览、无文件类型图标、无密码记忆、样式简陋；密码页与下载页是散落的 string 拼接。",
-    "why": "clouddrive-kb §5 要求链接打开直接预览/下载（免登录）；家庭内手机打开照片分享却只能下载到本地查看，体验断裂。",
-    "suggestion": "分享页做轻量预览（图片走 /api/thumbnails，文档给可读卡片），统一为模板化 HTML/CSS。"
+    "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/Generated/Dtos.g.kt:120（FileEntryDto.state 已生成）与 ui/FileListScreen.kt:857-957（ListItem 仅图标+名称+大小+时间）",
+    "problem": "Android 文件列表不渲染每文件同步状态：FileEntryDto.state（云端/仅云端/冲突/同步中语义齐全）已从 /api/tree 拉取，但 ListItem 从未使用，无 ✓/↻/!/✗/☁ 状态图标，也无同步汇总进度。",
+    "why": "clouddrive-kb §4 同步状态可视化标杆要求每文件状态 + 汇总进度；手机上看不到「这张照片还没传到云盘/有冲突」，家人无法判断备份是否完成，直接违背家庭照片备份的核心感知。",
+    "suggestion": "Android ListItem 按 state 字段叠加状态图标（与 Win 端 ResolveState 同语义、图标+颜色双通道），列表顶部加一条同步汇总进度条/计数。"
   },
   {
     "dimension": "ux",
     "severity": "P3",
-    "location": "CloudPan.Client.UI/UI/SetupForm.cs（1022 行）与 MainWindow.cs（1773 行）整体",
-    "problem": "SetupForm/MainWindow 确实逻辑与 UI 混叠（UDP 搜索、文件夹安全校验、文件夹统计、错误重试、冲突管理全部内嵌在 Form 内），体验散乱；行数问题更多体现为一致性/可维护性风险（同套校验逻辑在 SetupForm 与 SettingsForm 各写一遍）。",
-    "why": "CLAUDE.md 规则 8 单类 ≤400 行被显著突破；后续 UI 改版时混叠逻辑难以复用，且两处校验重复存在漂移。",
-    "suggestion": "借新架构迁移（Client.UI 只渲染）把校验/搜索/统计下沉 Client.Core/Infrastructure，窗口收敛为纯布局；与文件浏览改版一并做。"
+    "location": "CloudPan.Client.UI/UI/FileBrowserView.cs:294-296（排序下拉仅 名称/大小/类型）、317-320（列仅 状态/名称/大小/类型）与 FileBrowserView.List.cs:51-52（空状态「此文件夹为空 将文件放入同步目录即可自动同步」）",
+    "problem": "Windows 文件列表缺「修改时间」列与排序（clouddrive-kb §1 要求名称/时间/大小）；空状态文案已过时——T-033 后已有「上传」按钮与拖拽导入，文案仍指向同步目录，未引导现有入口；排序/视图（列表/网格）选择也不记忆，重启回默认。",
+    "why": "按时间找最近修改是家庭高频路径，缺时间排序只能肉眼扫；空状态与现有能力脱节未起到「给下一步动作」的引导；「系统记住偏好」承诺（ux-kb 零记忆负担）未兑现。",
+    "suggestion": "增加「修改时间」列与排序（升/降）；空状态改为「点击『上传』按钮或直接把文件拖进窗口开始同步」并加显式动作按钮；把排序/视图模式持久化到 ClientConfig。"
+  },
+  {
+    "dimension": "ux",
+    "severity": "P3",
+    "location": "CloudPan.Client.UI/UI/FileBrowserView.List.cs:175-220（网格视图仅自绘通用文件夹/文件字形，无缩略图）与 MainWindow.Trash.cs:98-266（回收站对话框无保留期限提示）",
+    "problem": "网格视图对图片/视频不加载缩略图（服务端 /api/thumbnails 已存在，Win 端未接入），网格名不副实；回收站对话框「恢复/清空」但从不提示保留期限，用户不知多久后会被自动清理，误以为删除内容永久存在。",
+    "why": "clouddrive-kb §2 网格视图服务图片/相册场景、回收站需保留期限提示；照片是家庭云盘核心内容，无缩略图的网格与无期限的回收站都削弱产品完整性感知。",
+    "suggestion": "网格视图对图片类型异步加载缩略图（复用 /api/thumbnails，本地缓存）；回收站页脚加「文件将在保留期（如 30 天）后自动清理」提示。"
+  },
+  {
+    "dimension": "ux",
+    "severity": "P3",
+    "location": "CloudPan.Client.UI/UI/SetupForm.cs:72-117（全用「Token」术语）vs CloudPan.Server.UI/SettingsPage.Guide.cs:12-59（服务端用「连接钥匙」）；SettingsForm.AccountTab.cs:151（磁盘: {drive.Name} ({drive.DriveType}) 透出英文枚举）；MainWindow.Share.cs:232-234（已生成（过期 {ExpiresAt}）透出 ISO-8601 UTC 原始串）",
+    "problem": "术语与技术信息跨端不一致：客户端首次配置/设置全用「家庭 Token / 64 字符家庭 Token」，服务端却用白话「连接钥匙」，两端对同一概念叫法不同；设置页磁盘类型显示英文枚举（Fixed/Network/Removable）；分享对话框过期时间透出 ISO-8601 UTC 原始串（如 2026-08-04T15:00:00Z）而非「x 天后过期」。",
+    "why": "visual-design-kb §7 平台一致性 + ux-kb 白话原则：老人小孩看到 Token 与「连接钥匙」两种叫法会困惑是否同一物；英文枚举与 ISO 时间串是典型技术残留，家庭用户无法理解。",
+    "suggestion": "统一产品词汇（客户端改用「连接钥匙」或在首启页写「连接钥匙（Token）」括号注释一次）；磁盘类型映射为中文（固定/网络/可移动）；分享过期时间格式化为相对白话（如「7 天后过期」）。"
+  },
+  {
+    "dimension": "ux",
+    "severity": "P3",
+    "location": "CloudPan.Client.UI/UI/MainWindow.Errors.cs:83、MainWindow.Conflicts.cs:78、MainWindow.Trash.cs:103、MainWindow.Share.cs:38、MainWindow.Versions.cs:38（错误列表/冲突解决/回收站/分享/版本历史全部动态 new Form，未显式设 BackColor/未 ThemeWatcher.Watch）",
+    "problem": "Windows 端所有业务弹窗均为动态 new Form：部分未显式设置 BackColor=CloudPanColors.BackgroundWhite，全部未调用 ThemeWatcher.Watch——深色模式下呈「浅色窗体 + 深色控件」割裂外观，且系统主题运行时切换时这些已打开弹窗不刷新（仅主窗刷新）。",
+    "why": "visual-design-kb §6 要求深色模式令牌级切换、视觉一致；弹窗是家庭用户高频触达面，浅深混排破坏「同一系统」观感。",
+    "suggestion": "为动态弹窗统一设置 BackColor=CloudPanColors.BackgroundWhite 并接入 ThemeWatcher.Watch；或将各弹窗抽为独立 Form 子类统一主题跟随（配合架构规则 8 拆分）。"
+  },
+  {
+    "dimension": "ux",
+    "severity": "P3",
+    "location": "CloudPan.Infrastructure/Design/DesignTokens.cs:183-185 与 FileBrowserView.List.cs:118-135（每文件状态字形颜色）",
+    "problem": "浅色主题状态色对比度不达标：SuccessGreen(76,175,80)≈2.78:1、WarningOrange(255,152,0)≈2.16:1，用于每文件状态字形（✓/↻/!/✗/☁）颜色；虽双通道有字形兜底，但颜色通道本身低于 WCAG 1.4.3 非文本图形 ≥3:1，弱视/老年用户辨认困难。",
+    "why": "visual-design-kb §3 状态色语义全局统一且对比度达标；家庭场景含老人，颜色+图标双通道都须稳健才算达标。",
+    "suggestion": "浅色组 SuccessGreen/WarningOrange 加深（如绿 #2E7D32≈4.9:1、琥珀 #F57C00≈3.4:1），或给字形加深色描边，保证颜色通道独立达标。"
+  },
+  {
+    "dimension": "ux",
+    "severity": "P3",
+    "location": "CloudPan.Client.UI/UI/MainWindow.Browser.cs:26-47（5 秒定时刷新）与 CloudPan.Client.Core/Services/SyncBrowseService.cs:60-110（GetFileBrowserAsync 全树 Directory.EnumerateFileSystemEntries + SyncQueue/RemoteSnapshots 两张表全表 ToListAsync）",
+    "problem": "文件浏览每 5 秒触发一次全树枚举 + 全表加载：即使当前目录只有几十项，每次刷新仍递归扫描同步根全部文件并全表读取队列/快照，家庭照片库（数万文件）下每 5 秒一次磁盘/CPU 抖动，滚动与交互被周期打断；搜索防抖 300ms 也触发同一全树扫描。",
+    "why": "ux-kb 零等待焦虑：>1s 操作应有反馈、操作不被打断；大目录下周期性卡顿直接可见，浏览体验打折扣。",
+    "suggestion": "浏览数据改为服务端 /api/tree 快照 + 本地增量缓存（本地 FS 枚举由 FileSystemWatcher 增量维护，或后台线程预计算），仅当当前目录相关数据变化才刷新；刷新间隔拉长或改为事件驱动。"
+  },
+  {
+    "dimension": "ux",
+    "severity": "P3",
+    "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt:742-753（顶栏「设置」与「断开连接」两图标按钮）",
+    "problem": "Android 文件列表顶栏同时放「设置」与「断开连接」两个图标按钮，且二者 onClick 都调用 onBackToSettings()——行为完全相同（都回设置页），「断开连接」图标（LinkOff）实际并不真正断开连接（仅 invalidateClient 清理连接池），双按钮冗余且误导。",
+    "why": "Nielsen 4 一致性/标准：同义同形；两个图标做同一件事让用户对「断开连接」语义产生错误预期（以为会真正断开/登出），操作入口混乱。",
+    "suggestion": "删除「断开连接」图标按钮，仅保留设置入口；若真要提供断开/登出，改为在设置页内提供明确的「断开连接」动作并给出已断开反馈。"
   }
 ]
