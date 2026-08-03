@@ -4439,7 +4439,7 @@
       "title": "版本存档与缩略图缓存存储回收（BackgroundHostedService 统一回收任务）",
       "dimension": "function",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 8,
       "findingId": "F-130",
       "dependsOn": [],
@@ -4470,7 +4470,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "与 T-087 同走缩略图『接入』保留路线：T-087 先确认接入方向，本任务按保留后的缓存语义实现回收。| 执行（task-executor 2026-08-04）：改动文件 = shared-spec.json（1.8.0，新增 storageReclaimIntervalMinutes=60 / thumbnailCacheRetentionDays=30 配置键 + changelog）、CloudPan.CodeGen/Generators/ManifestGenerator.cs（SpecConfig 生成新常量）、CloudPan.Contract/Generated/ContractManifest.g.cs（CodeGen 重生成）、CloudPan.Infrastructure/Storage/IFileStorageService.cs + FileStorageService.cs（新增 DeleteVersionArchive 孤儿存档删除单点）、CloudPan.Server.Core/Versions/VersionCommitHelper.cs（prune 事务提交后同步删被裁剪版本存档物理文件；DeleteOrphanArchive 委托单点）、CloudPan.Server.Core/FileIndex/IFileIndexService.cs + FileIndexService.cs（墓碑清理同步删存档物理文件；新增 PurgeOrphanVersionArchivesAsync 孤儿存档清理，含 10 分钟在途保护窗）、CloudPan.Server.Core/Thumbnails/IThumbnailService.cs + ThumbnailService.cs（新增 ReclaimExpiredThumbnailsAsync 按创建时间/LRU 回收）、CloudPan.Server.Host/Hosting/BackgroundHostedService.cs（新增 StorageReclaim 统一存储回收任务，间隔/保留期读 SpecConfig）、CloudPan.Tests（VersionCommit/FileIndex/Thumbnail 回收单测 3 项）。验证：dotnet test --filter 'VersionCommit|FileIndex' 24/24 通过；dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 343/343 通过；dotnet run --project CloudPan.CodeGen -- --verify 校验通过。",
+      "note": "与 T-087 同走缩略图『接入』保留路线：T-087 先确认接入方向，本任务按保留后的缓存语义实现回收。| 执行（task-executor 2026-08-04）：改动文件 = shared-spec.json（1.8.0，新增 storageReclaimIntervalMinutes=60 / thumbnailCacheRetentionDays=30 配置键 + changelog）、CloudPan.CodeGen/Generators/ManifestGenerator.cs（SpecConfig 生成新常量）、CloudPan.Contract/Generated/ContractManifest.g.cs（CodeGen 重生成）、CloudPan.Infrastructure/Storage/IFileStorageService.cs + FileStorageService.cs（新增 DeleteVersionArchive 孤儿存档删除单点）、CloudPan.Server.Core/Versions/VersionCommitHelper.cs（prune 事务提交后同步删被裁剪版本存档物理文件；DeleteOrphanArchive 委托单点）、CloudPan.Server.Core/FileIndex/IFileIndexService.cs + FileIndexService.cs（墓碑清理同步删存档物理文件；新增 PurgeOrphanVersionArchivesAsync 孤儿存档清理，含 10 分钟在途保护窗）、CloudPan.Server.Core/Thumbnails/IThumbnailService.cs + ThumbnailService.cs（新增 ReclaimExpiredThumbnailsAsync 按创建时间/LRU 回收）、CloudPan.Server.Host/Hosting/BackgroundHostedService.cs（新增 StorageReclaim 统一存储回收任务，间隔/保留期读 SpecConfig）、CloudPan.Tests（VersionCommit/FileIndex/Thumbnail 回收单测 3 项）。验证：dotnet test --filter 'VersionCommit|FileIndex' 24/24 通过；dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 343/343 通过；dotnet run --project CloudPan.CodeGen -- --verify 校验通过。| 验收（task-verifier 2026-08-04）：AC1 通过（dotnet test --filter 'VersionCommit|FileIndex' 24/24，覆盖裁剪/墓碑同步删存档物理文件，见 VersionCommitHelperTests.cs:136 与 FileIndexServiceTests.cs:160）；AC2 通过（StorageReclaim 回收任务存在，间隔/保留期读 SpecConfig.StorageReclaimIntervalMinutes / ThumbnailCacheRetentionDays）；AC3 通过（dotnet test CloudPan.Tests -c Release 343/343，dotnet build CloudPan.sln -c Release 0 警告 0 错误）。独立核对：StorageReclaim 用 Task.Run+try-catch 捕获全部异常（7.2 合规，非 _= 模式，全部 Timer 均 Dispose）；删除存档统一经 IFileStorageService.DeleteVersionArchive 单点（调用点仅 VersionCommitHelper/FileIndexService，无散落裸 File.Delete）；缩略图回收按 LastWriteTime（LRU）< cutoff 清理、保留期读 SpecConfig；孤儿存档清理含 10 分钟在途保护窗（防删除未提交事务引用文件）；prune/墓碑清理均在 DB 提交后删物理文件、失败文件由统一回收兜底。自动项全过、无手动项 → done。",
       "updatedAt": "2026-08-04"
     },
     {
