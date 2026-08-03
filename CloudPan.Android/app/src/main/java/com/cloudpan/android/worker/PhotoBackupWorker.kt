@@ -34,6 +34,18 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.TimeUnit
 
+/** 单张照片备份结果（T-060：失败重试上限 + 游标越过）。 */
+private enum class BackupOutcome {
+    /** 本次新上传成功。 */
+    Uploaded,
+
+    /** 去重跳过（已备份/内容级去重/已 Blocked），视为已解析，游标可越过。 */
+    Skipped,
+
+    /** 本次触发失败重试上限，标记 Blocked，游标越过继续备份后续照片。 */
+    Blocked
+}
+
 /**
  * WorkManager Worker——定期扫描新增照片并上传到服务端 /Photos/ 目录。
  * 间隔: 15 分钟（shared-spec.json config.androidPollIntervalMinutes）。
@@ -43,6 +55,8 @@ import java.util.concurrent.TimeUnit
  * 下次运行重试；不再出现「较早照片失败、较晚照片成功导致失败照片被跳过」。
  * 每张照片经 BackupLog（Uri+FileHash 去重 / BackupStatus 状态机）记录，远程路径
  * 含哈希短码避免同名照片相互覆盖。
+ * 队头阻塞防护（T-060）：单张照片连续失败达到 MAX_RETRY 次即标记 Blocked，游标越过
+ * 继续备份后续照片，坏照片不再阻塞整个相册；未达上限仍按 T-044 语义停止、下次运行重试。
  */
 class PhotoBackupWorker(
     context: Context,
@@ -113,9 +127,19 @@ class PhotoBackupWorker(
 
             var uploaded = 0
             var hadFailure = false
+            // T-060：本次运行中标记 Blocked（重试超限）的照片数，用于完成通知提示
+            var blockedPhotos = 0
             // 连续成功段末尾（毫秒）——遇失败即停，不越过失败照片
             var segmentEnd = lastBackupEpoch
             var hasSegmentProgress = false
+
+            // 推进连续段末尾：某照片被成功上传/去重跳过/标记 Blocked 处理后，游标即可越过该照片
+            fun advanceSegment(dateAdded: Long) {
+                if (dateAdded * 1000L > segmentEnd) {
+                    segmentEnd = dateAdded * 1000L
+                    hasSegmentProgress = true
+                }
+            }
 
             cursor?.use { c ->
                 val idCol = c.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
@@ -134,10 +158,7 @@ class PhotoBackupWorker(
                     val file = File(filePath)
                     if (!file.exists()) {
                         // 文件已不存在（被移动/删除）：视为已解决，允许连续段越过
-                        if (dateAdded * 1000L > segmentEnd) {
-                            segmentEnd = dateAdded * 1000L
-                            hasSegmentProgress = true
-                        }
+                        advanceSegment(dateAdded)
                         continue@photo
                     }
 
@@ -146,7 +167,7 @@ class PhotoBackupWorker(
                         .appendPath(mediaId.toString()).build().toString()
 
                     try {
-                        val newlyUploaded = backupPhoto(
+                        when (backupPhoto(
                             api = api,
                             dao = backupLogDao,
                             file = file,
@@ -154,22 +175,37 @@ class PhotoBackupWorker(
                             fileName = fileName,
                             dateAdded = dateAdded,
                             mimeType = mimeType
-                        )
-                        if (newlyUploaded) uploaded++
-                        // 推进连续段（含去重跳过/已备份照片）
-                        if (dateAdded * 1000L > segmentEnd) {
-                            segmentEnd = dateAdded * 1000L
-                            hasSegmentProgress = true
+                        )) {
+                            BackupOutcome.Uploaded -> {
+                                uploaded++
+                                advanceSegment(dateAdded)
+                                notification = buildProgressNotification("正在备份照片...", uploaded, -1)
+                                notificationManager.notify(notificationId, notification)
+                                Log.i(TAG, "已备份: $fileName")
+                            }
+                            BackupOutcome.Skipped -> {
+                                // 去重跳过（已备份/已 Blocked 安全网）：视为已解决，允许连续段越过
+                                advanceSegment(dateAdded)
+                                Log.d(TAG, "跳过（去重/已处理）: $fileName")
+                            }
+                            BackupOutcome.Blocked -> {
+                                // 失败重试已达上限：标记 Blocked，游标越过继续，不再阻塞后续照片
+                                blockedPhotos++
+                                advanceSegment(dateAdded)
+                                notification = buildFailureNotification(
+                                    "照片已 Blocked",
+                                    "照片「$fileName」重试 $MAX_RETRY 次仍失败，已跳过备份，请手动处理"
+                                )
+                                notificationManager.notify(notificationId, notification)
+                                Log.e(TAG, "照片已 Blocked（重试 $MAX_RETRY 次失败），跳过: $fileName")
+                            }
                         }
-                        notification = buildProgressNotification("正在备份照片...", uploaded, -1)
-                        notificationManager.notify(notificationId, notification)
-                        Log.i(TAG, "已备份: $fileName")
                     } catch (e: Exception) {
                         Log.e(TAG, "备份失败: $fileName", e)
                         // 发送单张失败通知
                         notification = buildFailureNotification("备份失败", "照片「$fileName」上传失败：${e.message}")
                         notificationManager.notify(notificationId, notification)
-                        // 连续段语义：遇失败即停，游标停在失败照片之前，该照片及后续下次运行重试
+                        // 连续段语义（未达重试上限）：遇失败即停，游标停在失败照片之前，该照片及后续下次运行重试
                         hadFailure = true
                         break@photo
                     }
@@ -184,6 +220,10 @@ class PhotoBackupWorker(
             // 完成通知
             notification = buildProgressNotification(
                 when {
+                    blockedPhotos > 0 && hadFailure ->
+                        "备份暂停：$blockedPhotos 张已 Blocked（重试超限，请手动处理），另有照片失败将在下次重试（已上传 $uploaded 张）"
+                    blockedPhotos > 0 ->
+                        "照片备份完成，已上传 $uploaded 张；$blockedPhotos 张已 Blocked（重试超限，请手动处理）"
                     hadFailure -> "备份暂停：有照片失败，将在下次自动重试（已上传 $uploaded 张）"
                     uploaded > 0 -> "照片备份完成，已上传 $uploaded 张"
                     else -> "没有新照片需要备份"
@@ -208,8 +248,14 @@ class PhotoBackupWorker(
 
     /**
      * 备份单张照片并写 BackupLog（状态机 Pending→Uploading→Done/Failed）。
-     * 去重：同 Uri 且同 FileHash 已 Done，或任一同 FileHash 已 Done → 跳过（返回 false）。
-     * 返回 true 表示本次新上传；抛异常表示失败（由调用方停止连续段，下次运行重试）。
+     * 去重：同 Uri 且同 FileHash 已 Done，或任一同 FileHash 已 Done → 跳过。
+     *
+     * 失败重试上限（T-060）：单张照片连续失败记录 retryCount，达到 [MAX_RETRY] 次即标记 Blocked
+     * （Failed + retryCount 达上限），返回 [BackupOutcome.Blocked] 由调用方越过游标继续备份后续照片，
+     * 坏照片不再阻塞整个相册；未达上限抛异常，由调用方按连续段语义停止、下次运行重试。
+     *
+     * @return Uploaded=本次新上传；Skipped=去重跳过或已 Blocked；Blocked=本次触发失败重试上限。
+     * @throws Exception 未达失败重试上限的上传失败（调用方停止连续段）。
      */
     private suspend fun backupPhoto(
         api: CloudPanApi,
@@ -219,17 +265,21 @@ class PhotoBackupWorker(
         fileName: String,
         dateAdded: Long,
         mimeType: String
-    ): Boolean {
+    ): BackupOutcome {
         val fileHash = file.sha256Hex()
 
         // 按 Uri+FileHash 去重：同 Uri 且同哈希已备份 → 跳过
         val existing = dao.findByLocalUri(contentUri)
         if (existing != null && existing.status == BackupStatus.Done.value && existing.fileHash == fileHash) {
-            return false
+            return BackupOutcome.Skipped
+        }
+        // 已 Blocked（Failed 且 retryCount 达上限）：不再重试，静默跳过（避免每次运行重复通知），游标越过
+        if (existing != null && existing.status == BackupStatus.Failed.value && existing.retryCount >= MAX_RETRY) {
+            return BackupOutcome.Skipped
         }
         // 内容级去重：同 FileHash 已 Done → 跳过
         if (dao.findDoneByFileHash(fileHash) != null) {
-            return false
+            return BackupOutcome.Skipped
         }
 
         // 远程路径含哈希短码，避免同名照片相互覆盖
@@ -267,22 +317,31 @@ class PhotoBackupWorker(
                 fileSize = fileSize
             ))
             uploadPhoto(api, file, remotePath, mimeType)
-            // → Done
+            // → Done（成功即清零重试计数，避免照片内容变更后再次上传被旧计数误判 Blocked）
             dao.upsert(record.copy(
                 status = BackupStatus.Done.value,
                 remotePath = remotePath,
                 fileHash = fileHash,
-                fileSize = fileSize
+                fileSize = fileSize,
+                retryCount = 0
             ))
-            return true
+            return BackupOutcome.Uploaded
         } catch (e: Exception) {
-            // → Failed（保留记录，下次运行重试）
+            // → Failed（保留记录，下次运行重试）并累加重试计数
+            val nextRetry = record.retryCount + 1
             dao.upsert(record.copy(
                 status = BackupStatus.Failed.value,
                 remotePath = remotePath,
                 fileHash = fileHash,
-                fileSize = fileSize
+                fileSize = fileSize,
+                retryCount = nextRetry
             ))
+            if (nextRetry >= MAX_RETRY) {
+                // 已达失败重试上限：标记 Blocked（Failed + retryCount 达上限），调用方越过游标继续
+                Log.e(TAG, "照片已达失败重试上限（$MAX_RETRY 次），标记 Blocked: $fileName", e)
+                return BackupOutcome.Blocked
+            }
+            // 未达上限：抛异常让连续段停止，下次运行重试
             throw e
         }
     }
@@ -389,6 +448,9 @@ class PhotoBackupWorker(
         private const val WORK_NAME = "photo_backup_periodic"
         private const val CHANNEL_ID = "photo_backup_channel"
         private const val NOTIFICATION_ID_BACKUP = 1001
+
+        /** 单张照片失败重试上限（T-060）：连续失败达到该次数即标记 Blocked，越过游标继续备份后续照片。 */
+        private const val MAX_RETRY = 3
 
         /** 注册定期备份任务（每 15 分钟）。 */
         fun schedule(context: Context) {
