@@ -18,7 +18,7 @@ public class DesignTokensThemeTests
     [Fact]
     public void 深色语义组_与浅色组字段齐全()
     {
-        // 通过公开属性可读（映射表构建依赖全部 32 对，缺任一属性即编译失败）
+        // 通过公开属性可读（映射表构建依赖全部 25 对，缺任一属性即编译失败）
         Assert.True(CloudPanColors.PrimaryBlue.A == 255);
         Assert.True(CloudPanColors.BackgroundWhite.A == 255);
     }

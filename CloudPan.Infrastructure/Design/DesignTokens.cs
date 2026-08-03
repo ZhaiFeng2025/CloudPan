@@ -6,6 +6,10 @@ namespace CloudPan.Infrastructure.Design;
 /// 应用调色板设计令牌。
 /// 手工维护（shared-spec.json 不含 designTokens 节，此前“从契约生成”注释为伪称），
 /// 为两端 UI（CloudPan.Client.UI / CloudPan.Server.UI）共享的唯一来源：改此处两端同时生效。
+/// 仅保留有真实消费者的令牌（两端 UI：MainWindow/SetupForm/SettingsForm/FileBrowserView/
+/// ServerWindow/SettingsPage/ServerInstaller/SelectiveSyncPanel 等）；0 引用颜色
+/// （InfoBlue/TextLink/BorderFocus/BackgroundHover/BackgroundOverlay/SeparatorGray/DisabledBg/DisabledText）
+/// 已在 T-080 删除。
 /// </summary>
 public static class CloudPanColors
 {
@@ -28,7 +32,6 @@ public static class CloudPanColors
     public static Color SuccessGreen => Pick(Light.SuccessGreen, Dark.SuccessGreen);
     public static Color WarningOrange => Pick(Light.WarningOrange, Dark.WarningOrange);
     public static Color ErrorRed => Pick(Light.ErrorRed, Dark.ErrorRed);
-    public static Color InfoBlue => Pick(Light.InfoBlue, Dark.InfoBlue);
 
     // -- 状态底色（浅色组为浅底，深色组为深底，语义均为“状态信息底色”） --
     public static Color ErrorBgLight => Pick(Light.ErrorBgLight, Dark.ErrorBgLight);
@@ -46,25 +49,18 @@ public static class CloudPanColors
     public static Color TextError => Pick(Light.TextError, Dark.TextError);
     public static Color TextDarkGray => Pick(Light.TextDarkGray, Dark.TextDarkGray);
     public static Color TextOnPrimary => Pick(Light.TextOnPrimary, Dark.TextOnPrimary);
-    public static Color TextLink => Pick(Light.TextLink, Dark.TextLink);
 
     // -- 边框与背景 --
     public static Color BorderLight => Pick(Light.BorderLight, Dark.BorderLight);
     public static Color BorderMid => Pick(Light.BorderMid, Dark.BorderMid);
-    public static Color BorderFocus => Pick(Light.BorderFocus, Dark.BorderFocus);
     public static Color BackgroundLight => Pick(Light.BackgroundLight, Dark.BackgroundLight);
     public static Color BackgroundWhite => Pick(Light.BackgroundWhite, Dark.BackgroundWhite);
     public static Color BackgroundGray => Pick(Light.BackgroundGray, Dark.BackgroundGray);
-    public static Color BackgroundHover => Pick(Light.BackgroundHover, Dark.BackgroundHover);
-    public static Color BackgroundOverlay => Pick(Light.BackgroundOverlay, Dark.BackgroundOverlay);
 
     // -- 控件色 --
     public static Color ButtonBorderGray => Pick(Light.ButtonBorderGray, Dark.ButtonBorderGray);
     public static Color ButtonHoverBg => Pick(Light.ButtonHoverBg, Dark.ButtonHoverBg);
     public static Color ButtonPressBg => Pick(Light.ButtonPressBg, Dark.ButtonPressBg);
-    public static Color SeparatorGray => Pick(Light.SeparatorGray, Dark.SeparatorGray);
-    public static Color DisabledBg => Pick(Light.DisabledBg, Dark.DisabledBg);
-    public static Color DisabledText => Pick(Light.DisabledText, Dark.DisabledText);
 
     // -- 主题归一化映射（令牌层切换的唯一入口，UI 侧不逐处反色） --
     // 系统主题切换后，UI 把控件当前颜色交给本方法，映射到"当前主题下的对值"：
@@ -124,9 +120,9 @@ public static class CloudPanColors
         return map;
     }
 
-    // 浅色组与深色组逐一对（覆盖全部语义色）。注意顺序：
-    // 浅色组内存在同值但深色值不同的令牌（BackgroundGray/DisabledBg 均 245，BorderLight/ButtonPressBg 均 225），
-    // 后写入者胜出——把"更高频"的令牌放在后面（BackgroundGray 取 (44,44,44)、BorderLight 取 (74,74,74)）。
+    // 浅色组与深色组逐一对（覆盖全部有消费者的语义色）。注意顺序：
+    // 浅色组内存在同值但深色值不同的令牌（BorderLight/ButtonPressBg 均 225），
+    // 后写入者胜出——把“更高频”的令牌放在后面（BorderLight 取 (74,74,74)）。
     private static readonly (Color Light, Color Dark)[] PalettePairs =
     {
         (Light.PrimaryBlue, Dark.PrimaryBlue),
@@ -135,7 +131,6 @@ public static class CloudPanColors
         (Light.SuccessGreen, Dark.SuccessGreen),
         (Light.WarningOrange, Dark.WarningOrange),
         (Light.ErrorRed, Dark.ErrorRed),
-        (Light.InfoBlue, Dark.InfoBlue),
         (Light.ErrorBgLight, Dark.ErrorBgLight),
         (Light.WarningBgLight, Dark.WarningBgLight),
         (Light.SuccessBgLight, Dark.SuccessBgLight),
@@ -147,23 +142,15 @@ public static class CloudPanColors
         (Light.TextError, Dark.TextError),
         (Light.TextDarkGray, Dark.TextDarkGray),
         (Light.TextOnPrimary, Dark.TextOnPrimary),
-        (Light.TextLink, Dark.TextLink),
         (Light.BorderMid, Dark.BorderMid),
-        (Light.BorderFocus, Dark.BorderFocus),
         (Light.BackgroundLight, Dark.BackgroundLight),
         (Light.BackgroundWhite, Dark.BackgroundWhite),
-        (Light.BackgroundHover, Dark.BackgroundHover),
-        (Light.BackgroundOverlay, Dark.BackgroundOverlay),
         (Light.ButtonBorderGray, Dark.ButtonBorderGray),
         (Light.ButtonHoverBg, Dark.ButtonHoverBg),
-        (Light.DisabledBg, Dark.DisabledBg),
         (Light.ButtonPressBg, Dark.ButtonPressBg),
         // BorderLight 浅色 (225) 与 ButtonPressBg 浅色同值：后写胜出，取 BorderLight 深色 (74)
         (Light.BorderLight, Dark.BorderLight),
-        // BackgroundGray 浅色 (245) 与 DisabledBg 浅色同值：后写胜出，取 BackgroundGray 深色 (44)
         (Light.BackgroundGray, Dark.BackgroundGray),
-        (Light.SeparatorGray, Dark.SeparatorGray),
-        (Light.DisabledText, Dark.DisabledText),
     };
 
     private static readonly Dictionary<Color, Color> LightToDark = BuildMap(isLightToDark: true);
@@ -183,7 +170,6 @@ public static class CloudPanColors
         public static readonly Color SuccessGreen = Color.FromArgb(76, 175, 80);
         public static readonly Color WarningOrange = Color.FromArgb(255, 152, 0);
         public static readonly Color ErrorRed = Color.FromArgb(244, 67, 54);
-        public static readonly Color InfoBlue = Color.FromArgb(33, 150, 243);
 
         // -- 状态背景色（浅色） --
         public static readonly Color ErrorBgLight = Color.FromArgb(255, 235, 238);
@@ -201,25 +187,18 @@ public static class CloudPanColors
         public static readonly Color TextError = Color.FromArgb(198, 40, 40);
         public static readonly Color TextDarkGray = Color.FromArgb(97, 97, 97);
         public static readonly Color TextOnPrimary = Color.FromArgb(255, 255, 255);
-        public static readonly Color TextLink = Color.FromArgb(0, 100, 190);
 
         // -- 边框与背景 --
         public static readonly Color BorderLight = Color.FromArgb(225, 225, 225);
         public static readonly Color BorderMid = Color.FromArgb(200, 200, 200);
-        public static readonly Color BorderFocus = Color.FromArgb(0, 120, 212);
         public static readonly Color BackgroundLight = Color.FromArgb(248, 248, 248);
         public static readonly Color BackgroundWhite = Color.White;
         public static readonly Color BackgroundGray = Color.FromArgb(245, 245, 245);
-        public static readonly Color BackgroundHover = Color.FromArgb(235, 241, 248);
-        public static readonly Color BackgroundOverlay = Color.FromArgb(0, 0, 0, 96);
 
         // -- 控件色 --
         public static readonly Color ButtonBorderGray = Color.FromArgb(192, 192, 192);
         public static readonly Color ButtonHoverBg = Color.FromArgb(235, 235, 235);
         public static readonly Color ButtonPressBg = Color.FromArgb(225, 225, 225);
-        public static readonly Color SeparatorGray = Color.FromArgb(208, 208, 208);
-        public static readonly Color DisabledBg = Color.FromArgb(245, 245, 245);
-        public static readonly Color DisabledText = Color.FromArgb(180, 180, 180);
     }
 
     // ============================================================
@@ -237,7 +216,6 @@ public static class CloudPanColors
         public static readonly Color SuccessGreen = Color.FromArgb(110, 190, 115);
         public static readonly Color WarningOrange = Color.FromArgb(255, 172, 40);
         public static readonly Color ErrorRed = Color.FromArgb(250, 96, 84);
-        public static readonly Color InfoBlue = Color.FromArgb(90, 170, 250);
 
         // -- 状态背景色（深色） --
         public static readonly Color ErrorBgLight = Color.FromArgb(66, 34, 36);
@@ -255,26 +233,19 @@ public static class CloudPanColors
         public static readonly Color TextError = Color.FromArgb(250, 130, 120);
         public static readonly Color TextDarkGray = Color.FromArgb(170, 170, 170);
         public static readonly Color TextOnPrimary = Color.FromArgb(255, 255, 255);
-        public static readonly Color TextLink = Color.FromArgb(110, 176, 240);
 
         // -- 边框与背景（阴影减弱、以边框区分层级，边框略亮于背景） --
         public static readonly Color BorderLight = Color.FromArgb(74, 74, 74);
         public static readonly Color BorderMid = Color.FromArgb(95, 95, 95);
-        public static readonly Color BorderFocus = Color.FromArgb(86, 160, 230);
         public static readonly Color BackgroundLight = Color.FromArgb(36, 36, 36);
         // 深色表面用 (32,32,32) 而非 (30,30,30)：后者与浅色组 TextPrimary 同值，
         // 会破坏 NormalizeToTheme 双向映射幂等（浅色 TextPrimary 被误反映射为 White）
         public static readonly Color BackgroundWhite = Color.FromArgb(32, 32, 32);
         public static readonly Color BackgroundGray = Color.FromArgb(44, 44, 44);
-        public static readonly Color BackgroundHover = Color.FromArgb(52, 58, 70);
-        public static readonly Color BackgroundOverlay = Color.FromArgb(0, 0, 0, 140);
 
         // -- 控件色 --
         public static readonly Color ButtonBorderGray = Color.FromArgb(84, 84, 84);
         public static readonly Color ButtonHoverBg = Color.FromArgb(58, 58, 58);
         public static readonly Color ButtonPressBg = Color.FromArgb(48, 48, 48);
-        public static readonly Color SeparatorGray = Color.FromArgb(70, 70, 70);
-        public static readonly Color DisabledBg = Color.FromArgb(46, 46, 46);
-        public static readonly Color DisabledText = Color.FromArgb(110, 110, 110);
     }
 }
