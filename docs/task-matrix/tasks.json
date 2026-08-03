@@ -4355,7 +4355,7 @@
       "title": "客户端 HTTP 接口签名契约化（C# IApiClient 与 Kotlin Retrofit 由 CodeGen 生成）",
       "dimension": "architecture",
       "priority": "P1",
-      "status": "acceptance",
+      "status": "done",
       "batch": 8,
       "findingId": "F-128",
       "dependsOn": [],
@@ -4392,7 +4392,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "执行（T-086）：改动清单——shared-spec.json（api.endpoints 补 clientMethod 结构化参数段 query/body/path/part 映射 + 方法名/返回类型，版本 1.7.0 + changelog）；SpecModels.cs（新增 ClientMethodDef/ClientParamDef）；ApiClientGenerator.cs + ClientApiRenderer.cs（生成 IApiClient 接口与 ApiClient 方法骨架）；KotlinApiGenerator.cs（生成 CloudPanApi.g.kt Retrofit 接口）；Program.cs（注册 C#客户端接口/骨架/Kotlin接口 三个生成器 + ClientApiOutputDir）；删除手工 IApiClient.cs、ApiClient.Trash.cs、ApiClient.ShareVersion.cs、CloudPanApi.kt；DownloadResult 迁契约层（传输协议抽象）；新增 CloudPan.Contract/IApiClient.Config.cs（运行时限速配置 partial）与 DownloadResult.cs；FileRepository.kt 4 处 Map body 改类型化 DTO；ClientBootstrap/TrayAppContext 补 CloudPan.Contract 引用。自证：dotnet run --project CloudPan.CodeGen -- --verify 通过（15 生成物一致 + 版本治理 changelog 8 条单调）；dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 340/340 通过（含架构 14/14）；验收 grep 命中：CloudPan.Contract/Generated/ClientApi.g.cs 含 interface IApiClient，CloudPanApi.g.kt 含 @GET/@POST/@DELETE。取舍：Kotlin 编译因环境缺 Android SDK（ANDROID_HOME 未设）无法验证，已人工核对生成接口与调用点签名一致。commit 3c62e9e",
+      "note": "执行（T-086）：改动清单——shared-spec.json（api.endpoints 补 clientMethod 结构化参数段 query/body/path/part 映射 + 方法名/返回类型，版本 1.7.0 + changelog）；SpecModels.cs（新增 ClientMethodDef/ClientParamDef）；ApiClientGenerator.cs + ClientApiRenderer.cs（生成 IApiClient 接口与 ApiClient 方法骨架）；KotlinApiGenerator.cs（生成 CloudPanApi.g.kt Retrofit 接口）；Program.cs（注册 C#客户端接口/骨架/Kotlin接口 三个生成器 + ClientApiOutputDir）；删除手工 IApiClient.cs、ApiClient.Trash.cs、ApiClient.ShareVersion.cs、CloudPanApi.kt；DownloadResult 迁契约层（传输协议抽象）；新增 CloudPan.Contract/IApiClient.Config.cs（运行时限速配置 partial）与 DownloadResult.cs；FileRepository.kt 4 处 Map body 改类型化 DTO；ClientBootstrap/TrayAppContext 补 CloudPan.Contract 引用。自证：dotnet run --project CloudPan.CodeGen -- --verify 通过（15 生成物一致 + 版本治理 changelog 8 条单调）；dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 340/340 通过（含架构 14/14）；验收 grep 命中：CloudPan.Contract/Generated/ClientApi.g.cs 含 interface IApiClient，CloudPanApi.g.kt 含 @GET/@POST/@DELETE。取舍：Kotlin 编译因环境缺 Android SDK（ANDROID_HOME 未设）无法验证，已人工核对生成接口与调用点签名一致。commit 3c62e9e\n验收（T-086，verifier 独立裁决）：AC1 实测 dotnet run --project CloudPan.CodeGen -- --verify 通过（15 项全部一致，含 C#客户端接口/骨架/Kotlin接口/路由）；AC2 实测 CloudPan.Contract/Generated/ClientApi.g.cs:18 interface IApiClient 命中（16 方法签名齐全，含 path 参数绑定）；AC3 实测 CloudPan.Android/.../Generated/CloudPanApi.g.kt @GET/@POST/@DELETE 14 处命中（@Query/@Body/@Part/@Multipart 语法合理）；AC4 实测 dotnet build CloudPan.sln -c Release 0 警告 0 错误。独立核对无假收敛：git 3c62e9e 删除手工 IApiClient.cs/CloudPanApi.kt/ApiClient.Trash.cs/ApiClient.ShareVersion.cs，ApiClient.cs 仅剩 HttpClient 基础设施与 manual 流式实现（GetFileTree/Delete/Move/Mkdir 等移入 Generated/ApiClient.g.cs 骨架）；spec api.endpoints 已补 clientMethod 结构化参数段（query/body/path/part + wireName/kotlinType/optional/default，1.7.0+changelog）；Kotlin 编译限制属实（ANDROID_HOME 空、local.properties 指向的 SDK 目录不存在、gradle 不在 PATH），生成物语法合理且 FileRepository.kt 调用点签名对齐；调用点 SyncManageService/SyncBrowseService 经 IApiClient 接口消费（非死代码）。全部自动项通过且无手动项 → done",
       "updatedAt": "2026-08-04"
     },
     {
