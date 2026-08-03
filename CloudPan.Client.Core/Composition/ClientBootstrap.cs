@@ -1,6 +1,5 @@
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using CloudPan.Client.Core.Models;
 using CloudPan.Client.Core.Services;
 using Microsoft.EntityFrameworkCore;
@@ -52,13 +51,9 @@ public sealed class ConnectionResult
     /// <summary>是否在 5 秒超时内连上服务端。</summary>
     public bool Connected { get; }
 
-    /// <summary>服务端版本号（连接成功时查询，失败/异常为 null）。</summary>
-    public string? ServerVersion { get; }
-
-    internal ConnectionResult(bool connected, string? serverVersion)
+    internal ConnectionResult(bool connected)
     {
         Connected = connected;
-        ServerVersion = serverVersion;
     }
 }
 
@@ -235,7 +230,7 @@ public sealed class ClientBootstrap
         Log.Information("数据库已重建");
     }
 
-    /// <summary>连接检测（5 秒超时）+ 服务端版本检查。</summary>
+    /// <summary>连接检测（5 秒超时）。</summary>
     public ConnectionResult HealthCheck()
     {
         var apiClient = Provider.GetRequiredService<IApiClient>();
@@ -248,11 +243,11 @@ public sealed class ClientBootstrap
         {
             logger.LogWarning("无法连接到服务端 {ServerUrl}（5秒超时）", _serverUrl);
             logger.LogInformation("客户端以离线模式运行，连接恢复后自动同步，托盘图标将显示离线状态");
-            return new ConnectionResult(false, null);
+            return new ConnectionResult(false);
         }
 
         logger.LogInformation("已连接到服务端 {ServerUrl}", _serverUrl);
-        return new ConnectionResult(true, QueryServerVersion(logger));
+        return new ConnectionResult(true);
     }
 
     // ===== 私有辅助 =====
@@ -390,31 +385,4 @@ public sealed class ClientBootstrap
         }
     }
 
-    private string? QueryServerVersion(Microsoft.Extensions.Logging.ILogger logger)
-    {
-        var clientVer = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version;
-        string clientVerStr = clientVer != null
-            ? $"{clientVer.Major}.{clientVer.Minor}.{clientVer.Build}"
-            : "1.0.0";
-        try
-        {
-            using CancellationTokenSource versionCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            using HttpClient http = new HttpClient(new HttpClientHandler { UseProxy = false }) { BaseAddress = new Uri(_serverUrl.TrimEnd('/')) };
-            http.Timeout = TimeSpan.FromSeconds(5);
-            var versionResp = http.GetAsync("/api/version", versionCts.Token).GetAwaiter().GetResult();
-            if (versionResp.IsSuccessStatusCode)
-            {
-                string versionJson = versionResp.Content.ReadAsStringAsync(versionCts.Token).GetAwaiter().GetResult();
-                using JsonDocument doc = JsonDocument.Parse(versionJson);
-                string? serverVersion = doc.RootElement.GetProperty("version").GetString();
-                if (serverVersion != null && serverVersion != clientVerStr)
-                {
-                    logger.LogInformation("服务端版本 {ServerVer}，当前 {ClientVer}", serverVersion, clientVerStr);
-                }
-                return serverVersion;
-            }
-        }
-        catch { /* 版本检查失败不影响正常使用 */ }
-        return null;
-    }
 }
