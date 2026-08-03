@@ -349,7 +349,9 @@ public class SyncEngineTests : IDisposable
     [Fact]
     public async Task FullScan_取消勾选CloudOnly本地残留副本_不重传不振荡()
     {
-        // 场景（F-23）：/photos 目录已取消勾选，快照 State==CloudOnly，本地仍残留此前下载的副本
+        // 场景（F-23）：/photos 目录已取消勾选（排除集含 /photos/），快照 State==CloudOnly，
+        // 本地仍残留此前下载的副本
+        SetSelectedPaths(_engine, new List<string> { "/photos/" });
         string filePath = Path.Combine(_syncRoot, "photos", "summer.jpg");
         Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
         await File.WriteAllTextAsync(filePath, "jpeg-data");
@@ -1455,6 +1457,219 @@ public class SyncEngineTests : IDisposable
         Assert.False(CallIsPathSelected(_engine, "/docs/private/secret.txt"));
         Assert.True(CallIsPathSelected(_engine, "/docs/public.txt"));     // 同级文件不受影响
         Assert.True(CallIsPathSelected(_engine, "/docs/private2/x.txt")); // 前缀不误伤相似路径
+    }
+
+    // ============================================================
+    // 排除集语义闭环（T-054）：上传方向拦截 + 重新勾选恢复
+    // ============================================================
+
+    [Fact]
+    public async Task EnqueueLocalChange_排除子树内新文件_不入队上传()
+    {
+        // 排除集：取消勾选 /photos → 子树内本地新建/修改文件不再上传
+        SetSelectedPaths(_engine, new List<string> { "/photos/" });
+        string filePath = Path.Combine(_syncRoot, "photos", "secret.txt");
+        Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
+        await File.WriteAllTextAsync(filePath, "隐私内容");
+
+        await _engine.EnqueueLocalChangeAsync("/photos/secret.txt", SyncOperation.Upload);
+
+        await using var dbCheck = await _dbFactory.CreateDbContextAsync();
+        Assert.Equal(0, await dbCheck.SyncQueue.CountAsync());
+    }
+
+    [Fact]
+    public async Task EnqueueLocalChange_排除子树内删除_不入队不删服务端()
+    {
+        // 排除集：取消勾选 /photos → 删除本地残留副本不得传播（服务端副本保留，重新勾选后可再下载）
+        SetSelectedPaths(_engine, new List<string> { "/photos/" });
+        string filePath = Path.Combine(_syncRoot, "photos", "summer.jpg");
+        Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
+        await File.WriteAllTextAsync(filePath, "jpeg-data");
+
+        await _engine.EnqueueLocalChangeAsync("/photos/summer.jpg", SyncOperation.Delete);
+
+        await using var dbCheck = await _dbFactory.CreateDbContextAsync();
+        Assert.Equal(0, await dbCheck.SyncQueue.CountAsync());
+    }
+
+    [Fact]
+    public async Task FullScan_排除子树内新建文件_不入队上传()
+    {
+        // 排除子树内新建文件（无快照）——修复前被当作新文件上传（上传方向泄漏）
+        SetSelectedPaths(_engine, new List<string> { "/photos/" });
+        string filePath = Path.Combine(_syncRoot, "photos", "new-secret.txt");
+        Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
+        await File.WriteAllTextAsync(filePath, "新建的隐私文件");
+
+        await _engine.FullScanAsync();
+
+        await using var dbCheck = await _dbFactory.CreateDbContextAsync();
+        int uploadCount = await dbCheck.SyncQueue.CountAsync(q =>
+            q.FilePath == "/photos/new-secret.txt" && q.Operation == (int)SyncOperation.Upload);
+        Assert.Equal(0, uploadCount);
+    }
+
+    [Fact]
+    public async Task FullScan_排除子树内新建目录_不入队mkdir()
+    {
+        // 排除子树内新建目录（无快照）——不入队 mkdir（服务端不建立目录条目）
+        SetSelectedPaths(_engine, new List<string> { "/photos/" });
+        Directory.CreateDirectory(Path.Combine(_syncRoot, "photos", "albums"));
+
+        await _engine.FullScanAsync();
+
+        await using var dbCheck = await _dbFactory.CreateDbContextAsync();
+        int mkdirCount = await dbCheck.SyncQueue.CountAsync(q =>
+            q.FilePath == "/photos/albums" && q.Operation == (int)SyncOperation.Upload);
+        Assert.Equal(0, mkdirCount);
+    }
+
+    [Fact]
+    public async Task FullScan_重新勾选_本地副本恢复Synced()
+    {
+        // 场景：/photos 曾取消勾选（快照 CloudOnly + 本地残留副本），重新勾选（IsPathSelected 转 true）
+        // → 本地存在 → 恢复 State（重置 CloudOnly → Synced），不再永久卡 CloudOnly
+        string content = "残留的本地副本内容";
+        string filePath = Path.Combine(_syncRoot, "photos", "summer.jpg");
+        Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
+        await File.WriteAllTextAsync(filePath, content);
+        string localHash = await FileHasher.ComputeSha256Async(filePath);
+
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.Add(new RemoteSnapshot
+            {
+                Path = "/photos/summer.jpg", Type = (int)FileType.File,
+                Size = content.Length, Version = 3, State = (int)FileState.CloudOnly, Hash = localHash
+            });
+            await setupDb.SaveChangesAsync();
+        }
+
+        // 默认选择集 = 全选（重新勾选）
+        await _engine.FullScanAsync();
+
+        await using var dbCheck = await _dbFactory.CreateDbContextAsync();
+        var snapshot = await dbCheck.RemoteSnapshots.FindAsync("/photos/summer.jpg");
+        Assert.NotNull(snapshot);
+        Assert.Equal((int)FileState.Synced, snapshot!.State); // 恢复 Synced
+        Assert.True(snapshot.IsDownloaded);                    // 本地已落盘
+        // 本地内容与快照一致 → 不重复上传（不振荡）
+        Assert.Equal(0, await dbCheck.SyncQueue.CountAsync(q =>
+            q.FilePath == "/photos/summer.jpg" && q.Operation == (int)SyncOperation.Upload));
+    }
+
+    [Fact]
+    public async Task FullScan_重新勾选_本地缺失_入队下载()
+    {
+        // 场景：/photos 曾取消勾选（快照 CloudOnly，本地无副本），重新勾选 → 本地缺失 → 入队下载
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.Add(new RemoteSnapshot
+            {
+                Path = "/photos/summer.jpg", Type = (int)FileType.File,
+                Size = 9, Version = 3, State = (int)FileState.CloudOnly, Hash = "cloud-hash"
+            });
+            await setupDb.SaveChangesAsync();
+        }
+
+        await _engine.FullScanAsync();
+
+        await using var dbCheck = await _dbFactory.CreateDbContextAsync();
+        var item = await dbCheck.SyncQueue.FirstOrDefaultAsync(q =>
+            q.FilePath == "/photos/summer.jpg" && q.Operation == (int)SyncOperation.Download);
+        Assert.NotNull(item);
+        Assert.Equal(3, item!.BaseVersion); // 版本相等也需下载（CloudOnly 从未落盘）
+        // 快照保持 CloudOnly，下载完成后才置 Synced
+        var snapshot = await dbCheck.RemoteSnapshots.FindAsync("/photos/summer.jpg");
+        Assert.Equal((int)FileState.CloudOnly, snapshot!.State);
+    }
+
+    [Fact]
+    public async Task ApplyRemoteChanges_重新勾选_版本相等_本地副本恢复Synced()
+    {
+        // 版本相等分支（T-054 修复点）：快照 CloudOnly、远端版本相等、本地残留副本存在
+        // → 恢复 State（重置 CloudOnly → Synced），修复前该分支不恢复导致永久卡 CloudOnly
+        string content = "残留副本";
+        string filePath = Path.Combine(_syncRoot, "photos", "restore.txt");
+        Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
+        await File.WriteAllTextAsync(filePath, content);
+        string localHash = await FileHasher.ComputeSha256Async(filePath);
+
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.Add(new RemoteSnapshot
+            {
+                Path = "/photos/restore.txt", Type = (int)FileType.File,
+                Size = content.Length, Version = 3, State = (int)FileState.CloudOnly, Hash = localHash
+            });
+            await setupDb.SaveChangesAsync();
+        }
+
+        var response = new FileTreeResponse(
+            new[]
+            {
+                new FileEntryDto("/photos/restore.txt", (int)FileType.File,
+                    localHash, content.Length, 3, DateTime.UtcNow.ToString("O"), (int)FileState.Synced)
+            },
+            null, false, 3);
+
+        var method = typeof(SyncEngine).GetMethod("ApplyRemoteChangesAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        Task? task = (Task?)method!.Invoke(_engine, [db, response, CancellationToken.None]);
+        Assert.NotNull(task);
+        await task;
+        await db.SaveChangesAsync();
+
+        var snapshot = await db.RemoteSnapshots.FindAsync("/photos/restore.txt");
+        Assert.NotNull(snapshot);
+        Assert.Equal((int)FileState.Synced, snapshot!.State); // 重置 CloudOnly → Synced
+        Assert.True(snapshot.IsDownloaded);
+        // 版本相等 + 本地存在 → 不入队下载（内容一致无需重传）
+        Assert.Equal(0, await db.SyncQueue.CountAsync(q => q.FilePath == "/photos/restore.txt"));
+    }
+
+    [Fact]
+    public async Task ApplyRemoteChanges_重新勾选_版本相等_本地缺失_入队下载()
+    {
+        // 版本相等分支（T-054 修复点）：快照 CloudOnly、远端版本相等、本地无副本
+        // → 入队下载（修复前版本相等分支不恢复 → 永久卡 CloudOnly，文件无法恢复）
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.Add(new RemoteSnapshot
+            {
+                Path = "/photos/restore.txt", Type = (int)FileType.File,
+                Size = 9, Version = 3, State = (int)FileState.CloudOnly, Hash = "cloud-hash"
+            });
+            await setupDb.SaveChangesAsync();
+        }
+
+        var response = new FileTreeResponse(
+            new[]
+            {
+                new FileEntryDto("/photos/restore.txt", (int)FileType.File,
+                    "cloud-hash", 9, 3, DateTime.UtcNow.ToString("O"), (int)FileState.Synced)
+            },
+            null, false, 3);
+
+        var method = typeof(SyncEngine).GetMethod("ApplyRemoteChangesAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        Task? task = (Task?)method!.Invoke(_engine, [db, response, CancellationToken.None]);
+        Assert.NotNull(task);
+        await task;
+        await db.SaveChangesAsync();
+
+        // 已入队下载（版本相等也需下载，CloudOnly 从未落盘）
+        var item = await db.SyncQueue.FirstOrDefaultAsync(q =>
+            q.FilePath == "/photos/restore.txt" && q.Operation == (int)SyncOperation.Download);
+        Assert.NotNull(item);
+        // 快照保持 CloudOnly，下载完成后 ProcessDownloadAsync 才置 Synced
+        var snapshot = await db.RemoteSnapshots.FindAsync("/photos/restore.txt");
+        Assert.Equal((int)FileState.CloudOnly, snapshot!.State);
     }
 }
 

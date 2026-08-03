@@ -2445,7 +2445,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "执行 2026-08-03：删除 SettingsForm.AccountTab 手建 HttpClient 与魔数 \"/api/health\"，测试连接改走 IApiClient.EnsureHealthAsync（新增，内部引用 SpecRoutes.Health；失败抛底层异常供白话归因），经 ApiClient 唯一证书/代理/超时装配点（自签证书静默接受 → 自签服务端不再假失败）。成功/失败均改图标+文字反馈（复用 _connResultIcon + 新增 _connResultText），成功不弹模态框；失败按 ErrorAttribution 风格白话归因（404→检查服务端地址；连不上→确认台式机已开机/服务运行；超时→检查网络），不透出裸状态码与异常原文。MockApiClient 补齐接口实现。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过 285/285；grep 'new HttpClient' SettingsForm.AccountTab.cs 与 grep '\"/api/health\"' CloudPan.Client.UI/ 均无匹配。改动文件：CloudPan.Client.Core/Services/IApiClient.cs、CloudPan.Client.Core/Services/ApiClient.cs、CloudPan.Client.UI/UI/SettingsForm.cs、CloudPan.Client.UI/UI/SettingsForm.AccountTab.cs、CloudPan.Tests/Client/Services/MockApiClient.cs、docs/task-matrix/tasks.json。任务背景：T-041 回炉任务（批次 4 T-041 标记完成但被 UI 层绕开，同一 HttpClient 装配的契约收敛仍留第二入口，simplicity F-53 与 ux U-7 同源合并）。",
+      "note": "执行 2026-08-03：删除 SettingsForm.AccountTab 手建 HttpClient 与魔数 \"/api/health\"，测试连接改走 IApiClient.EnsureHealthAsync（新增，内部引用 SpecRoutes.Health；失败抛底层异常供白话归因），经 ApiClient 唯一证书/代理/超时装配点（自签证书静默接受 → 自签服务端不再假失败）。成功/失败均改图标+文字反馈（复用 _connResultIcon + 新增 _connResultText），成功不弹模态框；失败按 ErrorAttribution 风格白话归因（404→检查服务端地址；连不上→确认台式机已开机/服务运行；超时→检查网络），不透出裸状态码与异常原文。MockApiClient 补齐接口实现。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过 285/285；grep 'new HttpClient' SettingsForm.AccountTab.cs 与 grep '\"/api/health\"' CloudPan.Client.UI/ 均无匹配。改动文件：CloudPan.Client.Core/Services/IApiClient.cs、CloudPan.Client.Core/Services/ApiClient.cs、CloudPan.Client.UI/UI/SettingsForm.cs、CloudPan.Client.UI/UI/SettingsForm.AccountTab.cs、CloudPan.Tests/Client/Services/MockApiClient.cs、docs/task-matrix/tasks.json。任务背景：T-041 回炉任务（批次 4 T-041 标记完成但被 UI 层绕开，同一 HttpClient 装配的契约收敛仍留第二入口，simplicity F-53 与 ux U-7 同源合并）。｜验收 2026-08-03：自动项 3 条全过——(1) grep 'new HttpClient' CloudPan.Client.UI/UI/SettingsForm.AccountTab.cs 退出码 1 无匹配（TestConnection_Click 改走 new ApiClient）；(2) grep '\"/api/health\"' CloudPan.Client.UI/ 退出码 1 无匹配（魔数收敛于契约 SpecRoutes.g.cs SpecRoutes.Health，ApiClient.EnsureHealthAsync 内部引用）；(3) dotnet build CloudPan.sln -c Release 通过，0 警告 0 错误。手动项代码路径核对存在：成功 → _connResultIcon=✓ + _connResultText=连接成功 无模态 MessageBox；失败 → ClassifyTestError 按 ErrorAttribution 风格白话归因（404→服务端地址不正确；无状态码→无法连接到服务端；超时→连接超时）不透裸状态码与异常原文。需人工确认：{手动：测试连接成功仅图标+文字反馈（无模态弹窗）；失败显示白话原因与下一步}。含手动项，按分流规则留 acceptance 待人工确认。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -2453,7 +2453,7 @@
       "title": "排除集语义闭环：覆盖上传方向 + 重新勾选恢复（T-047 补全）",
       "dimension": "function",
       "priority": "P2",
-      "status": "todo",
+      "status": "in-progress",
       "batch": 5,
       "findingId": "F-54",
       "dependsOn": [],
@@ -2485,7 +2485,7 @@
       "attempts": 0,
       "statusReason": null,
       "note": "T-047 补全：排除集只拦下载方向 + 重新勾选永久卡 CloudOnly 同源合并（function F-2/F-3）。",
-      "updatedAt": null
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-055",

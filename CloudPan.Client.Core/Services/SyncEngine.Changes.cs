@@ -104,6 +104,13 @@ public partial class SyncEngine
             return;
         }
 
+        // T-054：排除集覆盖上传方向——重命名属上传方向变更，排除子树内不对外发布（服务端条目保留原路径）
+        if (!IsPathSelected(oldPath) || !IsPathSelected(newPath))
+        {
+            _logger.LogDebug("路径在排除子树内，跳过重命名入队: {Old} → {New}", oldPath, newPath);
+            return;
+        }
+
         await using var db = await _dbFactory.CreateDbContextAsync();
         // 去重：同路径已有的重命名
         var existing = await db.SyncQueue
@@ -128,6 +135,15 @@ public partial class SyncEngine
         if (SyncIgnoreParser.ShouldIgnore(relativePath, _ignorePatterns))
         {
             _logger.LogDebug("忽略匹配忽略规则的变更: {Path}", relativePath);
+            return;
+        }
+
+        // T-054：排除集覆盖上传方向——排除子树内的本地变更（上传/删除）不入队，
+        // 隐私文件不外传，本地副本保留（CloudOnly 残留副本由 FullScan 跳过不重传）。
+        // 删除同样拦截：排除目录内删除本地残留副本不得删服务端副本，重新勾选后可再下载恢复。
+        if (!IsPathSelected(relativePath))
+        {
+            _logger.LogDebug("路径在排除子树内，跳过入队: {Op} {Path}", operation, relativePath);
             return;
         }
 

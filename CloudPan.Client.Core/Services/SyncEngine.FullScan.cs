@@ -92,9 +92,34 @@ public partial class SyncEngine
                 // 跳过 CloudOnly 文件（不含本地副本，不纳入删除检测，由用户按需下载）
                 if (snapshot.State == (int)CloudPan.Contract.FileState.CloudOnly)
                 {
-                    // 记录该路径已取消勾选，供第 3 步跳过本地残留副本
-                    cloudOnlyPaths.Add(snapshot.Path);
-                    continue;
+                    // T-054：重新勾选已排除目录——IsPathSelected 转 true 的 CloudOnly 快照恢复同步，
+                    // 否则保持排除态（跳过并记录供第 3 步跳过本地残留副本）
+                    if (IsPathSelected(snapshot.Path))
+                    {
+                        if (!localFiles.Contains(snapshot.Path))
+                        {
+                            // 本地缺失 → 入队下载（CloudOnly 从未落盘，版本相等也需下载）
+                            if (snapshot.Type == (int)CloudPan.Contract.FileType.File)
+                            {
+                                _logger.LogInformation("重新勾选已排除目录，本地缺失，入队下载: {Path}", snapshot.Path);
+                                await EnqueueDownloadAsync(snapshot.Path, snapshot.Version);
+                            }
+                            continue;
+                        }
+
+                        // 本地残留副本存在 → 恢复 State（重置 CloudOnly → Synced），本地内容即同步内容；
+                        // 不 continue：落入下方常规大小/哈希比对——本地副本若在排除期间被修改（内容漂移）→ 入队上传
+                        snapshot.State = (int)CloudPan.Contract.FileState.Synced;
+                        snapshot.IsDownloaded = true;
+                        _logger.LogInformation("重新勾选已排除目录，本地副本恢复同步: {Path}", snapshot.Path);
+                        await db.SaveChangesAsync();
+                    }
+                    else
+                    {
+                        // 记录该路径已取消勾选，供第 3 步跳过本地残留副本
+                        cloudOnlyPaths.Add(snapshot.Path);
+                        continue;
+                    }
                 }
 
                 if (!localFiles.Contains(snapshot.Path) && !localDirs.Contains(snapshot.Path))
@@ -173,6 +198,13 @@ public partial class SyncEngine
                 continue;
             }
 
+            // T-054：排除集覆盖上传方向——排除子树内新建的本地文件（无快照）不入队上传
+            if (!IsPathSelected(path))
+            {
+                _logger.LogDebug("路径在排除子树内，跳过新文件上传: {Path}", path);
+                continue;
+            }
+
             await EnqueueLocalChangeAsync(path, SyncOperation.Upload);
         }
 
@@ -182,6 +214,13 @@ public partial class SyncEngine
         {
             if (matchedLocalPaths.Contains(path))
             {
+                continue;
+            }
+
+            // T-054：排除子树内新建的本地目录（无快照）不入队 mkdir
+            if (!IsPathSelected(path))
+            {
+                _logger.LogDebug("路径在排除子树内，跳过目录同步: {Path}", path);
                 continue;
             }
 

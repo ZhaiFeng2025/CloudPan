@@ -193,6 +193,42 @@ public partial class SyncEngine
                 continue;
             }
 
+            // T-054：重新勾选已排除目录——CloudOnly 快照且远端版本相等（排除期间远端未变）时，
+            // 版本相等分支此前直接跳过，导致快照永久卡 CloudOnly。此处恢复同步：
+            // 本地存在 → 恢复 State（重置 CloudOnly → Synced）；本地缺失 → 入队下载（CloudOnly 从未落盘）。
+            // 远端版本已变更（Version < item.Version）则落入下方常规分支（哈希不同→下载，哈希相同→更新版本号），
+            // 本地残留副本滞后时不误恢复 Synced（避免陈旧内容覆盖新版本）。
+            if (snapshot != null && snapshot.State == (int)FileState.CloudOnly && snapshot.Version == item.Version)
+            {
+                if (File.Exists(localPath))
+                {
+                    snapshot.State = item.State;
+                    snapshot.IsDownloaded = true;
+                    snapshot.LastModified = item.LastModified;
+                    _logger.LogInformation($"重新勾选已排除目录，本地副本恢复同步: {item.Path}");
+                }
+                else
+                {
+                    // 去重：检查队列中是否已有同路径下载项
+                    var existingDl = await db.SyncQueue
+                        .FirstOrDefaultAsync(q => q.FilePath == item.Path
+                            && q.Operation == (int)SyncOperation.Download);
+                    if (existingDl == null)
+                    {
+                        db.SyncQueue.Add(new SyncQueueItem
+                        {
+                            FilePath = item.Path,
+                            Operation = (int)SyncOperation.Download,
+                            Priority = (int)QueuePriority.Normal,
+                            BaseVersion = item.Version,
+                            FileSize = item.CurrentSize
+                        });
+                    }
+                    _logger.LogInformation($"重新勾选已排除目录，本地缺失，入队下载: {item.Path}");
+                }
+                continue;
+            }
+
             // 文件：版本落后则入队下载（哈希相同则跳过下载只更新版本号）
             if (snapshot == null || snapshot.Version < item.Version)
             {
