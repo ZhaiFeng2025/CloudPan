@@ -80,13 +80,14 @@ public partial class TrayAppContext
                 cfg.SelectedPaths = form.SelectedPaths;
                 cfg.Save(ClientBootstrap.GetConfigPath());
 
-                // T-063：设置改动即时生效，无需重启客户端——限速运行时下发、排除集热更新并触发一次扫描。
+                // T-063：限速与排除集改动即时生效；T-075：服务端地址/同步文件夹/Token 修改需重启客户端后生效，
+                // 不再承诺立即生效（避免用户误以为新目录正在同步）。
                 // （Token 变更自动重连属独立链路 F-34/T-034，本轮不并入。）
                 _api.SetUploadLimit(cfg.UploadLimitBps);
                 _api.SetDownloadLimit(cfg.DownloadLimitBps);
                 _engine.UpdateSelectedPaths(cfg.SelectedPaths);
 
-                MessageBox.Show("设置已保存。",
+                MessageBox.Show("设置已保存。\n\n服务端地址、同步文件夹或 Token 修改需重启客户端后生效；带宽限制与排除设置已即时生效。",
                     "CloudPan", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }

@@ -83,10 +83,11 @@ public class CodeQualityTests
         // 主窗体本身仍无法拆到 400，按 producer 取舍记录合理上限。
         ["CloudPan.Client.UI.MainWindow"] = 2600,
         // ── 以下为 T-070 范围外的既有大型类型（非本任务拆分对象），记录现状上限防止继续膨胀 ──
-        ["CloudPan.Client.UI.SetupForm"] = 1074,
+        // T-075：同步根路径安全校验下沉为共享静态方法（SetupForm/SettingsForm 复用）使聚合 1074→1091，上限上调记录新现状
+        ["CloudPan.Client.UI.SetupForm"] = 1095,
         ["CloudPan.Client.UI.FileBrowserView"] = 854,
-        // T-074：选择性同步目录树异步接线（SyncTab 加载方法 + 保存阻止校验）使聚合 698→731，上限上调记录新现状
-        ["CloudPan.Client.UI.SettingsForm"] = 740,
+        // T-075：保存前同步根路径安全校验 + saveHint 统一重启提示使聚合 731→741，上限上调记录新现状
+        ["CloudPan.Client.UI.SettingsForm"] = 745,
         ["CloudPan.Client.UI.TrayAppContext"] = 522,
         ["CloudPan.Client.Core.Services.ApiClient"] = 562,
         ["CloudPan.Server.UI.ServerInstaller"] = 861,

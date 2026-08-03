@@ -23,6 +23,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- T-075：供 CloudPan.Tests 直接测试内部同步根路径安全校验 -->
+    <InternalsVisibleTo Include="CloudPan.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- EF/SQLite/Serilog 由 Client.Core 承载（T-029 组合根下沉），UI 壳只渲染 -->
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.1" />

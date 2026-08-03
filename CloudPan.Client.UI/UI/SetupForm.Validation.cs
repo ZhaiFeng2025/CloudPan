@@ -16,19 +16,16 @@ public partial class SetupForm
     //  文件夹安全验证（保持原逻辑不变）
     // ════════════════════════════════════════════════════════════════
 
-    /// <summary>检查文件夹是否安全可用——禁止系统目录、根目录、移动设备。</summary>
-    /// <param name="useHintColors">实时校验时用深灰提示色，提交时用红色。</param>
-    private bool ValidateFolderSafety(string folder, bool useHintColors = false)
+    /// <summary>检查同步文件夹是否安全可用（复用入口）。返回错误文案，null 表示安全。</summary>
+    /// <remarks>拒绝磁盘根目录、系统目录、网络盘、可移动磁盘与 .cloudpan 元数据目录；SetupForm/SettingsForm 保存前复用。</remarks>
+    internal static string? ValidateFolderSafety(string folder)
     {
         try
         {
             string normalized = Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar);
-            bool isRoot = Path.GetPathRoot(normalized) == normalized;
-            if (isRoot)
+            if (Path.GetPathRoot(normalized) == normalized)
             {
-                ShowFieldMessage(_folderErrorLabel, "不能选择磁盘根目录，请选择具体文件夹",
-                    useHintColors ? MessageSeverity.Hint : MessageSeverity.Error);
-                return false;
+                return "不能选择磁盘根目录，请选择具体文件夹";
             }
 
             // 禁止系统目录
@@ -39,77 +36,97 @@ public partial class SetupForm
                 || normalized.StartsWith(progFiles, StringComparison.OrdinalIgnoreCase)
                 || normalized.StartsWith(progFilesX86, StringComparison.OrdinalIgnoreCase))
             {
-                ShowFieldMessage(_folderErrorLabel, "不能选择系统目录，请选择用户文件夹",
-                    useHintColors ? MessageSeverity.Hint : MessageSeverity.Error);
-                return false;
+                return "不能选择系统目录，请选择用户文件夹";
             }
 
             // 禁止可移动磁盘和网络驱动器
             DriveInfo drive = new DriveInfo(Path.GetPathRoot(normalized)!);
             if (drive.DriveType == DriveType.Network)
             {
-                ShowFieldMessage(_folderErrorLabel, "不支持网络驱动器，请选择本地文件夹",
-                    useHintColors ? MessageSeverity.Hint : MessageSeverity.Error);
-                return false;
+                return "不支持网络驱动器，请选择本地文件夹";
             }
             if (drive.DriveType == DriveType.Removable)
             {
-                ShowFieldMessage(_folderErrorLabel, "不支持移动磁盘，请选择内置硬盘上的文件夹",
-                    useHintColors ? MessageSeverity.Hint : MessageSeverity.Error);
-                return false;
+                return "不支持移动磁盘，请选择内置硬盘上的文件夹";
             }
 
-            // 检查是否被其他同步服务接管（使用环境变量判断云盘路径）
-            var cloudDrivePaths = new[]
+            // 禁止把 .cloudpan 元数据目录（或其子目录）作为同步根
+            foreach (string segment in normalized.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
             {
-                (path: Environment.GetEnvironmentVariable("OneDrive"), name: "OneDrive"),
-                (path: Environment.GetEnvironmentVariable("OneDriveConsumer"), name: "OneDrive"),
-                (path: Environment.GetEnvironmentVariable("DROPBOX_HOME"), name: "Dropbox"),
-                (path: Environment.GetEnvironmentVariable("iCloudDrive"), name: "iCloud"),
-            };
-            foreach (var (cloudPath, serviceName) in cloudDrivePaths)
-            {
-                if (!string.IsNullOrEmpty(cloudPath) && normalized.StartsWith(cloudPath, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(segment, ".cloudpan", StringComparison.OrdinalIgnoreCase))
                 {
-                    ShowFieldMessage(_folderErrorLabel,
-                        $"此文件夹在 {serviceName} 同步范围内，可能造成同步冲突。确认要使用此文件夹吗？",
-                        MessageSeverity.Hint); // 改为提示不阻断，让用户自行确认
-                    // 不 return false，仅提示
+                    return "不能将 .cloudpan 元数据目录作为同步文件夹";
                 }
             }
 
-            // 统计文件夹内容（显示文件数量，帮助用户做决策）
-            // 在后台线程执行枚举，前台最多等 2 秒，避免巨量文件阻塞 UI
-            try
-            {
-                var (count, totalSize) = CountFolderContentsSafe(normalized);
-                if (count > 0)
-                {
-                    string sizeStr = totalSize > 1_048_576 ? $"{totalSize / 1_048_576} MB"
-                        : totalSize > 1024 ? $"{totalSize / 1024} KB" : $"{totalSize} B";
-                    _folderErrorLabel.Text = count >= 10000
-                        ? $"此文件夹包含超过 {count} 个文件，首次同步需要较长时间"
-                        : count > 100
-                        ? $"此文件夹包含 {count} 个文件（约 {sizeStr}），首次同步需要一些时间"
-                        : $"此文件夹包含 {count} 个文件（{sizeStr}）";
-                    _folderErrorLabel.ForeColor = CloudPanColors.TextDarkGray;
-                    _folderErrorLabel.Visible = true;
-                }
-                else
-                {
-                    HideFieldMessage(_folderErrorLabel);
-                }
-            }
-            catch { /* 权限不足 —— 不干扰用户 */ }
-
-            return true;
+            return null; // 安全
         }
         catch (Exception ex)
         {
-            ShowFieldMessage(_folderErrorLabel, $"路径无效: {ex.Message}",
+            return $"路径无效: {ex.Message}";
+        }
+    }
+
+    /// <summary>检查文件夹是否安全可用——禁止系统目录、根目录、移动设备，并显示字段提示与文件统计。</summary>
+    /// <param name="useHintColors">实时校验时用深灰提示色，提交时用红色。</param>
+    private bool ValidateFolderSafetyWithFeedback(string folder, bool useHintColors = false)
+    {
+        // T-075：阻塞性安全校验下沉为共享静态方法（SetupForm/SettingsForm 复用）
+        string? error = ValidateFolderSafety(folder);
+        if (error != null)
+        {
+            ShowFieldMessage(_folderErrorLabel, error,
                 useHintColors ? MessageSeverity.Hint : MessageSeverity.Error);
             return false;
         }
+
+        // 安全校验通过后再取规范化路径，用于云盘接管提示与文件统计
+        string normalized = Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar);
+
+        // 检查是否被其他同步服务接管（使用环境变量判断云盘路径）
+        var cloudDrivePaths = new[]
+        {
+            (path: Environment.GetEnvironmentVariable("OneDrive"), name: "OneDrive"),
+            (path: Environment.GetEnvironmentVariable("OneDriveConsumer"), name: "OneDrive"),
+            (path: Environment.GetEnvironmentVariable("DROPBOX_HOME"), name: "Dropbox"),
+            (path: Environment.GetEnvironmentVariable("iCloudDrive"), name: "iCloud"),
+        };
+        foreach (var (cloudPath, serviceName) in cloudDrivePaths)
+        {
+            if (!string.IsNullOrEmpty(cloudPath) && normalized.StartsWith(cloudPath, StringComparison.OrdinalIgnoreCase))
+            {
+                ShowFieldMessage(_folderErrorLabel,
+                    $"此文件夹在 {serviceName} 同步范围内，可能造成同步冲突。确认要使用此文件夹吗？",
+                    MessageSeverity.Hint); // 改为提示不阻断，让用户自行确认
+                // 不 return false，仅提示
+            }
+        }
+
+        // 统计文件夹内容（显示文件数量，帮助用户做决策）
+        // 在后台线程执行枚举，前台最多等 2 秒，避免巨量文件阻塞 UI
+        try
+        {
+            var (count, totalSize) = CountFolderContentsSafe(normalized);
+            if (count > 0)
+            {
+                string sizeStr = totalSize > 1_048_576 ? $"{totalSize / 1_048_576} MB"
+                    : totalSize > 1024 ? $"{totalSize / 1024} KB" : $"{totalSize} B";
+                _folderErrorLabel.Text = count >= 10000
+                    ? $"此文件夹包含超过 {count} 个文件，首次同步需要较长时间"
+                    : count > 100
+                    ? $"此文件夹包含 {count} 个文件（约 {sizeStr}），首次同步需要一些时间"
+                    : $"此文件夹包含 {count} 个文件（{sizeStr}）";
+                _folderErrorLabel.ForeColor = CloudPanColors.TextDarkGray;
+                _folderErrorLabel.Visible = true;
+            }
+            else
+            {
+                HideFieldMessage(_folderErrorLabel);
+            }
+        }
+        catch { /* 权限不足 —— 不干扰用户 */ }
+
+        return true;
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -158,7 +175,7 @@ public partial class SetupForm
             return;
         }
         // 安全校验 + 统计信息，实时模式用深灰提示
-        ValidateFolderSafety(folder, useHintColors: true);
+        ValidateFolderSafetyWithFeedback(folder, useHintColors: true);
     }
 
     private void ValidateTokenField()
@@ -246,7 +263,7 @@ public partial class SetupForm
             valid = false;
             if (!focusSet) { _syncRootBox.Focus(); focusSet = true; }
         }
-        else if (!ValidateFolderSafety(folder, useHintColors: false))
+        else if (!ValidateFolderSafetyWithFeedback(folder, useHintColors: false))
         {
             valid = false;
             if (!focusSet) { _syncRootBox.Focus(); focusSet = true; }

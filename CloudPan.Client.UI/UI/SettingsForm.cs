@@ -80,7 +80,8 @@ public partial class SettingsForm : Form
 
         Label saveHint = new Label
         {
-            Text = "提示：Token 修改需重启客户端后生效",
+            // T-075：统一提示——服务端地址/同步根/Token 三类修改均需重启客户端后生效
+            Text = "提示：服务端地址、同步文件夹或 Token 修改后需重启客户端才生效",
             AutoSize = true,
             ForeColor = CloudPanColors.TextMuted,
             Font = new Font(SystemFonts.MessageBoxFont?.FontFamily ?? FontFamily.GenericSansSerif, 8F),
@@ -142,6 +143,15 @@ public partial class SettingsForm : Form
 
     private void SaveBtn_Click(object? sender, EventArgs e)
     {
+        // T-075：保存前对同步根复用 SetupForm.ValidateFolderSafety 做路径安全校验（拒存根目录/系统目录/网络盘/.cloudpan），非法路径阻止保存
+        string? pathError = SetupForm.ValidateFolderSafety(SyncRoot);
+        if (pathError != null)
+        {
+            MessageBox.Show(pathError + "\n\n同步文件夹未保存，请修改后再保存。",
+                "CloudPan", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
         // T-074：目录树未加载时阻止保存，避免空树全选覆盖既有排除配置
         if (!_syncPanel.IsTreeLoaded)
         {
