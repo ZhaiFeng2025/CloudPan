@@ -211,7 +211,7 @@ public partial class ApiClient : IApiClient, IDisposable
     public async Task DeleteAsync(string path, int baseVersion, CancellationToken ct = default)
     {
         var response = await _http.PostAsJsonAsync(SpecRoutes.FilesDelete,
-            new { path, baseVersion }, JsonOptions, ct);
+            new DeleteRequestDto(path, baseVersion), JsonOptions, ct);
         response.EnsureSuccessStatusCode();
     }
 
@@ -219,7 +219,7 @@ public partial class ApiClient : IApiClient, IDisposable
     public async Task MoveAsync(string oldPath, string newPath, int baseVersion, CancellationToken ct = default)
     {
         var response = await _http.PostAsJsonAsync(SpecRoutes.FilesMove,
-            new { oldPath, newPath, baseVersion }, JsonOptions, ct);
+            new MoveRequestDto(oldPath, newPath, baseVersion), JsonOptions, ct);
         response.EnsureSuccessStatusCode();
     }
 
@@ -227,7 +227,7 @@ public partial class ApiClient : IApiClient, IDisposable
     public async Task MkdirAsync(string path, CancellationToken ct = default)
     {
         var response = await _http.PostAsJsonAsync(SpecRoutes.FilesMkdir,
-            new { path }, JsonOptions, ct);
+            new MkdirRequestDto(path), JsonOptions, ct);
         response.EnsureSuccessStatusCode();
     }
 

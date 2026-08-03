@@ -3362,7 +3362,7 @@
       "title": "目录重命名客户端快照前缀跟随，避免整子树重下载",
       "dimension": "function",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 6,
       "findingId": "F-77",
       "dependsOn": [],
@@ -3388,7 +3388,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "执行 2026-08-03（task-executor）：T-066 目录重命名客户端快照前缀跟随。问题——ProcessRenameAsync 重命名目录时只更新目录自身快照，子项快照停留在旧前缀：增量同步把新前缀判为远端新文件→整棵子树重下载；FullScan 把旧前缀判为本地删除→整棵子树删除传播 + 服务端 404 噪音。修复——(1) ProcessRenameAsync 检测目录重命名时经 RewriteSubtreeSnapshotsAsync 将旧前缀全部子项快照（含目录自身）按新前缀重建（内容/版本/落盘跟随），并清空旧前缀下未决队列项（Delete 先于 Move 到达的回收站误删竞态防护）；该方法独立 partial 文件 SyncEngine.Rename.cs 避免行数超限（T-042 门禁 400）。(2) FullScan rename 对齐：收集未决重命名（旧/新前缀），旧前缀快照本地缺失不入队 Delete（消除旧路径 404 删除噪音），新前缀本地文件/目录不入队 Upload/mkdir（避免 rename 判为 create 重复上传）。改动文件——CloudPan.Client.Core/Services/SyncEngine.Transfers.cs（ProcessRenameAsync 目录分支）；CloudPan.Client.Core/Services/SyncEngine.Rename.cs（新增 RewriteSubtreeSnapshotsAsync）；CloudPan.Client.Core/Services/SyncEngine.FullScan.cs（未决重命名收集 + IsUnderAnyPrefix + delete/upload 侧守卫）；CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 4 测试：子项快照前缀跟随/清空旧前缀未决队列/远端新路径树不触发重下载/未决重命名不入队删除与上传）。验证——dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test CloudPan.Tests -c Release EXIT=0（305/305 通过，SyncEngine 过滤 74/74 含新增 4 测试）。",
+      "note": "执行 2026-08-03（task-executor）：T-066 目录重命名客户端快照前缀跟随。问题——ProcessRenameAsync 重命名目录时只更新目录自身快照，子项快照停留在旧前缀：增量同步把新前缀判为远端新文件→整棵子树重下载；FullScan 把旧前缀判为本地删除→整棵子树删除传播 + 服务端 404 噪音。修复——(1) ProcessRenameAsync 检测目录重命名时经 RewriteSubtreeSnapshotsAsync 将旧前缀全部子项快照（含目录自身）按新前缀重建（内容/版本/落盘跟随），并清空旧前缀下未决队列项（Delete 先于 Move 到达的回收站误删竞态防护）；该方法独立 partial 文件 SyncEngine.Rename.cs 避免行数超限（T-042 门禁 400）。(2) FullScan rename 对齐：收集未决重命名（旧/新前缀），旧前缀快照本地缺失不入队 Delete（消除旧路径 404 删除噪音），新前缀本地文件/目录不入队 Upload/mkdir（避免 rename 判为 create 重复上传）。改动文件——CloudPan.Client.Core/Services/SyncEngine.Transfers.cs（ProcessRenameAsync 目录分支）；CloudPan.Client.Core/Services/SyncEngine.Rename.cs（新增 RewriteSubtreeSnapshotsAsync）；CloudPan.Client.Core/Services/SyncEngine.FullScan.cs（未决重命名收集 + IsUnderAnyPrefix + delete/upload 侧守卫）；CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 4 测试：子项快照前缀跟随/清空旧前缀未决队列/远端新路径树不触发重下载/未决重命名不入队删除与上传）。验证——dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test CloudPan.Tests -c Release EXIT=0（305/305 通过，SyncEngine 过滤 74/74 含新增 4 测试）。【验收 2026-08-03（task-verifier）】两条验收标准全过：①dotnet test --filter SyncEngine 74/74 通过（0 失败）；实质核对 SyncEngineTests.cs 存在 5 个目录重命名相关测试且断言有效——ProcessRename_目录重命名_子项快照前缀跟随（旧前缀快照移除/新前缀哈希大小版本落盘保留/SyncQueue=0 无重下载重上传删除）、ProcessRename_目录重命名_清空旧前缀未决队列项（SyncQueue=0）、ProcessRename_目录重命名后_远端新路径树不触发子项重下载（Download 队列=0）、FullScan_未决重命名_不入队删除与上传；代码路径存在——RewriteSubtreeSnapshotsAsync（SyncEngine.Rename.cs:16）由 SyncEngine.Transfers.cs:340 调用，IsUnderAnyPrefix（SyncEngine.FullScan.cs:374）三处守卫。②dotnet test CloudPan.Tests -c Release 305/305 通过（0 失败）；dotnet build CloudPan.sln -c Release Build succeeded（0 错误 0 警告）。独立裁决：验收通过，置 done。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -3396,7 +3396,7 @@
       "title": "delete/move/mkdir 请求体契约化（spec + 生成 record + 客户端引用）",
       "dimension": "architecture",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 6,
       "findingId": "F-63",
       "dependsOn": [],
@@ -3426,8 +3426,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "执行 2026-08-03（task-executor）：T-067 请求体契约化。问题——delete/move/mkdir/trash-restore/share-create/version-restore 请求体无 spec 单一来源：服务端 Controller 文件内手写 record（FilesController.cs:149-155 DeleteRequest/MoveRequest/MkdirRequest、ShareController.cs CreateShareRequest、TrashController.cs RestoreTrashRequest、VersionsController.cs RestoreRequest），客户端 ApiClient 以匿名对象 new { path, baseVersion }/new { oldPath, newPath, baseVersion }/new { metaFileName }/new { filePath, password, expiresAt, maxDownloads } PostAsJsonAsync，--verify 覆盖不到请求方向，字段名错位静默 400。修复——(1) shared-spec.json v1.6.0 entities 新增 6 个非持久化请求 DTO（DeleteRequest/MoveRequest/MkdirRequest/CreateShareRequest/RestoreTrashRequest/RestoreRequest），字段名对齐 apiMapping；(2) EntityGenerator.ServerExcludedTables 加入 6 请求实体（不入 EF 实体生成，仅 apiMapping 驱动 DtoGenerator）；(3) DtoGenerator 生成 DeleteRequestDto/MoveRequestDto/MkdirRequestDto/CreateShareRequestDto/RestoreTrashRequestDto/RestoreRequestDto（CloudPan.Contract/Generated/Dtos.g.cs）；(4) 服务端 4 个 Controller 删除文件内手写 record，[FromBody] 改引用生成类型；(5) 客户端 ApiClient.cs/ApiClient.Trash.cs/ApiClient.ShareVersion.cs 匿名对象改引用生成类型。改动文件——shared-spec.json；CloudPan.CodeGen/Generators/EntityGenerator.cs；CloudPan.Server.Host/Controllers/{FilesController.cs,FilesController.FileOps.cs,ShareController.cs,TrashController.cs,VersionsController.cs}；CloudPan.Client.Core/Services/{ApiClient.cs,ApiClient.Trash.cs,ApiClient.ShareVersion.cs}；11 个 Generated 产物重生成（版本头 1.5.0→1.6.0）。验证——dotnet run --project CloudPan.CodeGen EXIT=0；--verify 全部一致；dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test CloudPan.Tests -c Release EXIT=0（305/305 通过）。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-068",

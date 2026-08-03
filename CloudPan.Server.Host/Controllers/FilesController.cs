@@ -142,14 +142,3 @@ public partial class FilesController : ControllerBase
         return File(result.Content!, "application/octet-stream", result.FileName);
     }
 }
-
-// ---- 请求 DTO（简单场景直接用 record，不放入共享库） ----
-
-/// <summary>删除文件请求（BaseVersion 用于乐观并发校验，0 表示不校验）。</summary>
-public record DeleteRequest(string Path, int BaseVersion = 0);
-
-/// <summary>移动/重命名请求（BaseVersion 用于乐观并发校验，0 表示不校验）。</summary>
-public record MoveRequest(string OldPath, string NewPath, int BaseVersion = 0);
-
-/// <summary>创建目录请求。</summary>
-public record MkdirRequest(string Path);

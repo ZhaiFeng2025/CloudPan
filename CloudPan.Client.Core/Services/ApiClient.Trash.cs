@@ -24,7 +24,7 @@ public partial class ApiClient
     public async Task RestoreTrashAsync(string metaFileName, CancellationToken ct = default)
     {
         var response = await _http.PostAsJsonAsync(SpecRoutes.TrashRestore,
-            new { metaFileName }, JsonOptions, ct);
+            new RestoreTrashRequestDto(metaFileName), JsonOptions, ct);
         response.EnsureSuccessStatusCode();
     }
 

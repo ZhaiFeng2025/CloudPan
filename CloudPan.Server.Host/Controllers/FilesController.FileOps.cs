@@ -15,7 +15,7 @@ public partial class FilesController
     /// POST /api/files/delete — 删除文件或文件夹（递归）。
     /// </summary>
     [HttpPost(SpecRoutes.FilesDelete)]
-    public async Task<IActionResult> Delete([FromBody] DeleteRequest request)
+    public async Task<IActionResult> Delete([FromBody] DeleteRequestDto request)
     {
         if (string.IsNullOrWhiteSpace(request.Path))
         {
@@ -39,7 +39,7 @@ public partial class FilesController
     /// POST /api/files/move — 移动或重命名文件/文件夹。
     /// </summary>
     [HttpPost(SpecRoutes.FilesMove)]
-    public async Task<IActionResult> Move([FromBody] MoveRequest request)
+    public async Task<IActionResult> Move([FromBody] MoveRequestDto request)
     {
         if (string.IsNullOrWhiteSpace(request.OldPath) || string.IsNullOrWhiteSpace(request.NewPath))
         {
@@ -63,7 +63,7 @@ public partial class FilesController
     /// POST /api/files/mkdir — 创建文件夹。
     /// </summary>
     [HttpPost(SpecRoutes.FilesMkdir)]
-    public async Task<IActionResult> Mkdir([FromBody] MkdirRequest request)
+    public async Task<IActionResult> Mkdir([FromBody] MkdirRequestDto request)
     {
         if (string.IsNullOrWhiteSpace(request.Path))
         {

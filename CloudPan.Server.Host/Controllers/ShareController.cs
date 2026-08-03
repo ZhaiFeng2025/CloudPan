@@ -24,7 +24,7 @@ public class ShareController : ControllerBase
     /// POST /api/shares — 创建分享链接。
     /// </summary>
     [HttpPost(SpecRoutes.Shares)]
-    public async Task<IActionResult> CreateShare([FromBody] CreateShareRequest request)
+    public async Task<IActionResult> CreateShare([FromBody] CreateShareRequestDto request)
     {
         if (string.IsNullOrWhiteSpace(request.FilePath))
         {
@@ -141,11 +141,3 @@ public class ShareController : ControllerBase
         "<h2 style='color:red'>密码错误</h2>" +
         "<a href='javascript:history.back()'>返回重试</a></body></html>";
 }
-
-/// <summary>创建分享请求。</summary>
-public record CreateShareRequest(
-    string FilePath,
-    string? Password = null,
-    string? ExpiresAt = null,
-    int? MaxDownloads = null
-);

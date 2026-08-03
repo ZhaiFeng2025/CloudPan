@@ -1,5 +1,5 @@
 // AUTO-GENERATED from shared-spec.json
-// 版本: 1.5.0  日期: 2026-08-03
+// 版本: 1.6.0  日期: 2026-08-03
 // 源: shared-spec.json → enums + entities.apiMapping + api.responses + api.errorResponse
 // 请勿手工编辑 — 重新生成: dotnet run --project CloudPan.CodeGen
 
@@ -158,6 +158,43 @@ data class SyncLogDto(
     @SerializedName("result") val result: Int,
     @SerializedName("details") val details: String?,
     @SerializedName("createdAt") val createdAt: String
+)
+
+// POST /api/files/delete 请求体（非持久化 API 请求 DTO，仅 apiMapping 驱动生成，不入库）。BaseVersion 用于乐观并发校验，0 表示不校验。
+data class DeleteRequestDto(
+    @SerializedName("path") val path: String,
+    @SerializedName("baseVersion") val baseVersion: Int
+)
+
+// POST /api/files/move 请求体（非持久化 API 请求 DTO，仅 apiMapping 驱动生成，不入库）。BaseVersion 用于乐观并发校验，0 表示不校验。
+data class MoveRequestDto(
+    @SerializedName("oldPath") val oldPath: String,
+    @SerializedName("newPath") val newPath: String,
+    @SerializedName("baseVersion") val baseVersion: Int
+)
+
+// POST /api/files/mkdir 请求体（非持久化 API 请求 DTO，仅 apiMapping 驱动生成，不入库）。
+data class MkdirRequestDto(
+    @SerializedName("path") val path: String
+)
+
+// POST /api/shares 请求体（非持久化 API 请求 DTO，仅 apiMapping 驱动生成，不入库）。expiresAt 传 ISO 8601 UTC，null 表示永不过期。
+data class CreateShareRequestDto(
+    @SerializedName("filePath") val filePath: String,
+    @SerializedName("password") val password: String?,
+    @SerializedName("expiresAt") val expiresAt: String?,
+    @SerializedName("maxDownloads") val maxDownloads: Int?
+)
+
+// POST /api/trash/restore 请求体（非持久化 API 请求 DTO，仅 apiMapping 驱动生成，不入库）。metaFileName 为回收站元数据文件名。
+data class RestoreTrashRequestDto(
+    @SerializedName("metaFileName") val metaFileName: String
+)
+
+// POST /api/versions/restore 请求体（非持久化 API 请求 DTO，仅 apiMapping 驱动生成，不入库）。将文件恢复至指定历史版本。
+data class RestoreRequestDto(
+    @SerializedName("filePath") val filePath: String,
+    @SerializedName("version") val version: Int
 )
 
 // ===================== API 响应 DTO（api.responses） =====================

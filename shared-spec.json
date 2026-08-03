@@ -3,9 +3,12 @@
   "$id": "cloudpan-shared-spec",
   "title": "CloudPan 共享定义",
   "description": "所有枚举、实体、端点、字段名、错误码、配置值的唯一事实来源。所有代码和文档引用本文件，禁止各自重复定义。",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "date": "2026-08-03",
   "_changelog": [
+    { "version": "1.6.0", "date": "2026-08-03", "changes": [
+      "请求体契约化：entities 新增非持久化 API 请求 DTO（DeleteRequest/MoveRequest/MkdirRequest/CreateShareRequest/RestoreTrashRequest/RestoreRequest），字段名对齐 apiMapping；DtoGenerator 生成请求 record（DeleteRequestDto 等），服务端 Controller 删除文件内手写 record、客户端 ApiClient 删除匿名对象请求体，改引用生成类型（T-067）"
+    ]},
     { "version": "1.5.0", "date": "2026-08-03", "changes": [
       "api.responses.ChunkStatusData 新增 version: int（服务端当前版本号），断点续传恢复路径不再兜底 version=0（T-064）",
       "entities.ChunkedUpload 新增 Finalized 布尔列：Finalize 完成标记，崩溃窗口（位图已收全块但未落盘）会话在重启时清除并允许客户端重传（T-064）"
@@ -382,6 +385,86 @@
         "scan_interval_minutes":   "定时扫描间隔。默认 '5'",
         "server_version":          "服务端版本号",
         "global_version":          "全局单调版本号计数器"
+      }
+    },
+
+    "DeleteRequest": {
+      "description": "POST /api/files/delete 请求体（非持久化 API 请求 DTO，仅 apiMapping 驱动生成，不入库）。BaseVersion 用于乐观并发校验，0 表示不校验。",
+      "table": "",
+      "fields": [
+        { "name": "Path",        "type": "TEXT",    "nullable": false, "role": "", "description": "要删除的文件/目录路径，以 / 开头" },
+        { "name": "BaseVersion", "type": "INTEGER", "nullable": false, "role": "", "description": "乐观并发基准版本号，0 表示不校验" }
+      ],
+      "apiMapping": {
+        "Path": "path",
+        "BaseVersion": "baseVersion"
+      }
+    },
+
+    "MoveRequest": {
+      "description": "POST /api/files/move 请求体（非持久化 API 请求 DTO，仅 apiMapping 驱动生成，不入库）。BaseVersion 用于乐观并发校验，0 表示不校验。",
+      "table": "",
+      "fields": [
+        { "name": "OldPath",     "type": "TEXT",    "nullable": false, "role": "", "description": "源路径，以 / 开头" },
+        { "name": "NewPath",     "type": "TEXT",    "nullable": false, "role": "", "description": "目标路径，以 / 开头" },
+        { "name": "BaseVersion", "type": "INTEGER", "nullable": false, "role": "", "description": "乐观并发基准版本号，0 表示不校验" }
+      ],
+      "apiMapping": {
+        "OldPath": "oldPath",
+        "NewPath": "newPath",
+        "BaseVersion": "baseVersion"
+      }
+    },
+
+    "MkdirRequest": {
+      "description": "POST /api/files/mkdir 请求体（非持久化 API 请求 DTO，仅 apiMapping 驱动生成，不入库）。",
+      "table": "",
+      "fields": [
+        { "name": "Path", "type": "TEXT", "nullable": false, "role": "", "description": "要创建的文件夹路径，以 / 结尾" }
+      ],
+      "apiMapping": {
+        "Path": "path"
+      }
+    },
+
+    "CreateShareRequest": {
+      "description": "POST /api/shares 请求体（非持久化 API 请求 DTO，仅 apiMapping 驱动生成，不入库）。expiresAt 传 ISO 8601 UTC，null 表示永不过期。",
+      "table": "",
+      "fields": [
+        { "name": "FilePath",     "type": "TEXT",    "nullable": false, "role": "", "description": "要分享的文件路径" },
+        { "name": "Password",     "type": "TEXT",    "nullable": true,  "role": "", "description": "访问密码，null 表示无密码" },
+        { "name": "ExpiresAt",    "type": "TEXT",    "nullable": true,  "role": "", "description": "过期时间 (UTC)，null 表示永不过期" },
+        { "name": "MaxDownloads", "type": "INTEGER", "nullable": true,  "role": "", "description": "最大下载次数，null 表示不限" }
+      ],
+      "apiMapping": {
+        "FilePath": "filePath",
+        "Password": "password",
+        "ExpiresAt": "expiresAt",
+        "MaxDownloads": "maxDownloads"
+      }
+    },
+
+    "RestoreTrashRequest": {
+      "description": "POST /api/trash/restore 请求体（非持久化 API 请求 DTO，仅 apiMapping 驱动生成，不入库）。metaFileName 为回收站元数据文件名。",
+      "table": "",
+      "fields": [
+        { "name": "MetaFileName", "type": "TEXT", "nullable": false, "role": "", "description": "回收站元数据文件名" }
+      ],
+      "apiMapping": {
+        "MetaFileName": "metaFileName"
+      }
+    },
+
+    "RestoreRequest": {
+      "description": "POST /api/versions/restore 请求体（非持久化 API 请求 DTO，仅 apiMapping 驱动生成，不入库）。将文件恢复至指定历史版本。",
+      "table": "",
+      "fields": [
+        { "name": "FilePath", "type": "TEXT",    "nullable": false, "role": "", "description": "要回滚的文件路径" },
+        { "name": "Version",  "type": "INTEGER", "nullable": false, "role": "", "description": "回滚到的历史版本号" }
+      ],
+      "apiMapping": {
+        "FilePath": "filePath",
+        "Version": "version"
       }
     }
   },

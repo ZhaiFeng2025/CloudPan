@@ -16,7 +16,7 @@ public partial class ApiClient
         string filePath, string? password, string? expiresAt, int? maxDownloads, CancellationToken ct = default)
     {
         var response = await _http.PostAsJsonAsync(SpecRoutes.Shares,
-            new { filePath, password, expiresAt, maxDownloads }, JsonOptions, ct);
+            new CreateShareRequestDto(filePath, password, expiresAt, maxDownloads), JsonOptions, ct);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<ShareCreateResponse>(JsonOptions, ct);
     }
@@ -49,7 +49,7 @@ public partial class ApiClient
     public async Task<VersionRestoreResponse?> RestoreVersionAsync(string filePath, int version, CancellationToken ct = default)
     {
         var response = await _http.PostAsJsonAsync(SpecRoutes.VersionsRestore,
-            new { filePath, version }, JsonOptions, ct);
+            new RestoreRequestDto(filePath, version), JsonOptions, ct);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<VersionRestoreResponse>(JsonOptions, ct);
     }

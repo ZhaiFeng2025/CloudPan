@@ -41,7 +41,7 @@ public class VersionsController : ControllerBase
     /// 回滚本身会先存档当前版本，再用历史文件覆盖。
     /// </summary>
     [HttpPost(SpecRoutes.VersionsRestore)]
-    public async Task<IActionResult> Restore([FromBody] RestoreRequest request)
+    public async Task<IActionResult> Restore([FromBody] RestoreRequestDto request)
     {
         if (string.IsNullOrWhiteSpace(request.FilePath))
         {
@@ -66,6 +66,3 @@ public class VersionsController : ControllerBase
             result.RestoredFromVersion)));
     }
 }
-
-/// <summary>将文件恢复至指定历史版本的请求。</summary>
-public record RestoreRequest(string FilePath, int Version);

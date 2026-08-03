@@ -30,7 +30,7 @@ public class TrashController : ControllerBase
 
     /// <summary>POST /api/trash/restore — 恢复文件。</summary>
     [HttpPost(SpecRoutes.TrashRestore)]
-    public async Task<IActionResult> Restore([FromBody] RestoreTrashRequest request)
+    public async Task<IActionResult> Restore([FromBody] RestoreTrashRequestDto request)
     {
         if (string.IsNullOrWhiteSpace(request.MetaFileName))
         {
@@ -54,6 +54,3 @@ public class TrashController : ControllerBase
         return Ok(new TrashEmptyResponse("trash emptied"));
     }
 }
-
-/// <summary>从回收站恢复文件的请求，MetaFileName 为回收站元数据文件名。</summary>
-public record RestoreTrashRequest(string MetaFileName);

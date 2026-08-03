@@ -9,10 +9,11 @@ namespace CloudPan.CodeGen.Generators;
 /// </summary>
 public static class EntityGenerator
 {
-    /// <summary>非服务端表：客户端本地表 + Android 专用表，服务端生成跳过。</summary>
+    /// <summary>非服务端表：客户端本地表 + Android 专用表 + API 请求 DTO（非持久化，仅 apiMapping 驱动 DtoGenerator），服务端生成跳过。</summary>
     private static readonly HashSet<string> ServerExcludedTables = new()
     {
-        "SyncQueue", "RemoteSnapshot", "SyncCursor", "BackupLog", "OfflineCache"
+        "SyncQueue", "RemoteSnapshot", "SyncCursor", "BackupLog", "OfflineCache",
+        "DeleteRequest", "MoveRequest", "MkdirRequest", "CreateShareRequest", "RestoreTrashRequest", "RestoreRequest"
     };
 
     /// <summary>C# 客户端本地表：从 spec 生成到 CloudPan.Client.Core.Models（客户端 EF 实体，T-062）。</summary>
