@@ -18,8 +18,17 @@ public class FileBrowserView : UserControl
     /// <summary>目录激活（双击子目录 / 点击面包屑段）→ 参数为目录相对路径。</summary>
     public event Action<string>? DirectoryActivated;
 
-    /// <summary>文件激活（双击文件）→ 参数为文件相对路径。</summary>
-    public event Action<string>? FileActivated;
+    /// <summary>文件激活（双击文件）→ 参数为文件项（宿主据本地存在性/CloudOnly 决定打开或下载）。</summary>
+    public event Action<FileBrowseItem>? FileActivated;
+
+    /// <summary>点击「上传」（多选文件）→ 参数为选中的本地文件路径数组（T-033，宿主复制入同步根并入队上传）。</summary>
+    public event Action<string[]>? UploadRequested;
+
+    /// <summary>点击「下载到本机」（选中 CloudOnly 文件）→ 参数为选中的文件（T-033，宿主调用 DownloadPathAsync）。</summary>
+    public event Action<FileBrowseItem>? DownloadRequested;
+
+    /// <summary>拖拽文件到浏览视图 → 参数为拖入的本地文件路径数组（T-033，宿主复制入同步根并入队上传）。</summary>
+    public event Action<string[]>? FilesDropped;
 
     /// <summary>点击「上一级」。</summary>
     public event Action? UpRequested;
@@ -64,6 +73,8 @@ public class FileBrowserView : UserControl
     private Button _trashButton = null!;  // T-014：回收站入口
     private Button _shareButton = null!;  // T-018：分享（仅文件）
     private Button _versionButton = null!; // T-018：版本历史（仅文件）
+    private Button _uploadButton = null!;   // T-033：上传（多选文件）
+    private Button _downloadButton = null!; // T-033：下载到本机（仅 CloudOnly 选中项）
     private ComboBox _sortCombo = null!;
     private ListView _list = null!;
     private Label _emptyLabel = null!;
@@ -87,6 +98,22 @@ public class FileBrowserView : UserControl
     public FileBrowserView()
     {
         BuildLayout();
+
+        // T-033：支持拖拽文件到浏览视图即导入同步根（上传入口）。
+        // 递归开启全部子控件拖放目标（含空目录时的 _emptyLabel 覆盖层，避免其挡住列表的拖放）。
+        EnableDropTarget(this);
+    }
+
+    /// <summary>递归为控件树开启文件拖放目标（T-033）：拖入文件收集路径后交宿主导入同步根。</summary>
+    private void EnableDropTarget(Control root)
+    {
+        root.AllowDrop = true;
+        root.DragEnter += FileBrowser_DragEnter;
+        root.DragDrop += FileBrowser_DragDrop;
+        foreach (Control child in root.Controls)
+        {
+            EnableDropTarget(child);
+        }
     }
 
     private void BuildLayout()
@@ -175,6 +202,19 @@ public class FileBrowserView : UserControl
         viewPanel.Controls.Add(_listViewButton);
         viewPanel.Controls.Add(_gridViewButton);
 
+        // T-033：上传（多选文件，复制到当前浏览目录并入队上传）
+        _uploadButton = new Button
+        {
+            Text = "上传",
+            Width = 64,
+            Height = CloudPanSpacing.MinTouchSize,
+            FlatStyle = FlatStyle.Flat,
+            Margin = new Padding(4, 0, 0, 0),
+        };
+        _uploadButton.FlatAppearance.BorderColor = CloudPanColors.ButtonBorderGray;
+        _uploadButton.Click += UploadButton_Click;
+        viewPanel.Controls.Add(_uploadButton);
+
         // T-014：删除（进回收站，无选中项禁用）+ 回收站入口
         _deleteButton = new Button
         {
@@ -227,6 +267,20 @@ public class FileBrowserView : UserControl
         _versionButton.FlatAppearance.BorderColor = CloudPanColors.ButtonBorderGray;
         _versionButton.Click += VersionButton_Click;
         viewPanel.Controls.Add(_versionButton);
+
+        // T-033：下载到本机（仅 CloudOnly 选中项可用，按需取回）
+        _downloadButton = new Button
+        {
+            Text = "下载到本机",
+            Width = 88,
+            Height = CloudPanSpacing.MinTouchSize,
+            FlatStyle = FlatStyle.Flat,
+            Margin = new Padding(4, 0, 0, 0),
+            Enabled = false,
+        };
+        _downloadButton.FlatAppearance.BorderColor = CloudPanColors.ButtonBorderGray;
+        _downloadButton.Click += DownloadButton_Click;
+        viewPanel.Controls.Add(_downloadButton);
 
         toolbar.Controls.Add(viewPanel, 1, 0);
 
@@ -406,7 +460,7 @@ public class FileBrowserView : UserControl
         }
     }
 
-    /// <summary>同步选中项状态（SelectedItem / 删除按钮可用性；T-018 分享/版本仅对文件可用）。</summary>
+    /// <summary>同步选中项状态（SelectedItem / 删除按钮可用性；T-018 分享/版本仅对文件可用；T-033 下载仅对 CloudOnly 可用）。</summary>
     private void UpdateSelection(FileBrowseItem? item)
     {
         SelectedItem = item;
@@ -414,6 +468,8 @@ public class FileBrowserView : UserControl
         _deleteButton.Enabled = item != null;
         _shareButton.Enabled = item != null && !item.IsDirectory;
         _versionButton.Enabled = item != null && !item.IsDirectory;
+        _downloadButton.Enabled = item != null && !item.IsDirectory
+            && item.State == (int)FileState.CloudOnly && !item.LocalExists;
     }
 
     /// <summary>将 FileBrowseItem 映射为（图标, 颜色）双通道；未注入 StateResolver 时使用默认 FileState 映射。</summary>
@@ -652,7 +708,48 @@ public class FileBrowserView : UserControl
         }
         else
         {
-            FileActivated?.Invoke(item.Path);
+            FileActivated?.Invoke(item);
+        }
+    }
+
+    /// <summary>T-033：点击「上传」→ 多选文件对话框 → 转发文件路径给宿主（复制入同步根并入队上传）。</summary>
+    private void UploadButton_Click(object? sender, EventArgs e)
+    {
+        using OpenFileDialog ofd = new OpenFileDialog
+        {
+            Multiselect = true,
+            Title = "选择要上传的文件",
+            CheckFileExists = true,
+        };
+        if (ofd.ShowDialog(this) == DialogResult.OK && ofd.FileNames.Length > 0)
+        {
+            UploadRequested?.Invoke(ofd.FileNames);
+        }
+    }
+
+    /// <summary>T-033：点击「下载到本机」→ 转发选中的 CloudOnly 文件给宿主（按需下载）。</summary>
+    private void DownloadButton_Click(object? sender, EventArgs e)
+    {
+        if (SelectedItem != null && !SelectedItem.IsDirectory)
+        {
+            DownloadRequested?.Invoke(SelectedItem);
+        }
+    }
+
+    /// <summary>T-033：拖拽进入浏览视图：仅接受文件拖放（显示复制效果）。</summary>
+    private void FileBrowser_DragEnter(object? sender, DragEventArgs e)
+    {
+        e.Effect = e.Data?.GetDataPresent(DataFormats.FileDrop) == true
+            ? DragDropEffects.Copy
+            : DragDropEffects.None;
+    }
+
+    /// <summary>T-033：拖放文件到浏览视图：收集文件路径交宿主导入同步根。</summary>
+    private void FileBrowser_DragDrop(object? sender, DragEventArgs e)
+    {
+        if (e.Data?.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
+        {
+            FilesDropped?.Invoke(files);
         }
     }
 

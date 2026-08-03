@@ -200,4 +200,36 @@ public partial class SyncEngine
         await db.SaveChangesAsync();
         _logger.LogInformation($"入队: {operation} {relativePath}");
     }
+
+    /// <summary>
+    /// 上传入口（T-033）：将本地文件复制到同步目录并纳入上传队列（普通/分块由队列处理）。
+    /// <paramref name="destRelativeDir"/> 为同步树内的相对目录（"/" 为同步根）；目标重名时覆盖，视为新版本上传。
+    /// 供文件浏览视图「上传」按钮与主窗口拖拽导入复用。
+    /// </summary>
+    public async Task ImportFilesAsync(IReadOnlyList<string> sourceFiles, string destRelativeDir = "/", CancellationToken ct = default)
+    {
+        // 防御：目标目录须为同步树内路径（拒绝上级跳转穿越同步根）
+        string cleanDir = destRelativeDir.Replace('\\', '/').TrimEnd('/');
+        if (cleanDir.Split('/', StringSplitOptions.RemoveEmptyEntries).Any(seg => seg == ".."))
+        {
+            _logger.LogWarning("拒绝导入：目标目录含上级跳转: {Dir}", destRelativeDir);
+            return;
+        }
+
+        foreach (string source in sourceFiles)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            string fileName = Path.GetFileName(source);
+            string destRel = "/" + (cleanDir + "/" + fileName).TrimStart('/');
+            string destAbs = ToLocalPath(destRel);
+            Directory.CreateDirectory(Path.GetDirectoryName(destAbs)!);
+
+            // 复制到同步目录后入队上传；FileWatcher 若已入队同操作，EnqueueLocalChangeAsync 去重，无重复上传
+            await Task.Run(() => File.Copy(source, destAbs, overwrite: true), ct);
+            await EnqueueLocalChangeAsync(destRel, SyncOperation.Upload);
+
+            _logger.LogInformation("导入文件入队上传: {Source} → {Dest}", source, destRel);
+        }
+    }
 }

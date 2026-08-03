@@ -102,8 +102,8 @@ public partial class MainWindow
     /// <summary>双击子目录 / 点击面包屑段：进入目录。</summary>
     private void FileBrowser_DirectoryActivated(string path) => NavigateTo(path);
 
-    /// <summary>双击文件：尝试用系统默认程序打开本地副本。</summary>
-    private void FileBrowser_FileActivated(string path) => OpenFile(path);
+    /// <summary>双击文件：本地存在则系统打开，CloudOnly 弹下载确认（T-033）。</summary>
+    private void FileBrowser_FileActivated(FileBrowseItem item) => OpenFile(item);
 
     /// <summary>点击「上一级」：进入父目录。</summary>
     private void FileBrowser_UpRequested() => NavigateTo(GetParentPath(_currentPath));
@@ -133,11 +133,11 @@ public partial class MainWindow
         return idx <= 0 ? "/" : p[..idx];
     }
 
-    /// <summary>打开文件浏览视图中的文件：本地存在则系统打开，CloudOnly 未下载则提示。</summary>
-    private void OpenFile(string relativePath)
+    /// <summary>打开文件浏览视图中的文件：本地存在则系统打开，CloudOnly 弹下载确认而非仅日志（T-033）。</summary>
+    private void OpenFile(FileBrowseItem item)
     {
         string localPath = System.IO.Path.Combine(
-            Program.SyncRoot, relativePath.TrimStart('/').Replace('/', System.IO.Path.DirectorySeparatorChar));
+            Program.SyncRoot, item.Path.TrimStart('/').Replace('/', System.IO.Path.DirectorySeparatorChar));
         if (System.IO.File.Exists(localPath))
         {
             try
@@ -146,12 +146,70 @@ public partial class MainWindow
             }
             catch (Exception ex)
             {
-                AddLog($"打开文件失败: {relativePath} — {ex.Message}");
+                AddLog($"打开文件失败: {item.Path} — {ex.Message}");
+            }
+            return;
+        }
+
+        if (item.State == (int)FileState.CloudOnly)
+        {
+            var result = MessageBox.Show(
+                $"该文件仅在云端，尚未下载到本机。\n\n是否立即下载到本机？\n\n{item.Path}",
+                "CloudPan — 下载文件",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+            if (result == DialogResult.Yes)
+            {
+                StartDownload(item.Path);
             }
         }
         else
         {
-            AddLog($"该文件仅在云端（CloudOnly），未下载到本地，暂无法打开: {relativePath}");
+            AddLog($"该文件仅在云端，未下载到本地，暂无法打开: {item.Path}");
+        }
+    }
+
+    /// <summary>T-033：工具栏「上传」→ 复制到当前浏览目录并入队上传。</summary>
+    private async void FileBrowser_UploadRequested(string[] files) => await ImportFilesAsync(files);
+
+    /// <summary>T-033：拖拽文件到浏览视图 → 复制到当前浏览目录并入队上传。</summary>
+    private async void FileBrowser_FilesDropped(string[] files) => await ImportFilesAsync(files);
+
+    /// <summary>T-033：「下载到本机」→ CloudOnly 文件入队下载（复用 SyncEngine.DownloadPathAsync）。</summary>
+    private void FileBrowser_DownloadRequested(FileBrowseItem item) => StartDownload(item.Path);
+
+    /// <summary>T-033：CloudOnly 按需下载：入队高优先级下载并立即刷新（文件显示 ↻ 下载中）。</summary>
+    private async void StartDownload(string relativePath)
+    {
+        try
+        {
+            await _engine.DownloadPathAsync(relativePath);
+            AddLog($"已开始下载到本机: {relativePath}");
+            await LoadBrowserAsync();
+        }
+        catch (Exception ex)
+        {
+            AddLog($"下载入队失败: {relativePath} — {ex.Message}");
+        }
+    }
+
+    /// <summary>T-033：导入文件到当前浏览目录（复制 + 入队上传 + 立即刷新）。async void 调用方内部捕获全部异常。</summary>
+    private async Task ImportFilesAsync(string[] files)
+    {
+        if (files.Length == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await _engine.ImportFilesAsync(files, _currentPath);
+            AddLog($"已导入 {files.Length} 个文件到 {_currentPath}");
+            await LoadBrowserAsync();
+        }
+        catch (Exception ex)
+        {
+            AddLog($"导入文件失败: {ex.Message}");
         }
     }
 

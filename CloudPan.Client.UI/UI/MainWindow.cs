@@ -147,6 +147,11 @@ public partial class MainWindow : Form
         // T-018：分享 + 版本历史（仅文件）
         _fileBrowser.ShareRequested += FileBrowser_ShareRequested;
         _fileBrowser.VersionHistoryRequested += FileBrowser_VersionHistoryRequested;
+
+        // T-033：上传（多选文件）+ 下载到本机 + 拖拽导入
+        _fileBrowser.UploadRequested += FileBrowser_UploadRequested;
+        _fileBrowser.DownloadRequested += FileBrowser_DownloadRequested;
+        _fileBrowser.FilesDropped += FileBrowser_FilesDropped;
     }
 
     // ================================================================

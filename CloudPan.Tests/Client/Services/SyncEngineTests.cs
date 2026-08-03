@@ -899,6 +899,103 @@ public class SyncEngineTests : IDisposable
 
         Assert.Null(result);
     }
+
+    // ============================================================
+    // 上传入口 + CloudOnly 按需下载（T-033）
+    // ============================================================
+
+    [Fact]
+    public async Task ImportFilesAsync_复制到同步目录_入队上传()
+    {
+        // 源文件在同步根之外（temp 目录），目标为同步根
+        string source = Path.Combine(_tempDir, "import-src.txt");
+        await File.WriteAllTextAsync(source, "import me");
+
+        await _engine.ImportFilesAsync([source], "/");
+
+        // 已复制到同步根
+        Assert.True(File.Exists(Path.Combine(_syncRoot, "import-src.txt")));
+        // 已入队上传
+        await using var dbCheck = await _dbFactory.CreateDbContextAsync();
+        var item = await dbCheck.SyncQueue.FirstOrDefaultAsync(q => q.FilePath == "/import-src.txt");
+        Assert.NotNull(item);
+        Assert.Equal((int)SyncOperation.Upload, item!.Operation);
+    }
+
+    [Fact]
+    public async Task ImportFilesAsync_目标目录含上级跳转_拒绝导入()
+    {
+        string source = Path.Combine(_tempDir, "evil-src.txt");
+        await File.WriteAllTextAsync(source, "evil");
+
+        await _engine.ImportFilesAsync([source], "/../outside");
+
+        // 未复制到同步根外、未入队上传
+        Assert.False(File.Exists(Path.Combine(_tempDir, "outside", "evil-src.txt")));
+        await using var dbCheck = await _dbFactory.CreateDbContextAsync();
+        Assert.Equal(0, await dbCheck.SyncQueue.CountAsync());
+    }
+
+    [Fact]
+    public async Task DownloadPathAsync_CloudOnly文件_入队下载()
+    {
+        // 预置 CloudOnly 快照（无本地副本）
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.Add(new RemoteSnapshot
+            {
+                Path = "/cloud-dl.txt", Type = (int)FileType.File,
+                Size = 12, Version = 3, State = (int)FileState.CloudOnly, Hash = "cloud-hash"
+            });
+            await setupDb.SaveChangesAsync();
+        }
+
+        await _engine.DownloadPathAsync("/cloud-dl.txt");
+
+        await using var dbCheck = await _dbFactory.CreateDbContextAsync();
+        var item = await dbCheck.SyncQueue.FirstOrDefaultAsync(q => q.FilePath == "/cloud-dl.txt");
+        Assert.NotNull(item);
+        Assert.Equal((int)SyncOperation.Download, item!.Operation);
+        Assert.Equal((int)QueuePriority.High, item.Priority);
+    }
+
+    [Fact]
+    public async Task DownloadPathAsync_处理队列_下载到本地并转Synced()
+    {
+        // 预置 CloudOnly 快照（无本地副本）
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.Add(new RemoteSnapshot
+            {
+                Path = "/cloud-dl.txt", Type = (int)FileType.File,
+                Size = 12, Version = 3, State = (int)FileState.CloudOnly, Hash = "cloud-hash"
+            });
+            await setupDb.SaveChangesAsync();
+        }
+
+        await _engine.DownloadPathAsync("/cloud-dl.txt");
+
+        // 处理队列 → 下载完成 → 本地副本生成
+        var method = typeof(SyncEngine).GetMethod("ProcessQueueAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+        Task? task = (Task?)method!.Invoke(_engine, [CancellationToken.None]);
+        Assert.NotNull(task);
+        await task;
+
+        // 本地副本已生成
+        Assert.True(File.Exists(Path.Combine(_syncRoot, "cloud-dl.txt")));
+        Assert.True(_api.DownloadCalls.ContainsKey("/cloud-dl.txt"));
+
+        // 快照转 Synced
+        await using var dbFinal = await _dbFactory.CreateDbContextAsync();
+        var snapshot = await dbFinal.RemoteSnapshots.FindAsync("/cloud-dl.txt");
+        Assert.NotNull(snapshot);
+        Assert.Equal((int)FileState.Synced, snapshot!.State);
+
+        // 队列已清空
+        Assert.Equal(0, await dbFinal.SyncQueue.CountAsync());
+    }
 }
 
 /// <summary>测试用 ClientDbContext 工厂。</summary>

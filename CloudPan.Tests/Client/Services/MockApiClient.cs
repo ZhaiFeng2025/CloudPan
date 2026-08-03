@@ -80,7 +80,7 @@ public class MockApiClient : IApiClient
             new UploadData(remotePath, version, "mock-hash", size, false)));
     }
 
-    public Task<DownloadResult?> DownloadAsync(string remotePath, string localPath, IProgress<long>? progress = null, CancellationToken ct = default)
+    public async Task<DownloadResult?> DownloadAsync(string remotePath, string localPath, IProgress<long>? progress = null, CancellationToken ct = default)
     {
         DownloadCalls.TryGetValue(remotePath, out int count);
         DownloadCalls[remotePath] = count + 1;
@@ -94,11 +94,13 @@ public class MockApiClient : IApiClient
 
         File.WriteAllText(localPath, "mock-content");
 
-        return Task.FromResult<DownloadResult?>(new DownloadResult
+        // 返回真实哈希，使下载后校验（X-File-Hash）通过——否则 ProcessDownloadAsync 恒失败
+        string actualHash = await FileHasher.ComputeSha256Async(localPath, ct);
+        return new DownloadResult
         {
             LastModified = DateTime.UtcNow.ToString("O"),
-            ExpectedHash = "mock-hash"
-        });
+            ExpectedHash = actualHash
+        };
     }
 
     public async Task DeleteAsync(string path, int baseVersion, CancellationToken ct = default)
