@@ -3974,7 +3974,7 @@
       "title": "ThemeWatcher 双份下沉 Infrastructure/Design（两端只留初始化）",
       "dimension": "simplicity",
       "priority": "P2",
-      "status": "in-progress",
+      "status": "acceptance",
       "batch": 7,
       "findingId": "F-121",
       "dependsOn": [],
@@ -4000,7 +4000,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
+      "note": "执行 2026-08-03（task-executor）：T-079 ThemeWatcher 双份下沉。问题——ThemeWatcher 在 CloudPan.Client.UI/UI/ThemeWatcher.cs（144 行）与 CloudPan.Server.UI/ThemeWatcher.cs（145 行）逐字同构双份，主题跟随策略（订阅 ThemeManager.ThemeChanged → 回 UI 线程 → ApplyToTree 含 ListView/Button FlatAppearance 归一化）改一处须同步两处，两端深色模式行为有分叉风险。修复——单一实现移至 CloudPan.Infrastructure/Design/ThemeWatcher.cs（public static，逐字同构迁移，仅依赖 WinForms/System.Drawing），删除两端各 ~144 行重复实现；两端 UI 调用点（MainWindow/SetupForm/SettingsForm/ServerWindow/ServerInstaller 各一行 ThemeWatcher.Watch(this)）已 using CloudPan.Infrastructure.Design 故零改动，仍为一行初始化绑定；主题变更仍经 ThemeManager.ThemeChanged 事件暴露。CloudPan.Infrastructure.csproj 启用 UseWindowsForms（T-079：ThemeWatcher 依赖 Form/Control 等 WinForms 类型；WindowsDesktop 框架随之自带 System.Drawing 与 Microsoft.Win32.SystemEvents，原显式包引用 System.Drawing.Common 8.0.0 / Microsoft.Win32.SystemEvents 8.0.0 移除——原注释理由『非 WinForms 项目不自动带 WindowsDesktop 框架』因 UseWindowsForms 失效，保留将产生重复程序集）。改动文件——CloudPan.Infrastructure/Design/ThemeWatcher.cs（新增 144 行）；CloudPan.Client.UI/UI/ThemeWatcher.cs（删除）；CloudPan.Server.UI/ThemeWatcher.cs（删除）；CloudPan.Infrastructure/CloudPan.Infrastructure.csproj（+UseWindowsForms，-2 包引用）；tasks.json。验证——grep -rln 'class ThemeWatcher' 全库仅 1 处（CloudPan.Infrastructure/Design/ThemeWatcher.cs:10），CloudPan.Client.UI/CloudPan.Server.UI 无匹配（含验收标准原命令）；dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test CloudPan.Tests -c Release 326/326 通过；dotnet test --filter Architecture 13/13 通过。",
       "updatedAt": "2026-08-03"
     },
     {
