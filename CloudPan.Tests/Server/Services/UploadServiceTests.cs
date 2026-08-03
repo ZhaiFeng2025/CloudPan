@@ -23,7 +23,8 @@ public class UploadServiceTests : Infrastructure.TestBase
         var syncLog = new SyncLogService(dbFactory, NullLogger<SyncLogService>.Instance);
         var fileOps = new FileOperationService(storage, index, version,
             new TrashService(storage, index, version, NullLogger<TrashService>.Instance),
-            syncLog, NullLogger<FileOperationService>.Instance);
+            syncLog, new ConflictBackupHelper(storage, index, version, syncLog),
+            NullLogger<FileOperationService>.Instance);
         var svc = new UploadService(storage, fileOps, version, dbFactory,
             NullLogger<UploadService>.Instance,
             new VersionCommitHelper(storage, NullLogger<VersionCommitHelper>.Instance));

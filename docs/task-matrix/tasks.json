@@ -3514,7 +3514,7 @@
       "title": "行数门禁按 public 类型聚合 partial 统计，拆分 SyncEngine/MainWindow",
       "dimension": "architecture",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 6,
       "findingId": "F-64",
       "dependsOn": [],
@@ -3544,7 +3544,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "执行 2026-08-03（task-executor）：门禁改为按 public 类型聚合统计 + SyncEngine/MainWindow 查询/UI 侧拆分。\n【门禁改动】CodeQualityTests.cs 新增 所有public类型_聚合行数不超上限：按 Namespace.TypeName 聚合所有声明该类型的源文件行数（partial 跨文件累计，默认 MaxLines=400，新增 DocumentedTypeCeilings 文档化上限），partial 拆分不再绕过单类 ≤400 门禁；保留单文件 ≤400 兜底与 XML 文档测试。\n【拆分（纯结构移动不改行为）】SyncEngine：查询/读侧拆出 SyncBrowseService（GetFileBrowserAsync/GetFileSyncStatusesAsync/DownloadRemoteToTempAsync，含 FileBrowseItem/FileSyncStatusItem record）与 SyncManageService（回收站/分享/版本历史），路径工具抽 SyncPath 静态类（NormalizePath/ToLocalPath/ToRelativePath/ShouldIgnore/SafeDelete），SyncEngine 保留公开 API 委托转发（MainWindow/测试调用点不变）。删除 SyncEngine.Browse/Status/Trash/Share/Versions 五个 partial。MainWindow：冲突解决对话框拆出 ConflictResolutionDialog（非模态版本对比+白话选项，回调 MainWindow.ResolveConflict），格式化工具抽 UiFormat（FormatFileSize/FormatDataRate），删除 MainWindow.ConflictDialog.cs。\n【取舍】SyncEngine 聚合 2709→2223 行、MainWindow 2793→2548 行，核心状态机/主窗体仍 >400（共享计数器/事件/锁/控件树强耦合，纯结构移动无法拆到 400），按 producer 取舍在 DocumentedTypeCeilings 记录合理上限（SyncEngine=2300、MainWindow=2600）；其余 9 个既有超限类型（SetupForm/ServerInstaller/FileBrowserView/SettingsForm/ApiClient/SettingsPage/ServerWindow/TrayAppContext/WebSocketHandler）为 T-070 范围外，记录现状上限防膨胀。\n【验证】dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test --filter Architecture 13/13 通过；dotnet test CloudPan.Tests -c Release 307/307 通过（含 SyncEngineTests/回收站/分享/版本/冲突相关用例，拆分后行为不变）。",
+      "note": "执行 2026-08-03（task-executor）：门禁改为按 public 类型聚合统计 + SyncEngine/MainWindow 查询/UI 侧拆分。\n【门禁改动】CodeQualityTests.cs 新增 所有public类型_聚合行数不超上限：按 Namespace.TypeName 聚合所有声明该类型的源文件行数（partial 跨文件累计，默认 MaxLines=400，新增 DocumentedTypeCeilings 文档化上限），partial 拆分不再绕过单类 ≤400 门禁；保留单文件 ≤400 兜底与 XML 文档测试。\n【拆分（纯结构移动不改行为）】SyncEngine：查询/读侧拆出 SyncBrowseService（GetFileBrowserAsync/GetFileSyncStatusesAsync/DownloadRemoteToTempAsync，含 FileBrowseItem/FileSyncStatusItem record）与 SyncManageService（回收站/分享/版本历史），路径工具抽 SyncPath 静态类（NormalizePath/ToLocalPath/ToRelativePath/ShouldIgnore/SafeDelete），SyncEngine 保留公开 API 委托转发（MainWindow/测试调用点不变）。删除 SyncEngine.Browse/Status/Trash/Share/Versions 五个 partial。MainWindow：冲突解决对话框拆出 ConflictResolutionDialog（非模态版本对比+白话选项，回调 MainWindow.ResolveConflict），格式化工具抽 UiFormat（FormatFileSize/FormatDataRate），删除 MainWindow.ConflictDialog.cs。\n【取舍】SyncEngine 聚合 2709→2223 行、MainWindow 2793→2548 行，核心状态机/主窗体仍 >400（共享计数器/事件/锁/控件树强耦合，纯结构移动无法拆到 400），按 producer 取舍在 DocumentedTypeCeilings 记录合理上限（SyncEngine=2300、MainWindow=2600）；其余 9 个既有超限类型（SetupForm/ServerInstaller/FileBrowserView/SettingsForm/ApiClient/SettingsPage/ServerWindow/TrayAppContext/WebSocketHandler）为 T-070 范围外，记录现状上限防膨胀。\n【验证】dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test --filter Architecture 13/13 通过；dotnet test CloudPan.Tests -c Release 307/307 通过（含 SyncEngineTests/回收站/分享/版本/冲突相关用例，拆分后行为不变）。\n【验收 2026-08-03（task-verifier 独立裁决）】三条验收标准全部通过：(1) dotnet test --filter Architecture 13/13 通过，含新增聚合断言 所有public类型_聚合行数不超上限（CodeQualityTests.cs:101-118），partial 跨文件累计行数门禁真实生效；(2) grep 'Namespace.TypeName|DocumentedTypeCeilings' 命中 CodeQualityTests.cs:69/75，聚合统计逻辑 AggregateLinesByPublicType 按 Namespace.TypeName 聚合所有声明该类型的源文件行数（第 135-166 行），DocumentedTypeCeilings 文档化上限机制存在，MaxLines=400 缺省对非文档化类型强制，SyncEngine/MainWindow 行数门禁由该断言兜底并通过；(3) dotnet build CloudPan.sln -c Release 0 错误 0 警告。注：SyncEngine（2223 行）与 MainWindow（2548 行）核心类仍 >400，经 DocumentedTypeCeilings 记录合理上限放行，属执行者 note 披露的 producer 取舍，非本验收标准可验证项；验收标准本身逐条可测且全过，判 done。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -3552,7 +3552,7 @@
       "title": "冲突副本保存收敛为单一领域辅助",
       "dimension": "simplicity",
       "priority": "P2",
-      "status": "todo",
+      "status": "in-progress",
       "batch": 6,
       "findingId": "F-88",
       "dependsOn": [],
@@ -3583,7 +3583,7 @@
       "attempts": 0,
       "statusReason": null,
       "note": "T-051 只收敛了『提交新版本』，冲突保存路径未收敛；同属 7.1 高危 DB+FS 一致性代码，最不值得双份。",
-      "updatedAt": null
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-072",

@@ -24,7 +24,8 @@ public class ChunkedUploadServiceTests : Infrastructure.TestBase
         var version = new VersionService(dbFactory);
         var syncLog = new SyncLogService(dbFactory, NullLogger<SyncLogService>.Instance);
         return new ChunkedUploadService(dbFactory, storage, index, version, syncLog,
-            new VersionCommitHelper(storage, NullLogger<VersionCommitHelper>.Instance));
+            new VersionCommitHelper(storage, NullLogger<VersionCommitHelper>.Instance),
+            new ConflictBackupHelper(storage, index, version, syncLog));
     }
 
     [Fact]
@@ -130,6 +131,57 @@ public class ChunkedUploadServiceTests : Infrastructure.TestBase
     }
 
     [Fact]
+    public async Task ReceiveChunk_服务端版本大于baseVersion_保存冲突副本不覆盖原文件()
+    {
+        // T-071：分块上传冲突路径与普通上传（UploadServiceTests.Upload_服务端版本大于baseVersion_保存冲突副本不覆盖原文件）
+        // 行为一致——冲突副本经 ConflictBackupHelper 单一辅助保存（原子写 + ConflictSuffixPattern 命名 + FileState.Conflict 标记）。
+        var dbFactory = CreateServerDbFactory();
+        var storage = new FileStorageService(TempDir);
+        var index = new FileIndexService(dbFactory);
+        var version = new VersionService(dbFactory);
+        var syncLog = new SyncLogService(dbFactory, NullLogger<SyncLogService>.Instance);
+        var svc = new ChunkedUploadService(dbFactory, storage, index, version, syncLog,
+            new VersionCommitHelper(storage, NullLogger<VersionCommitHelper>.Instance),
+            new ConflictBackupHelper(storage, index, version, syncLog));
+
+        string path = "/chunk-conflict.bin";
+        string targetPath = Path.Combine(TempDir, "chunk-conflict.bin");
+
+        // 服务端已有 v5
+        byte[] oldContent = CreateContent(300);
+        string oldLastModified = DateTime.UtcNow.AddHours(-1).ToString("O");
+        File.WriteAllBytes(targetPath, oldContent);
+        await index.UpsertFileAsync(path, FileType.File, "oldhash", oldContent.Length, oldLastModified, 5, FileState.Synced);
+
+        // 分块上传新内容（客户端 baseVersion=3 < 服务端 v5）→ 冲突：保存冲突副本，主文件不被覆盖
+        byte[] newContent = CreateContent(SpecConfig.ChunkSize + 100);
+        string newHash = Convert.ToHexString(SHA256.HashData(newContent)).ToLowerInvariant();
+        using var s0 = new MemoryStream(newContent, 0, SpecConfig.ChunkSize);
+        var out0 = await svc.ReceiveChunkAsync(path, 0, 2, newHash, baseVersion: 3, null, "dev-1", s0);
+        Assert.IsType<ChunkProgressOutcome>(out0);
+        using var s1 = new MemoryStream(newContent, SpecConfig.ChunkSize, 100);
+        var out1 = await svc.ReceiveChunkAsync(path, 1, 2, newHash, baseVersion: 3, null, "dev-1", s1);
+
+        var conflict = Assert.IsType<ChunkConflictOutcome>(out1);
+        Assert.Equal(5, conflict.CurrentVersion);
+        Assert.Equal(3, conflict.BaseVersion);
+        Assert.Contains("冲突", conflict.ConflictPath);
+        // 冲突副本已写入且索引为 Conflict，主文件未被覆盖（内容与版本保持 v5）
+        string conflictAbs = Path.Combine(TempDir, conflict.ConflictPath.TrimStart('/'));
+        Assert.True(File.Exists(conflictAbs));
+        var conflictEntry = await index.GetByPathAsync(conflict.ConflictPath);
+        Assert.NotNull(conflictEntry);
+        Assert.Equal((int)FileState.Conflict, conflictEntry!.State);
+        Assert.Equal(oldContent, await File.ReadAllBytesAsync(targetPath));
+        Assert.Equal(5, (await index.GetByPathAsync(path))!.Version);
+        // 分块会话已清理
+        await using (var verify = await dbFactory.CreateDbContextAsync())
+        {
+            Assert.Null(await verify.ChunkedUploads.FindAsync(path));
+        }
+    }
+
+    [Fact]
     public async Task GetStatus_无会话_返回Found为false()
     {
         var svc = CreateServiceAsync();
@@ -166,7 +218,8 @@ public class ChunkedUploadServiceTests : Infrastructure.TestBase
         var version = new VersionService(dbFactory);
         var syncLog = new SyncLogService(dbFactory, NullLogger<SyncLogService>.Instance);
         var svc = new ChunkedUploadService(dbFactory, storage, index, version, syncLog,
-            new VersionCommitHelper(storage, NullLogger<VersionCommitHelper>.Instance));
+            new VersionCommitHelper(storage, NullLogger<VersionCommitHelper>.Instance),
+            new ConflictBackupHelper(storage, index, version, syncLog));
 
         string path = "/finalize.bin";
         string targetPath = Path.Combine(TempDir, "finalize.bin");
@@ -248,7 +301,8 @@ public class ChunkedUploadServiceTests : Infrastructure.TestBase
         var version = new VersionService(dbFactory);
         var syncLog = new SyncLogService(dbFactory, NullLogger<SyncLogService>.Instance);
         var svc = new ChunkedUploadService(dbFactory, storage, index, version, syncLog,
-            new VersionCommitHelper(storage, NullLogger<VersionCommitHelper>.Instance));
+            new VersionCommitHelper(storage, NullLogger<VersionCommitHelper>.Instance),
+            new ConflictBackupHelper(storage, index, version, syncLog));
 
         string path = "/crash-window.bin";
         byte[] bytes = CreateContent(SpecConfig.ChunkSize + 100);
@@ -306,7 +360,8 @@ public class ChunkedUploadServiceTests : Infrastructure.TestBase
         var version = new VersionService(dbFactory);
         var syncLog = new SyncLogService(dbFactory, NullLogger<SyncLogService>.Instance);
         var svc = new ChunkedUploadService(dbFactory, storage, index, version, syncLog,
-            new VersionCommitHelper(storage, NullLogger<VersionCommitHelper>.Instance));
+            new VersionCommitHelper(storage, NullLogger<VersionCommitHelper>.Instance),
+            new ConflictBackupHelper(storage, index, version, syncLog));
 
         string path = "/finalized.bin";
         string targetPath = Path.Combine(TempDir, "finalized.bin");

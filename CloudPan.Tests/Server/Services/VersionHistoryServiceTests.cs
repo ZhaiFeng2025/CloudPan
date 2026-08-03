@@ -27,7 +27,8 @@ public class VersionHistoryServiceTests : Infrastructure.TestBase
         var helper = new VersionCommitHelper(storage, NullLogger<VersionCommitHelper>.Instance);
         var fileOps = new FileOperationService(storage, index, version,
             new TrashService(storage, index, version, NullLogger<TrashService>.Instance),
-            syncLog, NullLogger<FileOperationService>.Instance);
+            syncLog, new ConflictBackupHelper(storage, index, version, syncLog),
+            NullLogger<FileOperationService>.Instance);
         var upload = new UploadService(storage, fileOps, version, dbFactory, NullLogger<UploadService>.Instance, helper);
         var versions = new VersionHistoryService(dbFactory, storage, index, version, syncLog, helper);
         return Task.FromResult((versions, storage, upload));

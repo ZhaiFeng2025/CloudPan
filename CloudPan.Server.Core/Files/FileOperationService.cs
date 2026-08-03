@@ -13,6 +13,7 @@ public class FileOperationService : IFileOperationService
     private readonly IVersionService _version;
     private readonly ITrashService _trash;
     private readonly ISyncLogService _syncLog;
+    private readonly ConflictBackupHelper _conflictBackup;
     private readonly ILogger<FileOperationService> _logger;
 
     public FileOperationService(
@@ -21,6 +22,7 @@ public class FileOperationService : IFileOperationService
         IVersionService version,
         ITrashService trash,
         ISyncLogService syncLog,
+        ConflictBackupHelper conflictBackup,
         ILogger<FileOperationService> logger)
     {
         _storage = storage;
@@ -28,6 +30,7 @@ public class FileOperationService : IFileOperationService
         _version = version;
         _trash = trash;
         _syncLog = syncLog;
+        _conflictBackup = conflictBackup;
         _logger = logger;
     }
 
@@ -247,37 +250,17 @@ public class FileOperationService : IFileOperationService
         string path, Stream content, long length, string? lastModified,
         int baseVersion, int currentVersion, string deviceId)
     {
-        int conflictVersion = await _version.NextVersionAsync();
-
-        // 生成冲突文件名
-        string nameWithoutExt = Path.GetFileNameWithoutExtension(path);
-        string ext = Path.GetExtension(path);
-        string suffix = DateTime.Now.ToString(SpecConfig.ConflictSuffixPattern); // 单源：shared-spec.json → SpecConfig.ConflictSuffixPattern
-        string conflictPath = Path.GetDirectoryName(path)?.Replace('\\', '/') ?? "";
-        if (!conflictPath.EndsWith('/') && !string.IsNullOrEmpty(conflictPath))
+        // 『保存冲突副本』统一经领域辅助 ConflictBackupHelper（T-071：与分块上传 Finalize 行为一致，
+        // 冲突检测 + 路径拼接 + 版本分配 + 原子写 + upsert + 审计单点实现）
+        var conflict = await _conflictBackup.SaveConflictCopyIfNeededAsync(
+            path, baseVersion, currentVersion, content, length, lastModified, deviceId);
+        if (conflict == null)
         {
-            conflictPath += "/";
+            // 防御：UploadService 已保证 baseVersion > 0 且服务端版本更高，理论不触发
+            throw new InvalidOperationException(
+                $"上传冲突处理被调用但未检测到冲突: path={path}, baseVersion={baseVersion}, currentVersion={currentVersion}");
         }
 
-        conflictPath = conflictPath + nameWithoutExt + suffix + ext;
-        if (!conflictPath.StartsWith('/'))
-        {
-            conflictPath = "/" + conflictPath;
-        }
-
-        // 保存冲突副本
-        await _storage.AtomicWriteAsync(conflictPath, content, expectedHash: null);
-
-        string conflictHash = await _storage.ComputeHashAsync(_storage.GetAbsolutePath(conflictPath));
-        var conflictEntry = await _index.UpsertFileAsync(
-            conflictPath, FileType.File, conflictHash, length,
-            lastModified ?? DateTime.UtcNow.ToString("O"), conflictVersion,
-            FileState.Conflict);
-
-        // 写入审计日志（冲突）
-        await _syncLog.LogAsync(path, SyncOperation.Upload, deviceId, LogResult.Conflict,
-            $"客户端 v{baseVersion} vs 服务端 v{currentVersion}，冲突副本: {conflictEntry.Path}");
-
-        return new UploadConflictResult(conflictPath, currentVersion, baseVersion);
+        return new UploadConflictResult(conflict.ConflictPath, conflict.CurrentVersion, conflict.BaseVersion);
     }
 }

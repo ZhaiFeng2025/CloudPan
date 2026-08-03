@@ -70,6 +70,8 @@ builder.Services.AddSingleton<IFileIndexService, FileIndexService>();
 builder.Services.AddSingleton<IVersionService, VersionService>();
 // 『提交新版本』领域辅助（T-051 收敛：Upload/ChunkedUpload/Restore 共用的一致性关键单点）
 builder.Services.AddSingleton<VersionCommitHelper>();
+// 『保存冲突副本』领域辅助（T-071 收敛：Upload/ChunkedUpload 共用，统一检测/命名/原子写/状态标记）
+builder.Services.AddSingleton<ConflictBackupHelper>();
 builder.Services.AddSingleton<IUploadService, UploadService>();
 builder.Services.AddSingleton<ISyncLogService, SyncLogService>();
 builder.Services.AddSingleton<IWebSocketHandler, WebSocketHandler>();

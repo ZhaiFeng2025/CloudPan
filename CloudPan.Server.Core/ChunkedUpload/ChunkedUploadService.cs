@@ -18,6 +18,7 @@ public partial class ChunkedUploadService : IChunkedUploadService
     private readonly IVersionService _version;
     private readonly ISyncLogService _syncLog;
     private readonly VersionCommitHelper _versionCommit;
+    private readonly ConflictBackupHelper _conflictBackup;
 
     public ChunkedUploadService(
         IDbContextFactory<CloudPanDbContext> dbFactory,
@@ -25,7 +26,8 @@ public partial class ChunkedUploadService : IChunkedUploadService
         IFileIndexService index,
         IVersionService version,
         ISyncLogService syncLog,
-        VersionCommitHelper versionCommit)
+        VersionCommitHelper versionCommit,
+        ConflictBackupHelper conflictBackup)
     {
         _dbFactory = dbFactory;
         _storage = storage;
@@ -33,6 +35,7 @@ public partial class ChunkedUploadService : IChunkedUploadService
         _version = version;
         _syncLog = syncLog;
         _versionCommit = versionCommit;
+        _conflictBackup = conflictBackup;
     }
 
     /// <inheritdoc />

@@ -25,6 +25,7 @@ public class FileOperationServiceTests : Infrastructure.TestBase
         var trash = trashOverride ?? new TrashService(storage, index, version, NullLogger<TrashService>.Instance);
         var syncLog = new SyncLogService(dbFactory, NullLogger<SyncLogService>.Instance);
         var svc = new FileOperationService(storage, index, version, trash, syncLog,
+            new ConflictBackupHelper(storage, index, version, syncLog),
             NullLogger<FileOperationService>.Instance);
         return Task.FromResult((svc, index));
     }

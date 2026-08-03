@@ -40,46 +40,21 @@ public partial class ChunkedUploadService
                 "文件校验失败，请重新上传"));
         }
 
-        // c. 冲突检测
+        // c. 冲突检测与冲突副本保存（单一辅助：检测 + 路径拼接 + 版本分配 + 原子写 + upsert + 审计）
         if (baseVersion > 0)
         {
             var existing = await _index.GetByPathAsync(path);
-            if (existing != null && existing.Version > baseVersion)
+            await using var conflictStream = new FileStream(record.TempPath, FileMode.Open, FileAccess.Read);
+            var conflict = await _conflictBackup.SaveConflictCopyIfNeededAsync(
+                path, baseVersion, existing?.Version ?? 0, conflictStream,
+                fileLength, record.LastModified, deviceId);
+            if (conflict != null)
             {
-                // 保存冲突副本
-                int conflictVersion = await _version.NextVersionAsync();
-                string nameWithoutExt = Path.GetFileNameWithoutExtension(path);
-                string ext = Path.GetExtension(path);
-                string suffix = DateTime.Now.ToString(SpecConfig.ConflictSuffixPattern); // 单源：shared-spec.json → SpecConfig
-                string conflictPath = (Path.GetDirectoryName(path)?.Replace('\\', '/') ?? "");
-                if (!conflictPath.EndsWith('/') && !string.IsNullOrEmpty(conflictPath))
-                {
-                    conflictPath += "/";
-                }
-
-                conflictPath = conflictPath + nameWithoutExt + suffix + ext;
-                if (!conflictPath.StartsWith('/'))
-                {
-                    conflictPath = "/" + conflictPath;
-                }
-
-                IOFile.Copy(record.TempPath, _storage.GetAbsolutePath(conflictPath), overwrite: true);
-                string conflictHash = await _storage.ComputeHashAsync(_storage.GetAbsolutePath(conflictPath));
-                long fileSize = new FileInfo(_storage.GetAbsolutePath(conflictPath)).Length;
-                var conflictEntry = await _index.UpsertFileAsync(
-                    conflictPath, FileType.File, conflictHash, fileSize,
-                    lastModified ?? DateTime.UtcNow.ToString("O"), conflictVersion,
-                    FileState.Conflict);
-
                 SafeDeleteTemp(record.TempPath);
                 db.ChunkedUploads.Remove(record);
                 await db.SaveChangesAsync();
 
-                // 审计日志（冲突）
-                await _syncLog.LogAsync(path, SyncOperation.Upload, deviceId, LogResult.Conflict,
-                    $"客户端 v{baseVersion} vs 服务端 v{existing.Version}，冲突副本: {conflictPath}");
-
-                return new ChunkConflictOutcome(path, existing.Version, baseVersion, conflictPath);
+                return new ChunkConflictOutcome(path, conflict.CurrentVersion, baseVersion, conflict.ConflictPath);
             }
         }
 
