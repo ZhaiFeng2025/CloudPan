@@ -1,5 +1,6 @@
 using CloudPan.Client.Core.Models;
 using CloudPan.Client.Core.Services;
+using CloudPan.Infrastructure.Design;
 using Microsoft.Win32;
 
 namespace CloudPan.Client.UI;
@@ -35,12 +36,12 @@ public class TrayAppContext : ApplicationContext
         // 左键→窗口 / 右键→动态构建菜单
         _trayIcon = new NotifyIcon
         {
-            Icon = CloudPanIcon.Create(),
+            Icon = IconFactory.CreateClient(),
             Text = "CloudPan — 文件同步",
             Visible = true
         };
         TrayIcon = _trayIcon;
-        _normalIcon = CloudPanIcon.Create();
+        _normalIcon = IconFactory.CreateClient();
 
         _trayIcon.MouseUp += TrayIcon_MouseUp;
 

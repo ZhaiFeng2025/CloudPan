@@ -41,7 +41,7 @@ public class ServerWindow : Form
         Size = new Size(720, 520);
         MinimumSize = new Size(600, 400);
         StartPosition = FormStartPosition.CenterScreen;
-        Icon = CloudPan.Server.UI.ServerIcons.CreateServer();
+        Icon = IconFactory.CreateServer();
         Font = new Font(CloudPanFonts.FontFamily, CloudPanFonts.SizeBody);
         BackColor = CloudPanColors.BackgroundWhite;
 

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using CloudPan.Infrastructure.Configuration;
+using CloudPan.Infrastructure.Design;
 using CloudPan.Infrastructure.Security;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
@@ -80,7 +81,7 @@ public class ServerTrayApp : ApplicationContext
         // Click 事件触发行为因 Windows 版本而异，MouseClick 最稳定。
         _trayIcon = new NotifyIcon
         {
-            Icon = CloudPan.Server.UI.ServerIcons.CreateServer(),
+            Icon = IconFactory.CreateServer(),
             Text = $"CloudPan Server — {_serverUrl}",
             Visible = true,
             ContextMenuStrip = _trayMenu

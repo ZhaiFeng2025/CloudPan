@@ -310,8 +310,8 @@ public partial class SetupForm
         const int margin = 28;
         int iconY = (76 - iconSize) / 2;
 
-        // 使用 CloudPanIcon 绘制蓝色圆形云朵图标（与系统托盘图标一致）
-        using (var fullIcon = CloudPanIcon.Create())
+        // 使用 IconFactory 绘制蓝色圆形云朵图标（与系统托盘图标一致）
+        using (var fullIcon = IconFactory.CreateClient())
         using (Icon icon = new Icon(fullIcon, iconSize, iconSize))
         {
             g.DrawIcon(icon, margin, iconY);

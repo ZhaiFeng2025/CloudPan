@@ -97,7 +97,7 @@ public partial class MainWindow : Form
         Size = new Size(980, 640);
         MinimumSize = new Size(700, 480);
         StartPosition = FormStartPosition.CenterScreen;
-        Icon = CloudPanIcon.Create();
+        Icon = IconFactory.CreateClient();
         BackColor = CloudPanColors.BackgroundWhite;
         Font = SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont;
 

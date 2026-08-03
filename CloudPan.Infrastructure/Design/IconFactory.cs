@@ -3,14 +3,20 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 
-namespace CloudPan.Server.UI;
+namespace CloudPan.Infrastructure.Design;
 
 /// <summary>
-/// 服务端图标（绿色 + "S" 徽章），运行时自绘（无需外部 .ico 文件）。
-/// 供 Server 项目使用，避免 Server 依赖 Client；绘制逻辑与 Client 的 CloudPanIcon 同源。
+/// 应用图标工厂——两端（CloudPan.Client.UI / CloudPan.Server.UI）共享的唯一实现。
+/// 运行时自绘 CloudPan 图标（无需外部 .ico 文件），支持多尺寸（16/32/64/256）与高 DPI。
+/// 主题色 + 徽章字符参数化：客户端蓝色无徽章（<see cref="CreateClient"/>），服务端绿色 "S" 徽章（<see cref="CreateServer"/>）。
+/// 此前两端各自 311 行同源实现（ServerIcons / CloudPanIcon），改此处两端同时生效。
 /// </summary>
-public static class ServerIcons
+public static class IconFactory
 {
+    private static readonly (Color Top, Color Bottom) BlueTheme = (
+        Color.FromArgb(0x1E, 0x88, 0xE5),
+        Color.FromArgb(0x15, 0x65, 0xC0));
+
     private static readonly (Color Top, Color Bottom) GreenTheme = (
         Color.FromArgb(0x43, 0xA0, 0x47),
         Color.FromArgb(0x2E, 0x7D, 0x32));
@@ -24,13 +30,23 @@ public static class ServerIcons
         (18f / 32f,  9f / 32f, 10f / 32f, 10f / 32f), // 右鼓包
     ];
 
-    /// <summary>生成绿色 + 右下角 "S" 标记的多尺寸服务端图标（16/32/64/256 px）。</summary>
-    public static Icon CreateServer()
+    /// <summary>生成默认蓝色多尺寸图标（16/32/64/256 px，无徽章）。客户端入口。</summary>
+    public static Icon CreateClient()
     {
-        return IconFromBytes(BuildIcoBytes(GreenTheme, 'S'));
+        return Create(BlueTheme, null);
     }
 
-    // ---- 私有实现（与 CloudPan.Client/UI/CloudPanIcon.cs 同源） ----
+    /// <summary>生成绿色 + 右下角 "S" 标记的多尺寸服务端图标（16/32/64/256 px）。服务端入口。</summary>
+    public static Icon CreateServer()
+    {
+        return Create(GreenTheme, 'S');
+    }
+
+    /// <summary>按主题色与徽章字符生成多尺寸图标（16/32/64/256 px）。</summary>
+    public static Icon Create((Color Top, Color Bottom) theme, char? badge)
+    {
+        return IconFromBytes(BuildIcoBytes(theme, badge));
+    }
 
     private static Icon IconFromBytes(byte[] icoData)
     {
