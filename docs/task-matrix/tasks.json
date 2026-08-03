@@ -4169,7 +4169,7 @@
       "title": "删除 409 冲突处理（转冲突提示而非静默丢弃）",
       "dimension": "function",
       "priority": "P3",
-      "status": "in-progress",
+      "status": "acceptance",
       "batch": 7,
       "findingId": "F-126",
       "dependsOn": [],
@@ -4200,7 +4200,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
+      "note": "执行 2026-08-03（task-executor）：T-084 删除 409 冲突处理。\n【核心改动】①ProcessDeleteAsync（SyncEngine.Transfers.cs:304）新增 409 catch——删除时文件被其他设备修改/上传（服务端版本 > baseVersion）转入冲突流程；②SyncEngine.Conflicts.cs 新增 HandleDeleteConflictAsync：构造 ConflictInfo 加入 _pendingConflicts 并触发 ConflictDetected，日志白话提示『文件已被其他设备修改，是否仍删除？』，返回 false（队列项保留但被 _pendingConflicts 跳过，等待用户决策），不删本地副本/快照；③SyncEngine.Changes.cs EnqueueLocalChangeAsync 为 Delete 携带 BaseVersion=快照版本——此前删除恒携带 0，服务端 FileOperationService.DeleteAsync 的 409 永不触发（该分支实为死代码），补齐后删除与并发编辑撞车时服务端真正返回 409，不再静默覆盖其他设备的改动。\n【测试】MockApiClient.DeleteAsync 对齐 FileOperationService.DeleteAsync 语义加 baseVersion 冲突检测（409）；SyncEngineTests 新增 ProcessDelete_服务端409_转入冲突流程不静默丢弃：服务端 v2 / 本机快照 v1 / 本地文件存在 → 入队删除 BaseVersion=1 → 409 → ConflictDetected 触发 1 次、本地副本保留、快照保留、队列项保留。\n【验证】AC1 dotnet test CloudPan.Tests -c Release --filter SyncEngine → 75/75 通过（含新增删除 409 测试）；AC2 grep -n '409|Conflict' CloudPan.Client.Core/Services/SyncEngine.Transfers.cs 命中 :304 删除 409 分支；AC3 dotnet test CloudPan.Tests -c Release → 336/336 全绿（原 335 + 新增 1），dotnet build CloudPan.sln -c Release → Build succeeded 0 警告 0 错误。行数门禁：Transfers.cs 399/400、SyncEngine 聚合 2194/2200 均达标。\n【取舍】删除 409 复用现有 _pendingConflicts/ConflictDetected 冲突通道（未新增专属 UI 对话框），ConflictInfo 不含远程快照信息（RemoteSize/RemoteModifiedTime=null，冲突对话框云盘版本显示未知）——P3 且行数门禁余量限制，未纳入远程信息；用户可经现有冲突列表/解决对话框处理（保留服务端版本即撤销删除）。",
       "updatedAt": "2026-08-03"
     }
   ]
