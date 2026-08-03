@@ -1987,7 +1987,7 @@
       "title": "冲突项不阻塞队列其他传输（解除队列饥饿）",
       "dimension": "function",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 4,
       "findingId": "F-45",
       "dependsOn": [],
@@ -2018,8 +2018,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "修复：ProcessQueueAsync 查询时从候选中剔除 _pendingConflicts 中的冲突路径（冲突项保留 DB，由 OnConflictResolved 解决时清除），冲突项不再占用前 5 槽位，其余传输不被饥饿；循环内冲突检查保留作同路径多操作时防御。改动文件：CloudPan.Client.Core/Services/SyncEngine.Queue.cs、CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增单测 ProcessQueue_待解决冲突5个_上传不被饥饿：5 冲突 + 1 上传 → 上传仍被处理且冲突项保留）。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过（270/270，含 SyncEngine 49/49）。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-046",

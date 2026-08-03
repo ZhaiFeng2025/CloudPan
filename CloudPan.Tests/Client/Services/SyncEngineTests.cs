@@ -504,6 +504,58 @@ public class SyncEngineTests : IDisposable
         Assert.Equal(0, remaining);
     }
 
+    // T-045：冲突项不阻塞队列其他传输——5 个待解决冲突 + 1 上传，上传仍被处理（不再整体饥饿）
+    [Fact]
+    public async Task ProcessQueue_待解决冲突5个_上传不被饥饿()
+    {
+        // 5 个待决策冲突路径写入 _pendingConflicts（模拟 409 后等待用户决策的状态）
+        string[] conflictPaths = Enumerable.Range(0, 5).Select(i => $"/conflict-{i}.txt").ToArray();
+        var pendingField = typeof(SyncEngine).GetField("_pendingConflicts",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(pendingField);
+        var pending = (System.Collections.Concurrent.ConcurrentDictionary<string, ConflictInfo>)pendingField!.GetValue(_engine)!;
+        foreach (string p in conflictPaths)
+        {
+            pending.TryAdd(p, new ConflictInfo(p, Path.Combine(_syncRoot, p.TrimStart('/')), DateTime.UtcNow, null, 10, 10, "hash"));
+        }
+
+        // 队列预置：5 个冲突项（高优先级 + 最早 CreatedAt，修复前恒占前 5 槽位）+ 后续真实上传
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            foreach (string p in conflictPaths)
+            {
+                setupDb.SyncQueue.Add(new SyncQueueItem
+                {
+                    FilePath = p,
+                    Operation = (int)SyncOperation.Upload,
+                    Priority = (int)QueuePriority.High,
+                    CreatedAt = "2026-01-01T00:00:00.0000000Z" // 最早的 CreatedAt → 排序时排最前
+                });
+            }
+            await setupDb.SaveChangesAsync();
+        }
+
+        string uploadPath = Path.Combine(_syncRoot, "not-starved.txt");
+        await File.WriteAllTextAsync(uploadPath, "必须被处理");
+        await _engine.EnqueueLocalChangeAsync("/not-starved.txt", SyncOperation.Upload);
+
+        // 处理队列
+        var method = typeof(SyncEngine).GetMethod("ProcessQueueAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+        Task? task = (Task?)method!.Invoke(_engine, [CancellationToken.None]);
+        Assert.NotNull(task);
+        await task;
+
+        // 上传未被饥饿：已调用上传 API 且队列项已处理移除
+        Assert.True(_api.UploadCalls.ContainsKey("/not-starved.txt"));
+        await using var dbFinal = await _dbFactory.CreateDbContextAsync();
+        Assert.Equal(0, await dbFinal.SyncQueue.CountAsync(q => q.FilePath == "/not-starved.txt"));
+
+        // 冲突项仍保留在 DB（等待用户解决后由 OnConflictResolved 清除）
+        Assert.Equal(5, await dbFinal.SyncQueue.CountAsync(q => conflictPaths.Contains(q.FilePath)));
+    }
+
     // ============================================================
     // 上传冲突检测 BaseVersion 接线测试（F-06）
     // ============================================================

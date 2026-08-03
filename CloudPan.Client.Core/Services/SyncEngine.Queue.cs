@@ -15,7 +15,16 @@ public partial class SyncEngine
     private async Task ProcessQueueAsync(CancellationToken ct)
     {
         await using var db = await _dbFactory.CreateDbContextAsync();
-        var items = await db.SyncQueue
+
+        // T-045：冲突项不占传输名额。待决策冲突路径从候选中剔除（冲突项保留在 DB，
+        // 由 OnConflictResolved 解决时清除），避免冲突堆积 ≥5 个时恒占前 5 槽位、其余传输饥饿。
+        var conflictPaths = _pendingConflicts.Keys.ToList();
+        IQueryable<SyncQueueItem> query = db.SyncQueue;
+        if (conflictPaths.Count > 0)
+        {
+            query = query.Where(q => !conflictPaths.Contains(q.FilePath));
+        }
+        var items = await query
             .OrderByDescending(q => q.Priority)
             .ThenBy(q => q.CreatedAt)
             .Take(5)
