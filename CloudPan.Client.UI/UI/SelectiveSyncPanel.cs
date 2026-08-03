@@ -74,12 +74,12 @@ public class SelectiveSyncPanel : UserControl
         _tree.AfterCheck += OnNodeChecked;
 
         // 空状态面板——树为空时显示提示，避免用户看到空白面板不知所措
-        Panel emptyState = new Panel { Dock = DockStyle.Fill, BackColor = Color.White };
+        Panel emptyState = new Panel { Dock = DockStyle.Fill, BackColor = CloudPanColors.BackgroundWhite };
         Label emptyLabel = new Label
         {
             Text = "尚未从服务端加载目录列表。\n连接服务端后此功能将自动生效。\n\n当前设置：同步根目录下所有文件。",
             TextAlign = ContentAlignment.MiddleCenter,
-            ForeColor = Color.Gray,
+            ForeColor = CloudPanColors.TextSecondary,
             Dock = DockStyle.Fill,
             Padding = new Padding(20),
             Font = new Font(SystemFonts.MessageBoxFont?.FontFamily ?? FontFamily.GenericSansSerif, 9.5F),

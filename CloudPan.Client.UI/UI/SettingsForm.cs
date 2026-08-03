@@ -52,6 +52,9 @@ public class SettingsForm : Form
 
         // 异步计算文件夹大小
         _ = UpdateFolderSizeAsync(syncRoot);
+
+        // T-032 深色模式：接入主题跟随（当前主题归一化 + 系统切换时刷新，含内部 SelectiveSyncPanel 树）
+        ThemeWatcher.Watch(this);
     }
 
     // ──────────────────────────────────────────────
@@ -441,7 +444,7 @@ public class SettingsForm : Form
             Height = CloudPanSpacing.InputHeight,
             FlatStyle = FlatStyle.Flat,
             BackColor = CloudPanColors.PrimaryBlue,
-            ForeColor = Color.White,
+            ForeColor = CloudPanColors.TextOnPrimary,
             Font = new Font(CloudPanFonts.FontFamily, 10F, FontStyle.Bold),
             Cursor = Cursors.Hand,
             UseVisualStyleBackColor = false,
@@ -458,7 +461,7 @@ public class SettingsForm : Form
             Width = CloudPanSpacing.ButtonWidth,
             Height = CloudPanSpacing.InputHeight,
             FlatStyle = FlatStyle.Flat,
-            BackColor = Color.White,
+            BackColor = CloudPanColors.BackgroundWhite,
             ForeColor = CloudPanColors.TextSecondary,
             Font = new Font(CloudPanFonts.FontFamily, CloudPanFonts.SizeBody),
             Cursor = Cursors.Hand,

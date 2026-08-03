@@ -241,6 +241,9 @@ public class ServerWindow : Form
 
         // 首次显示时：刷新数据 + 刷入缓存日志
         Shown += Window_Shown;
+
+        // T-032 深色模式：接入主题跟随（当前主题归一化 + 系统切换时刷新，含内部 SettingsPage 树）
+        ThemeWatcher.Watch(this);
     }
 
     // ===== 具名事件处理器（CP301：避免匿名 lambda 订阅无法退订） =====

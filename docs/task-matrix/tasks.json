@@ -1339,7 +1339,7 @@
       "title": "同步错误白话归因与异常解包",
       "dimension": "ux",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 3,
       "findingId": "F-31",
       "dependsOn": [
@@ -1372,7 +1372,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "同步错误白话归因与异常解包（F-31）：Client.Core 新增 ErrorAttribution 归因模型（Message 白话原因 + NextStep 下一步），从异常递归解包 AggregateException（Flatten 展开全部内层异常，逐条归类取优先级最高者，符合 CLAUDE.md 7.3 不只处理第一个）后映射：HttpRequestException 无状态码→『无法连接到云盘服务』+『请检查台式机是否已开机、云盘服务是否正在运行』；HttpRequestException 401→『登录凭证已失效』+『请打开设置重新配置云盘地址与 Token』；UnauthorizedAccessException→『没有访问权限』+『请检查同步文件夹访问权限』；IOException 磁盘满（HRESULT 0x80070070/文案）→『磁盘空间不足』+『请清理磁盘空间』；404→『找不到文件』；HTTP 其他状态码→『云盘服务返回错误（HTTP n）』；TaskCanceledException→『同步请求超时』；未知异常兜底『同步失败（未知错误）』不露原始异常串。ErrorOccurred 事件载荷由 string 改为 ErrorAttribution，6 处调用点全部接线（Queue 主异常路径 / 最大重试 / 磁盘空间不足 / 下载后文件不存在 / 下载后校验失败 / 冲突保留两者备份失败——后者不再透出 ex.Message）；MainWindow 错误弹窗显示『白话原因 + 下一步』而非 ex.Message。\n改动文件：\n新增 CloudPan.Client.Core/Services/ErrorAttribution.cs；\n修改 CloudPan.Client.Core/Services/SyncEngine.cs（事件签名）、SyncEngine.Queue.cs（:85 主异常路径 ErrorAttribution.FromException、:108 最大重试）、SyncEngine.Transfers.cs（:166/:183/:196 三处归因化）、SyncEngine.Conflicts.cs（:78 不再透出 ex.Message）；\n修改 CloudPan.Client.UI/UI/MainWindow.cs（SyncErrorInfo.Message→Attribution）、MainWindow.Errors.cs（OnErrorOccurred 签名/去重/日志 + ShowErrorPopup 显示下一步）；\n新增 CloudPan.Tests/Client/Services/ErrorAttributionTests.cs（7 用例）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 230/230 通过（原 223 + 新增 7）；dotnet test --filter ErrorAttribution 7/7 通过（网络/权限/磁盘满归因 + AggregateException 嵌套解包 + 多内层取最具体 + 未知异常兜底不露原始串）；CodeQuality+Architecture 11/11 通过。",
+      "note": "同步错误白话归因与异常解包（F-31）：Client.Core 新增 ErrorAttribution 归因模型（Message 白话原因 + NextStep 下一步），从异常递归解包 AggregateException（Flatten 展开全部内层异常，逐条归类取优先级最高者，符合 CLAUDE.md 7.3 不只处理第一个）后映射：HttpRequestException 无状态码→『无法连接到云盘服务』+『请检查台式机是否已开机、云盘服务是否正在运行』；HttpRequestException 401→『登录凭证已失效』+『请打开设置重新配置云盘地址与 Token』；UnauthorizedAccessException→『没有访问权限』+『请检查同步文件夹访问权限』；IOException 磁盘满（HRESULT 0x80070070/文案）→『磁盘空间不足』+『请清理磁盘空间』；404→『找不到文件』；HTTP 其他状态码→『云盘服务返回错误（HTTP n）』；TaskCanceledException→『同步请求超时』；未知异常兜底『同步失败（未知错误）』不露原始异常串。ErrorOccurred 事件载荷由 string 改为 ErrorAttribution，6 处调用点全部接线（Queue 主异常路径 / 最大重试 / 磁盘空间不足 / 下载后文件不存在 / 下载后校验失败 / 冲突保留两者备份失败——后者不再透出 ex.Message）；MainWindow 错误弹窗显示『白话原因 + 下一步』而非 ex.Message。\n改动文件：\n新增 CloudPan.Client.Core/Services/ErrorAttribution.cs；\n修改 CloudPan.Client.Core/Services/SyncEngine.cs（事件签名）、SyncEngine.Queue.cs（:85 主异常路径 ErrorAttribution.FromException、:108 最大重试）、SyncEngine.Transfers.cs（:166/:183/:196 三处归因化）、SyncEngine.Conflicts.cs（:78 不再透出 ex.Message）；\n修改 CloudPan.Client.UI/UI/MainWindow.cs（SyncErrorInfo.Message→Attribution）、MainWindow.Errors.cs（OnErrorOccurred 签名/去重/日志 + ShowErrorPopup 显示下一步）；\n新增 CloudPan.Tests/Client/Services/ErrorAttributionTests.cs（7 用例）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 230/230 通过（原 223 + 新增 7）；dotnet test --filter ErrorAttribution 7/7 通过（网络/权限/磁盘满归因 + AggregateException 嵌套解包 + 多内层取最具体 + 未知异常兜底不露原始串）；CodeQuality+Architecture 11/11 通过。\n【验收结论 2026-08-03】task-verifier 独立裁决：通过。验收标准①『dotnet test --filter ErrorAttribution』实测 7/7 通过（Failed 0 / Passed 7 / Skipped 0），7 用例覆盖验收要求的三类归因 + 递归解包：HttpRequestException 无状态码→『无法连接到云盘服务』（含检查台式机开机/服务运行）、HttpRequestException 401→『登录凭证已失效』、UnauthorizedAccessException→『没有访问权限』、IOException 磁盘满（HRESULT 0x80070070/文案）→『磁盘空间不足』、AggregateException 嵌套解包取内层连接失败归因、AggregateException 多内层取最具体归因、未知异常兜底通用白话不露原始异常串；验收标准②『grep -rn ''class ErrorAttribution'' CloudPan.Client.Core/ 有匹配』实测命中 e:/XiaoFeng/云盘/CloudPan.Client.Core/Services/ErrorAttribution.cs:9（public sealed class ErrorAttribution，Message 白话原因 + NextStep 下一步双字段）；验收标准③『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error。独立核查改动真实性：ErrorAttribution.cs 的 FromException 递归解包 AggregateException（Flatten 展开全部 InnerExceptions 并继续递归，符合 CLAUDE.md 7.3『不只处理第一个』），逐条归类按优先级取最具体一条，兜底不露原始异常串；归因映射完整（连接失败→检查台式机是否开机/服务运行、权限→检查同步文件夹权限、磁盘满→清理空间、401→重新配置 Token、404→文件可能在别处删除、超时→稍后重试）；SyncEngine.cs:101-102 ErrorOccurred 事件载荷由 string 改为 Action<string, ErrorAttribution, SyncOperation>（filePath, 白话归因, operationType），不再透出 ex.Message；MainWindow.Errors.cs:18 OnErrorOccurred 接收 ErrorAttribution、:106-107 ShowErrorPopup 显示『err.Attribution.Message』+『（下一步：err.Attribution.NextStep）』而非 ex.Message；MainWindow.cs:76 SyncErrorInfo.Attribution 属性接线。三条自动标准全过，无手动项。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -1380,7 +1380,7 @@
       "title": "深色模式令牌级切换",
       "dimension": "ux",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 3,
       "findingId": "F-32",
       "dependsOn": [
@@ -1412,8 +1412,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "深色模式令牌级切换（F-32）：令牌层新增深色语义组 + 跟随系统检测 + 归一化解析层；两端 UI 主要窗口经 ThemeWatcher 一行接入，系统主题切换时把控件颜色归一化到当前主题（映射完全在令牌层内部完成，UI 不逐处反色）。\n【令牌层 CloudPan.Infrastructure/Design】①DesignTokens.cs：CloudPanColors 由 static readonly 字段改为属性，浅/深两组（Dark 组深底浅字、状态色提亮、边框略亮于背景以区分层级）；新增 NormalizeToTheme（背景/表面色，White 视作表面→深色表面）与 NormalizeTextToTheme（前景色，TextOnPrimary 白字两主题保持白、系统默认 WindowText=Black 深色下转浅色正文——覆盖服务端 TextBox 仅设 BackColor 未设 ForeColor 场景）；PalettePairs 双向映射表（浅色组内 BackgroundGray/DisabledBg 均 245、BorderLight/ButtonPressBg 均 225 同值，后写者取高频令牌）。②ThemeManager.cs（新）：读注册表 AppsUseLightTheme（0=深色）+ Microsoft.Win32.SystemEvents.UserPreferenceChanged 监听系统主题，暴露 IsDark/ThemeChanged/Initialize/Refresh/ApplyTheme；Infrastructure.csproj 加 Microsoft.Win32.SystemEvents 8.0.0 包。深色组对比度达标 WCAG 1.4.3：TextPrimary(226) on BackgroundLight(36)≈12.9:1、TextSecondary(190)≈8.3:1、TextMuted(160) on BackgroundWhite(32)≈6:1；深色 BackgroundWhite 取 (32,32,32) 而非 (30,30,30)，避开与浅色 TextPrimary(30,30,30) 同值破坏双向映射幂等。\n【两端 UI】新增 ThemeWatcher.cs（CloudPan.Client.UI/UI 与 CloudPan.Server.UI 各一份同构——两端无共享 UI 项目，按规则 8 各自持有）：Watch(form) 一行接入——立即归一化当前主题 + 订阅 ThemeManager.ThemeChanged（具名方法满足 CP301；事件在 SystemEvents 回调线程触发，BeginInvoke 回 UI 线程改控件，符合 CLAUDE.md 7.4），递归归一化 BackColor/ForeColor、ListView 项/子项、Button FlatAppearance。入口接线：客户端 Program.Main 在 ApplicationConfiguration.Initialize() 后调 ThemeManager.Initialize()；服务端 ServerTrayApp 构造调（headless 不创建则不确定）。接入窗口：MainWindow/SetupForm/SettingsForm（客户端）+ ServerWindow/ServerInstaller（服务端）；FileBrowserView/SelectiveSyncPanel/SettingsPage 为 UserControl，随父窗体 Watch 递归覆盖。硬编码替换为令牌：SelectiveSyncPanel 空状态白底→BackgroundWhite、灰字→TextSecondary；SettingsForm 保存按钮白字→TextOnPrimary、取消按钮白底→BackgroundWhite；ServerInstaller 5 处蓝底白字→TextOnPrimary、步骤指示器数字→TextOnPrimary。自绘控件（GlowDot 发光/进度条白字/文件字形）为装饰性绘制，深色下保持可读，不改。\n【测试】新增 CloudPan.Tests/Infrastructure/Design/DesignTokensThemeTests.cs（7 用例：深色语义组存在/浅色幂等/深色下浅色令牌映射为深色对值/白背景与白字歧义分离（White 表面→(32,32,32) 且 NormalizeText 保持白）/系统默认黑字深色转浅正文/双向往返映射/深色组 WCAG 1.4.3 对比度）。\n【验证】dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 237/237 通过（含新增 7 用例）；验收 grep 'Dark|IsDark' CloudPan.Infrastructure/Design/DesignTokens.cs 有匹配（Dark 组/IsDark/Pick/Normalize*）。\n【手动验收项】①Win11 深色系统（设置→个性化→颜色→深色）下启动客户端主窗口/设置窗口/配置窗口与服务端管理窗口/安装向导，确认整体深色、文字可读（正文浅灰、输入框深底浅字、按钮蓝底白字、状态图标颜色可辨识）；②运行中切换系统浅色↔深色，已打开窗口 1-2 秒内整体刷新，列表项/按钮悬停/状态图标颜色同步切换；③浅色系统下 UI 与改版前视觉一致（无回归）。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-033",

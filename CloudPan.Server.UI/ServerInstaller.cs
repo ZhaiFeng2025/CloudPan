@@ -67,14 +67,14 @@ public class ServerInstaller : Form
         _titleLabel = new Label
         {
             Text = "CloudPan 服务端安装",
-            ForeColor = Color.White,
+            ForeColor = CloudPanColors.TextOnPrimary,
             Font = new Font(CloudPanFonts.FontFamily, 16, FontStyle.Bold),
             AutoSize = true
         };
         Label subtitle = new Label
         {
             Text = "将在此计算机上安装文件同步服务",
-            ForeColor = Color.White,
+            ForeColor = CloudPanColors.TextOnPrimary,
             Font = new Font(CloudPanFonts.FontFamily, 9),
             AutoSize = true,
             Location = new Point(24, 48)
@@ -144,7 +144,7 @@ public class ServerInstaller : Form
             Size = new Size(70, 24),
             FlatStyle = FlatStyle.Flat,
             BackColor = CloudPanColors.PrimaryBlue,
-            ForeColor = Color.White,
+            ForeColor = CloudPanColors.TextOnPrimary,
             Cursor = Cursors.Hand
         };
         browseBtn.FlatAppearance.BorderSize = 0;
@@ -221,7 +221,7 @@ public class ServerInstaller : Form
             Anchor = AnchorStyles.Top | AnchorStyles.Right,
             FlatStyle = FlatStyle.Flat,
             BackColor = CloudPanColors.PrimaryBlue,
-            ForeColor = Color.White,
+            ForeColor = CloudPanColors.TextOnPrimary,
             Font = new Font(CloudPanFonts.FontFamily, CloudPanFonts.SizeCaption, FontStyle.Bold),
             Cursor = Cursors.Hand,
             Size = new Size(70, 26)
@@ -256,7 +256,7 @@ public class ServerInstaller : Form
             Size = new Size(CloudPanSpacing.ButtonWidth, CloudPanSpacing.InputHeight),
             Location = new Point(24, 6),
             BackColor = CloudPanColors.PrimaryBlue,
-            ForeColor = Color.White,
+            ForeColor = CloudPanColors.TextOnPrimary,
             FlatStyle = FlatStyle.Flat,
             Font = new Font(CloudPanFonts.FontFamily, 10, FontStyle.Bold),
             Cursor = Cursors.Hand
@@ -292,6 +292,9 @@ public class ServerInstaller : Form
         Controls.Add(bodyPanel);
         Controls.Add(_stepPanel);
         Controls.Add(headerPanel);
+
+        // T-032 深色模式：接入主题跟随（当前主题归一化 + 系统切换时刷新）
+        ThemeWatcher.Watch(this);
     }
 
     // =================================================================
@@ -447,7 +450,7 @@ public class ServerInstaller : Form
             using Font numFont = new Font(CloudPanFonts.FontFamily, 8f, FontStyle.Bold);
             string numText = (i + 1).ToString();
             var numSize = g.MeasureString(numText, numFont);
-            using SolidBrush numBrush = new SolidBrush(filled ? Color.White : circleColor);
+            using SolidBrush numBrush = new SolidBrush(filled ? CloudPanColors.TextOnPrimary : circleColor);
             g.DrawString(numText, numFont, numBrush,
                 cx - numSize.Width / 2, cy - numSize.Height / 2);
 

@@ -115,6 +115,9 @@ public partial class MainWindow : Form
         // 删除撤销窗口（T-014）：5 秒内可撤销，超时隐藏
         _undoTimer = new System.Windows.Forms.Timer { Interval = 5000 };
         _undoTimer.Tick += UndoTimer_Tick;
+
+        // T-032 深色模式：接入主题跟随（当前主题归一化 + 系统切换时刷新）
+        ThemeWatcher.Watch(this);
     }
 
     // ================================================================

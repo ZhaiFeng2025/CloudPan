@@ -32,6 +32,9 @@ public class ServerTrayApp : ApplicationContext
         _app = app;
         _window = window;
 
+        // T-032 深色模式：在 UI 线程订阅系统主题事件（headless 无 UI 时不创建本类，不初始化）
+        ThemeManager.Initialize();
+
         // 启动期设置解析（与服务端 Program.cs 同链：CLI → server-settings.json → 默认）
         (string syncRoot, int port) = StartupSettingsResolver.Resolve(
             app.Configuration.GetValue<string>("SyncRoot"),

@@ -18,6 +18,8 @@
   <ItemGroup>
     <!-- DesignTokens（CloudPan.Infrastructure/Design）仅用 System.Drawing.Color；net8.0-windows 需显式包引用（非 WinForms 项目不自动带 WindowsDesktop 框架） -->
     <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
+    <!-- ThemeManager（CloudPan.Infrastructure/Design）订阅系统主题变更：Microsoft.Win32.SystemEvents.UserPreferenceChanged（非 WinForms，Windows 系统级事件） -->
+    <PackageReference Include="Microsoft.Win32.SystemEvents" Version="8.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.22" />
     <!-- SQLite 原生库：自包含单文件发布必需，解决 DllNotFoundException -->
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.10" />

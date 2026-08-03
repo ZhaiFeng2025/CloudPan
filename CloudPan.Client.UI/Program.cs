@@ -1,6 +1,7 @@
 using CloudPan.Client.Core.Composition;
 using CloudPan.Client.Core.Services;
 using CloudPan.Contract;
+using CloudPan.Infrastructure.Design;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -21,7 +22,10 @@ public static class Program
     {
         ApplicationConfiguration.Initialize();
 
-        // 0. 全局异常处理（防止未处理异常静默崩溃进程）
+        // 0. 系统主题跟随（T-032）：在 UI 线程订阅 SystemEvents，深色模式令牌级整体切换
+        ThemeManager.Initialize();
+
+        // 1. 全局异常处理（防止未处理异常静默崩溃进程）
         Application.ThreadException += StartupFlow.OnThreadException;
         AppDomain.CurrentDomain.UnhandledException += StartupFlow.OnUnhandledException;
         TaskScheduler.UnobservedTaskException += StartupFlow.OnUnobservedTaskException;

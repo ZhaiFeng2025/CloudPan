@@ -190,6 +190,9 @@ public partial class SetupForm : Form
 
         // ====== 键盘快捷键 ======
         AcceptButton = _okButton;
+
+        // T-032 深色模式：接入主题跟随（当前主题归一化 + 系统切换时刷新）
+        ThemeWatcher.Watch(this);
     }
 
     // ════════════════════════════════════════════════════════════════
