@@ -1384,6 +1384,182 @@ public class SyncEngineTests : IDisposable
     }
 
     // ============================================================
+    // 目录重命名快照前缀跟随（T-066）
+    // ============================================================
+
+    // T-066：重命名父目录时子项快照前缀跟随（旧前缀 → 新前缀，内容/版本/落盘标记保留），
+    // 不触发整棵子树重下载/重上传/批量删除
+    [Fact]
+    public async Task ProcessRename_目录重命名_子项快照前缀跟随()
+    {
+        // 预置本地目录 /photos + 子文件 + 快照（目录与子项均曾落盘）
+        string dirPath = Path.Combine(_syncRoot, "photos");
+        Directory.CreateDirectory(Path.Combine(dirPath, "sub"));
+        await File.WriteAllTextAsync(Path.Combine(dirPath, "summer.jpg"), "jpeg-data");
+        await File.WriteAllTextAsync(Path.Combine(dirPath, "sub", "video.mp4"), "mp4-content");
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.AddRange(
+                new RemoteSnapshot { Path = "/photos", Type = (int)FileType.Directory, Size = 0, Version = 5, State = (int)FileState.Synced, IsDownloaded = true },
+                new RemoteSnapshot { Path = "/photos/summer.jpg", Type = (int)FileType.File, Hash = "h1", Size = 9, Version = 5, State = (int)FileState.Synced, IsDownloaded = true },
+                new RemoteSnapshot { Path = "/photos/sub/video.mp4", Type = (int)FileType.File, Hash = "h2", Size = 11, Version = 5, State = (int)FileState.Synced, IsDownloaded = true });
+            await setupDb.SaveChangesAsync();
+        }
+
+        // 本地重命名 /photos → /vacation，入队并处理
+        Directory.Move(dirPath, Path.Combine(_syncRoot, "vacation"));
+        await _engine.EnqueueRenameAsync("/photos", "/vacation");
+        var method = typeof(SyncEngine).GetMethod("ProcessQueueAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+        Task? task = (Task?)method!.Invoke(_engine, [CancellationToken.None]);
+        Assert.NotNull(task);
+        await task;
+
+        await using var dbCheck = await _dbFactory.CreateDbContextAsync();
+        // 旧前缀快照全部移除（目录自身 + 子项）
+        Assert.Null(await dbCheck.RemoteSnapshots.FindAsync("/photos"));
+        Assert.Null(await dbCheck.RemoteSnapshots.FindAsync("/photos/summer.jpg"));
+        Assert.Null(await dbCheck.RemoteSnapshots.FindAsync("/photos/sub/video.mp4"));
+        // 子项快照已跟随到新前缀，字段（哈希/大小/版本/落盘）保留
+        var movedFile = await dbCheck.RemoteSnapshots.FindAsync("/vacation/summer.jpg");
+        Assert.NotNull(movedFile);
+        Assert.Equal("h1", movedFile!.Hash);
+        Assert.Equal(9, movedFile.Size);
+        Assert.Equal(5, movedFile.Version);
+        Assert.True(movedFile.IsDownloaded);
+        var movedDeep = await dbCheck.RemoteSnapshots.FindAsync("/vacation/sub/video.mp4");
+        Assert.NotNull(movedDeep);
+        Assert.Equal("h2", movedDeep!.Hash);
+        Assert.Equal(11, movedDeep.Size);
+        var movedDir = await dbCheck.RemoteSnapshots.FindAsync("/vacation");
+        Assert.NotNull(movedDir);
+        Assert.Equal((int)FileType.Directory, movedDir!.Type);
+        // 无整棵子树的重下载/重上传/删除队列项
+        Assert.Equal(0, await dbCheck.SyncQueue.CountAsync());
+    }
+
+    // T-066：目录重命名处理时清空旧前缀下的未决队列项（watcher 残留 Delete/Upload），
+    // 避免随后产生服务端 404 删除噪音
+    [Fact]
+    public async Task ProcessRename_目录重命名_清空旧前缀未决队列项()
+    {
+        // 预置快照 + 旧前缀下的未决队列项（FullScan 误判删除、watcher 残留上传）
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.AddRange(
+                new RemoteSnapshot { Path = "/photos", Type = (int)FileType.Directory, Version = 5, State = (int)FileState.Synced, IsDownloaded = true },
+                new RemoteSnapshot { Path = "/photos/summer.jpg", Type = (int)FileType.File, Hash = "h1", Size = 9, Version = 5, State = (int)FileState.Synced, IsDownloaded = true });
+            setupDb.SyncQueue.AddRange(
+                new SyncQueue { FilePath = "/photos/summer.jpg", Operation = (int)SyncOperation.Delete, Priority = (int)QueuePriority.High },
+                new SyncQueue { FilePath = "/photos/sub/video.mp4", Operation = (int)SyncOperation.Upload, Priority = (int)QueuePriority.High });
+            await setupDb.SaveChangesAsync();
+        }
+
+        // 本地已重命名
+        Directory.CreateDirectory(Path.Combine(_syncRoot, "photos"));
+        Directory.Move(Path.Combine(_syncRoot, "photos"), Path.Combine(_syncRoot, "vacation"));
+
+        // 反射直接调用 ProcessRenameAsync（不经队列排序，验证其清理逻辑本身）
+        var method = typeof(SyncEngine).GetMethod("ProcessRenameAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+        var item = new SyncQueue { FilePath = "/photos", TargetPath = "/vacation", Operation = (int)SyncOperation.Rename, BaseVersion = 5 };
+        Task? task = (Task?)method!.Invoke(_engine, [item, CancellationToken.None]);
+        Assert.NotNull(task);
+        await task;
+
+        await using var dbCheck = await _dbFactory.CreateDbContextAsync();
+        // 旧前缀未决队列项已清空
+        Assert.Equal(0, await dbCheck.SyncQueue.CountAsync());
+        // 快照已跟随
+        Assert.Null(await dbCheck.RemoteSnapshots.FindAsync("/photos/summer.jpg"));
+        Assert.NotNull(await dbCheck.RemoteSnapshots.FindAsync("/vacation/summer.jpg"));
+    }
+
+    // T-066：目录重命名后子项快照已在新路径 → 远端树反映新路径时不再触发整棵子树重下载
+    [Fact]
+    public async Task ProcessRename_目录重命名后_远端新路径树不触发子项重下载()
+    {
+        // 先执行目录重命名（子项快照前缀跟随）
+        string dirPath = Path.Combine(_syncRoot, "photos");
+        Directory.CreateDirectory(Path.Combine(dirPath, "sub"));
+        await File.WriteAllTextAsync(Path.Combine(dirPath, "summer.jpg"), "jpeg-data");
+        await File.WriteAllTextAsync(Path.Combine(dirPath, "sub", "video.mp4"), "mp4-content");
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.AddRange(
+                new RemoteSnapshot { Path = "/photos", Type = (int)FileType.Directory, Size = 0, Version = 5, State = (int)FileState.Synced, IsDownloaded = true },
+                new RemoteSnapshot { Path = "/photos/summer.jpg", Type = (int)FileType.File, Hash = "h1", Size = 9, Version = 5, State = (int)FileState.Synced, IsDownloaded = true },
+                new RemoteSnapshot { Path = "/photos/sub/video.mp4", Type = (int)FileType.File, Hash = "h2", Size = 11, Version = 5, State = (int)FileState.Synced, IsDownloaded = true });
+            await setupDb.SaveChangesAsync();
+        }
+        Directory.Move(dirPath, Path.Combine(_syncRoot, "vacation"));
+        await _engine.EnqueueRenameAsync("/photos", "/vacation");
+        var processMethod = typeof(SyncEngine).GetMethod("ProcessQueueAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(processMethod);
+        Task? processTask = (Task?)processMethod!.Invoke(_engine, [CancellationToken.None]);
+        Assert.NotNull(processTask);
+        await processTask;
+
+        // 远端树已反映新路径（服务端 Move 已完成），版本与快照相同 → 哈希相同跳过下载
+        var response = new FileTreeResponse(
+            new[]
+            {
+                new FileEntryDto("/vacation/summer.jpg", (int)FileType.File, "h1", 9, 5, DateTime.UtcNow.ToString("O"), (int)FileState.Synced),
+                new FileEntryDto("/vacation/sub/video.mp4", (int)FileType.File, "h2", 11, 5, DateTime.UtcNow.ToString("O"), (int)FileState.Synced)
+            },
+            null, false, 5);
+
+        var method = typeof(SyncEngine).GetMethod("ApplyRemoteChangesAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        Task? task = (Task?)method!.Invoke(_engine, [db, response, CancellationToken.None]);
+        Assert.NotNull(task);
+        await task;
+        await db.SaveChangesAsync();
+
+        // 子项快照版本相等、内容哈希相同 → 不入队下载（无整棵子树重下载）
+        Assert.Equal(0, await db.SyncQueue.CountAsync(q => q.Operation == (int)SyncOperation.Download));
+    }
+
+    // T-066：全量扫描落在重命名未决窗口（本地已改名、Move 未处理）时，不把 rename 判为
+    // delete+create——旧前缀快照本地缺失不入队 Delete，新前缀本地文件不入队 Upload
+    [Fact]
+    public async Task FullScan_未决重命名_不入队删除与上传()
+    {
+        // 场景：目录本地已改名（/photos → /vacation），快照仍在旧前缀、本地文件在新前缀，Move 尚未处理
+        string dirPath = Path.Combine(_syncRoot, "vacation");
+        Directory.CreateDirectory(dirPath);
+        await File.WriteAllTextAsync(Path.Combine(dirPath, "summer.jpg"), "jpeg-data");
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.AddRange(
+                new RemoteSnapshot { Path = "/photos", Type = (int)FileType.Directory, Size = 0, Version = 5, State = (int)FileState.Synced, IsDownloaded = true },
+                new RemoteSnapshot { Path = "/photos/summer.jpg", Type = (int)FileType.File, Hash = "h1", Size = 9, Version = 5, State = (int)FileState.Synced, IsDownloaded = true });
+            // 未决重命名：/photos → /vacation
+            setupDb.SyncQueue.Add(new SyncQueue
+            {
+                FilePath = "/photos", Operation = (int)SyncOperation.Rename, TargetPath = "/vacation",
+                Priority = (int)QueuePriority.High
+            });
+            await setupDb.SaveChangesAsync();
+        }
+
+        await _engine.FullScanAsync();
+
+        await using var dbCheck = await _dbFactory.CreateDbContextAsync();
+        // 旧前缀快照本地缺失 → 不入队 Delete（避免 Delete 先于 Move 到达制造回收站误删竞态 + 404 噪音）
+        Assert.Equal(0, await dbCheck.SyncQueue.CountAsync(q => q.Operation == (int)SyncOperation.Delete));
+        // 新前缀本地文件/目录无快照 → 不入队 Upload（避免 rename 判为 create 整棵子树重复上传）
+        Assert.Equal(0, await dbCheck.SyncQueue.CountAsync(q => q.Operation == (int)SyncOperation.Upload));
+        // 未决重命名项保留（待队列处理）
+        Assert.Equal(1, await dbCheck.SyncQueue.CountAsync(q => q.Operation == (int)SyncOperation.Rename));
+    }
+
+    // ============================================================
     // 选择性同步排除集语义（T-047）
     // ============================================================
 

@@ -332,22 +332,33 @@ public partial class SyncEngine
         await _api.MoveAsync(item.FilePath, item.TargetPath, item.BaseVersion ?? 0, ct);
         await using var db = await _dbFactory.CreateDbContextAsync();
         var snapshot = await db.RemoteSnapshots.FindAsync(item.FilePath);
-        if (snapshot != null)
+
+        if (snapshot != null && snapshot.Type == (int)CloudPan.Contract.FileType.Directory)
         {
-            db.RemoteSnapshots.Remove(snapshot);
+            // T-066：目录重命名——子项快照前缀跟随（旧前缀 → 新前缀，内容/版本跟随），
+            // 并清空旧前缀下的未决队列项，避免整棵子树被误判为删除+新增（重下载/批量删除）。
+            await RewriteSubtreeSnapshotsAsync(db, item);
         }
-        // 为新路径创建快照，避免下次全量扫描将新文件视为"新文件"重新上传
-        db.RemoteSnapshots.Add(new RemoteSnapshot
+        else
         {
-            Path = item.TargetPath,
-            Type = snapshot?.Type ?? (int)CloudPan.Contract.FileType.File,
-            Hash = snapshot?.Hash,
-            Size = snapshot?.Size ?? 0,
-            Version = item.BaseVersion ?? snapshot?.Version ?? 0,
-            State = (int)CloudPan.Contract.FileState.Synced,
-            LastModified = snapshot?.LastModified, // T-036：跟随旧快照的远程修改时间
-            IsDownloaded = true // T-037：重命名目标已在本机落盘
-        });
+            // 单文件（或目录快照缺失）重命名：移除旧快照、按新路径重建
+            if (snapshot != null)
+            {
+                db.RemoteSnapshots.Remove(snapshot);
+            }
+            // 为新路径创建快照，避免下次全量扫描将新文件视为"新文件"重新上传
+            db.RemoteSnapshots.Add(new RemoteSnapshot
+            {
+                Path = item.TargetPath,
+                Type = snapshot?.Type ?? (int)CloudPan.Contract.FileType.File,
+                Hash = snapshot?.Hash,
+                Size = snapshot?.Size ?? 0,
+                Version = item.BaseVersion ?? snapshot?.Version ?? 0,
+                State = (int)CloudPan.Contract.FileState.Synced,
+                LastModified = snapshot?.LastModified, // T-036：跟随旧快照的远程修改时间
+                IsDownloaded = true // T-037：重命名目标已在本机落盘
+            });
+        }
         await db.SaveChangesAsync();
         _logger.LogInformation("重命名完成: {Old} → {New}", item.FilePath, item.TargetPath);
         return true;

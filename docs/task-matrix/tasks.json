@@ -3323,7 +3323,7 @@
       "title": "版本回滚 RestoreAsync 失败路径回滚 DB 索引",
       "dimension": "function",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 6,
       "findingId": "F-79",
       "dependsOn": [],
@@ -3354,7 +3354,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "执行 2026-08-03（task-executor）：问题——RestoreAsync 步骤5 IOFile.Move 覆盖失败时 DB 索引已提交（指向新 hash/version）而磁盘仍旧内容，客户端下轮树同步对齐错误索引永不重传，进入『下载校验失败循环』毒化状态。修复——将 ChunkedUpload Finalize 的 RollbackFinalizeAsync 回滚逻辑提取为 VersionCommitHelper.RollbackCommittedVersionAsync 单点（dbFactory 作方法参数传入，不注入构造函数避免扩散 6 处测试构造点），RestoreAsync Move 失败时经该单点回滚：FileEntry 恢复旧 hash/version/size/LastModified/State + 移除本次存档孤儿 VersionRecord + extraRollbackWork 移除本次回滚记录（Version==newVersion 全局唯一，避免误删历史 RestoredFromVersion 记录）+ finally 清理 tmp；ChunkedUpload 路径委托同一单点，两条路径行为不分叉。改动文件——CloudPan.Server.Core/Versions/VersionCommitHelper.cs（新增 RollbackCommittedVersionAsync，注释 F-21/CLAUDE.md 7.1 7.3）、CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.Finalize.cs（RollbackFinalizeAsync 委托单点，删重复实现）、CloudPan.Server.Core/Versions/VersionHistoryService.cs（步骤5 catch 改为回滚+清理 tmp 后 rethrow）、CloudPan.Tests/Server/Services/VersionHistoryServiceTests.cs（新增 Restore_Move失败_回滚索引保持与磁盘一致：FileShare.Read 锁目标阻止 Move 覆盖、global_version 消费=3 证明走至 Move 阶段、磁盘hash==索引hash、无 RestoredFromVersion 孤儿记录、tmp 清理、锁释放后重试成功）。验证——dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test CloudPan.Tests -c Release EXIT=0（301/301 通过，VersionHistory 过滤 5/5 含新测试）；grep -n 'Rollback|回滚' VersionHistoryService.cs 有失败回滚处理。",
+      "note": "执行 2026-08-03（task-executor）：问题——RestoreAsync 步骤5 IOFile.Move 覆盖失败时 DB 索引已提交（指向新 hash/version）而磁盘仍旧内容，客户端下轮树同步对齐错误索引永不重传，进入『下载校验失败循环』毒化状态。修复——将 ChunkedUpload Finalize 的 RollbackFinalizeAsync 回滚逻辑提取为 VersionCommitHelper.RollbackCommittedVersionAsync 单点（dbFactory 作方法参数传入，不注入构造函数避免扩散 6 处测试构造点），RestoreAsync Move 失败时经该单点回滚：FileEntry 恢复旧 hash/version/size/LastModified/State + 移除本次存档孤儿 VersionRecord + extraRollbackWork 移除本次回滚记录（Version==newVersion 全局唯一，避免误删历史 RestoredFromVersion 记录）+ finally 清理 tmp；ChunkedUpload 路径委托同一单点，两条路径行为不分叉。改动文件——CloudPan.Server.Core/Versions/VersionCommitHelper.cs（新增 RollbackCommittedVersionAsync，注释 F-21/CLAUDE.md 7.1 7.3）、CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.Finalize.cs（RollbackFinalizeAsync 委托单点，删重复实现）、CloudPan.Server.Core/Versions/VersionHistoryService.cs（步骤5 catch 改为回滚+清理 tmp 后 rethrow）、CloudPan.Tests/Server/Services/VersionHistoryServiceTests.cs（新增 Restore_Move失败_回滚索引保持与磁盘一致：FileShare.Read 锁目标阻止 Move 覆盖、global_version 消费=3 证明走至 Move 阶段、磁盘hash==索引hash、无 RestoredFromVersion 孤儿记录、tmp 清理、锁释放后重试成功）。验证——dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test CloudPan.Tests -c Release EXIT=0（301/301 通过，VersionHistory 过滤 5/5 含新测试）；grep -n 'Rollback|回滚' VersionHistoryService.cs 有失败回滚处理。【验收 2026-08-03（task-verifier）】三条验收标准全过：①dotnet test --filter VersionHistory 5/5 通过（含新测试 Restore_Move失败_回滚索引保持与磁盘一致）；②grep 'Rollback|回滚' CloudPan.Server.Core/Versions/VersionHistoryService.cs 有失败回滚处理（L81/85/107/137/146/150/151），步骤5 IOFile.Move 失败 catch → VersionCommitHelper.RollbackCommittedVersionAsync 单点回滚（与分块上传 Finalize 同源）+ extraRollbackWork 移除本次回滚记录（Version==newVersion 全局唯一）+ finally 清理 tmp → rethrow，两条路径行为不分叉；③dotnet test CloudPan.Tests -c Release 301/301 通过、dotnet build CloudPan.sln -c Release Build succeeded（0 错误 0 警告）。独立裁决：验收通过，置 done。",
       "updatedAt": "2026-08-03"
     },
     {
@@ -3362,7 +3362,7 @@
       "title": "目录重命名客户端快照前缀跟随，避免整子树重下载",
       "dimension": "function",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 6,
       "findingId": "F-77",
       "dependsOn": [],
@@ -3388,8 +3388,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
-      "updatedAt": null
+      "note": "执行 2026-08-03（task-executor）：T-066 目录重命名客户端快照前缀跟随。问题——ProcessRenameAsync 重命名目录时只更新目录自身快照，子项快照停留在旧前缀：增量同步把新前缀判为远端新文件→整棵子树重下载；FullScan 把旧前缀判为本地删除→整棵子树删除传播 + 服务端 404 噪音。修复——(1) ProcessRenameAsync 检测目录重命名时经 RewriteSubtreeSnapshotsAsync 将旧前缀全部子项快照（含目录自身）按新前缀重建（内容/版本/落盘跟随），并清空旧前缀下未决队列项（Delete 先于 Move 到达的回收站误删竞态防护）；该方法独立 partial 文件 SyncEngine.Rename.cs 避免行数超限（T-042 门禁 400）。(2) FullScan rename 对齐：收集未决重命名（旧/新前缀），旧前缀快照本地缺失不入队 Delete（消除旧路径 404 删除噪音），新前缀本地文件/目录不入队 Upload/mkdir（避免 rename 判为 create 重复上传）。改动文件——CloudPan.Client.Core/Services/SyncEngine.Transfers.cs（ProcessRenameAsync 目录分支）；CloudPan.Client.Core/Services/SyncEngine.Rename.cs（新增 RewriteSubtreeSnapshotsAsync）；CloudPan.Client.Core/Services/SyncEngine.FullScan.cs（未决重命名收集 + IsUnderAnyPrefix + delete/upload 侧守卫）；CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 4 测试：子项快照前缀跟随/清空旧前缀未决队列/远端新路径树不触发重下载/未决重命名不入队删除与上传）。验证——dotnet build CloudPan.sln -c Release EXIT=0（0 错误 0 警告）；dotnet test CloudPan.Tests -c Release EXIT=0（305/305 通过，SyncEngine 过滤 74/74 含新增 4 测试）。",
+      "updatedAt": "2026-08-03"
     },
     {
       "id": "T-067",

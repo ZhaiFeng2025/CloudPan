@@ -76,6 +76,25 @@ public partial class SyncEngine
         HashSet<string> matchedLocalPaths = new HashSet<string>();
         // 选择性同步（F-23）：CloudOnly 快照路径集合——取消勾选后本地仍残留副本的文件不作为新文件上传
         HashSet<string> cloudOnlyPaths = new HashSet<string>();
+
+        // T-066：目录重命名对齐——收集未决重命名（旧路径 → 目标路径）。全量扫描落在重命名队列
+        // 未决窗口（本地已改名、Move 尚未处理）时，不得把 rename 判为 delete+create：
+        // 旧前缀快照本地缺失不入队 Delete（消除旧路径 404 删除噪音 + Delete 先于 Move 的回收站误删竞态），
+        // 新前缀本地文件不入队 Upload（重命名已由 ProcessRenameAsync 收敛快照，避免整棵子树重复上传）。
+        List<string> pendingRenameOldPaths = new();
+        List<string> pendingRenameNewPaths = new();
+        foreach (var rename in await db.SyncQueue
+            .Where(q => q.Operation == (int)SyncOperation.Rename)
+            .Select(q => new { q.FilePath, q.TargetPath })
+            .ToListAsync(ct))
+        {
+            if (!string.IsNullOrEmpty(rename.TargetPath))
+            {
+                pendingRenameOldPaths.Add(rename.FilePath);
+                pendingRenameNewPaths.Add(rename.TargetPath);
+            }
+        }
+
         int snapshotCount = 0;
 
         List<RemoteSnapshot> batch;
@@ -124,6 +143,15 @@ public partial class SyncEngine
 
                 if (!localFiles.Contains(snapshot.Path) && !localDirs.Contains(snapshot.Path))
                 {
+                    // T-066：目录重命名未决窗口——本地缺失可能只是重命名（本地已改名、Move 未处理），
+                    // 该路径处于未决重命名旧前缀 → 不入队 Delete（服务端已/将移动），
+                    // 消除旧路径 404 删除噪音与 Delete 先于 Move 到达的回收站误删竞态。
+                    if (pendingRenameOldPaths.Count > 0 && IsUnderAnyPrefix(snapshot.Path, pendingRenameOldPaths))
+                    {
+                        _logger.LogDebug("路径处于未决重命名旧前缀，跳过删除判定: {Path}", snapshot.Path);
+                        continue;
+                    }
+
                     // 本地缺失的删除判定（F-37/T-037）：只对『曾落盘且当前缺失』的文件入队 Delete。
                     // 未完成首次下载的快照（IsDownloaded=false）不触发删除传播——远端新文件在下载窗口内
                     // 快照已建但本地无文件，若按旧逻辑判定本地删除会取消未决下载并把服务端唯一副本移入回收站。
@@ -191,6 +219,14 @@ public partial class SyncEngine
                 continue;
             }
 
+            // T-066：目录重命名未决窗口——本地新路径文件可能是未决重命名的目标（快照将随 Move 收敛），
+            // 不得作为新文件判为 create 上传，否则 rename 被误判为 delete+create，整棵子树重复上传。
+            if (pendingRenameNewPaths.Count > 0 && IsUnderAnyPrefix(path, pendingRenameNewPaths))
+            {
+                _logger.LogDebug("路径处于未决重命名新前缀，跳过新文件上传: {Path}", path);
+                continue;
+            }
+
             // 选择性同步（F-23）：跳过 State==CloudOnly 快照对应的本地文件——取消勾选后本地残留副本
             // 若当新文件上传会置回 Synced→下次增量同步打回 CloudOnly→下次扫描重传，形成振荡
             if (cloudOnlyPaths.Contains(path))
@@ -214,6 +250,13 @@ public partial class SyncEngine
         {
             if (matchedLocalPaths.Contains(path))
             {
+                continue;
+            }
+
+            // T-066：目录重命名未决窗口——新前缀本地目录同理跳过 mkdir（rename 目标目录随 Move 建立）
+            if (pendingRenameNewPaths.Count > 0 && IsUnderAnyPrefix(path, pendingRenameNewPaths))
+            {
+                _logger.LogDebug("路径处于未决重命名新前缀，跳过目录同步: {Path}", path);
                 continue;
             }
 
@@ -322,5 +365,23 @@ public partial class SyncEngine
                    || path.Equals(sp.TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
         });
         return !excluded;
+    }
+
+    /// <summary>
+    /// T-066：判断路径是否位于任一前缀（未决重命名的旧前缀/新前缀）覆盖的子树内。
+    /// 前缀归一化为目录边界（"/photos" → "/photos/"），避免误伤相似路径（"/photosx"）。
+    /// </summary>
+    private static bool IsUnderAnyPrefix(string path, IReadOnlyList<string> prefixes)
+    {
+        string normalized = path.TrimEnd('/') + "/";
+        foreach (string prefix in prefixes)
+        {
+            string p = prefix.TrimEnd('/') + "/";
+            if (normalized.StartsWith(p, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 }
