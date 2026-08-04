@@ -5297,7 +5297,7 @@
       "title": "Android 文件列表每文件同步状态图标 + 汇总进度（消费 FileEntryDto.state）",
       "dimension": "ux",
       "priority": "P2",
-      "status": "in-progress",
+      "status": "acceptance",
       "batch": 9,
       "findingId": "F-149",
       "dependsOn": [],
