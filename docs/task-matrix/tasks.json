@@ -5297,7 +5297,7 @@
       "title": "Android 文件列表每文件同步状态图标 + 汇总进度（消费 FileEntryDto.state）",
       "dimension": "ux",
       "priority": "P2",
-      "status": "todo",
+      "status": "in-progress",
       "batch": 9,
       "findingId": "F-149",
       "dependsOn": [],
@@ -5328,8 +5328,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "对应批次 8 承诺项（Android 状态图标进批次 9）；FileEntryDto.state 由 T-039 契约对齐已生成。",
-      "updatedAt": null
+      "note": "执行(T-107)：改动文件清单——CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt（新增 FILE_STATE_* 常量 + syncStateChannel/syncStateLabel/syncSummary 三个 helper；ListItem supportingContent 叠加状态图标；列表顶部新增同步汇总行）。验证：AC1 grep 通过（grep -n \"\\.state\\|FileState\" FileListScreen.kt 命中 4 处渲染分支：syncStateChannel(file.state)/syncStateLabel(file.state)/syncSummary 统计）；AC3 gradle 环境：gradlew 可引导(Gradle 8.4 + JDK17)，但 Android SDK 缺失（local.properties 指向 C:/Users/Administrator/AppData/Local/Android/Sdk 不存在）→ assembleDebug 无法执行，以 grep/语法审查代替。语义：对齐 Windows ResolveBrowseState（Synced=✓绿 Modified/Uploading/Downloading/Deleting=↻蓝 CloudOnly=☁灰 Conflict=!橙，图标+颜色双通道 WCAG 1.4.1）。Deleting 映射为进行中蓝通道（Windows 默认分支为✓绿，语义上删除中非已完成，有意偏离）。",
+      "updatedAt": "2026-08-04"
     },
     {
       "id": "T-108",

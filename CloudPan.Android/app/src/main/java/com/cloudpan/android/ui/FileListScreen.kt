@@ -83,6 +83,61 @@ private fun formatTimestamp(iso: String): String {
 private fun fileName(path: String): String =
     path.trimEnd('/').substringAfterLast('/').ifEmpty { "/" }
 
+// ---- T-107：文件同步状态（FileEntryDto.state，与 shared-spec.json → CloudPan.Contract.FileState 一致） ----
+
+private const val FILE_STATE_SYNCED = 0
+private const val FILE_STATE_MODIFIED = 1
+private const val FILE_STATE_DELETING = 2
+private const val FILE_STATE_CLOUD_ONLY = 3
+private const val FILE_STATE_DOWNLOADING = 4 // 客户端瞬态，服务端不落库
+private const val FILE_STATE_UPLOADING = 5   // 客户端瞬态，服务端不落库
+private const val FILE_STATE_CONFLICT = 7
+
+/** 同步状态 →（图标, 颜色）双通道。与 Windows ResolveBrowseState 同语义（visual-kb §5：不只靠颜色，WCAG 1.4.1）。 */
+private fun syncStateChannel(state: Int): Pair<ImageVector, Color> = when (state) {
+    FILE_STATE_MODIFIED, FILE_STATE_UPLOADING, FILE_STATE_DOWNLOADING, FILE_STATE_DELETING ->
+        Icons.Default.Sync to Color(0xFF2196F3)     // 进行中（对齐 AccentBlue）
+    FILE_STATE_CLOUD_ONLY -> Icons.Default.Cloud to Color(0xFF757575) // 仅云端（对齐 TextMuted）
+    FILE_STATE_CONFLICT -> Icons.Default.Warning to Color(0xFFFF9800) // 冲突（对齐 WarningOrange）
+    else -> Icons.Default.Check to Color(0xFF4CAF50) // 已同步（对齐 SuccessGreen）
+}
+
+/** 同步状态无障碍文案。 */
+private fun syncStateLabel(state: Int): String = when (state) {
+    FILE_STATE_MODIFIED -> "已修改"
+    FILE_STATE_DELETING -> "删除中"
+    FILE_STATE_CLOUD_ONLY -> "仅云端"
+    FILE_STATE_DOWNLOADING -> "下载中"
+    FILE_STATE_UPLOADING -> "上传中"
+    FILE_STATE_CONFLICT -> "冲突"
+    else -> "已同步"
+}
+
+/**
+ * T-107：当前列表同步汇总（仅统计文件，不含文件夹）。返回（图标, 颜色, 文案）；
+ * 无文件时返回 null 不渲染。文案给家人『备份完成』感知，如「已备份 3 项 · 备份完成」。
+ */
+private fun syncSummary(files: List<FileEntryDto>): Triple<ImageVector, Color, String>? {
+    val states = files.mapNotNull { if (it.type == 0) it.state else null }
+    if (states.isEmpty()) return null
+    val total = states.size
+    val synced = states.count { it == FILE_STATE_SYNCED }
+    val conflicts = states.count { it == FILE_STATE_CONFLICT }
+    val inFlight = states.count {
+        it == FILE_STATE_MODIFIED || it == FILE_STATE_UPLOADING ||
+            it == FILE_STATE_DOWNLOADING || it == FILE_STATE_DELETING
+    }
+    val parts = mutableListOf("已备份 $synced 项")
+    if (conflicts > 0) parts.add("$conflicts 项冲突")
+    if (synced == total) parts.add("备份完成") else if (inFlight > 0) parts.add("$inFlight 项同步中")
+    val (icon, color) = when {
+        conflicts > 0 -> Icons.Default.Warning to Color(0xFFFF9800)
+        inFlight > 0 -> Icons.Default.Sync to Color(0xFF2196F3)
+        else -> Icons.Default.Check to Color(0xFF4CAF50)
+    }
+    return Triple(icon, color, parts.joinToString(" · "))
+}
+
 /** 文件排序。 */
 private fun sortFiles(list: List<FileEntryDto>, sortBy: String): List<FileEntryDto> = when (sortBy) {
     "size" -> list.sortedByDescending { it.size }
@@ -907,6 +962,27 @@ fun FileListScreen(
                     )
                 }
 
+                // T-107：同步汇总（已备份 N 项/冲突 M 项），图标+颜色双通道给家人『备份完成』感知
+                val summary = syncSummary(files)
+                if (summary != null) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            summary.first, null,
+                            modifier = Modifier.size(16.dp),
+                            tint = summary.second
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            summary.third,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = summary.second
+                        )
+                    }
+                }
+
                 // T-059：仅当分页已翻完（!hasMore）且无子项时才显示空状态；
                 // 若首屏直系子项为空但 hasMore 仍为真，则继续走 LazyColumn 触发增量加载
                 if (files.isEmpty() && !isRefreshing && !hasMore) {
@@ -1002,12 +1078,25 @@ fun FileListScreen(
                                     }
                                 },
                                 supportingContent = {
-                                    Text(
-                                        formatSize(file.size) +
-                                        if (file.type == 0)
-                                            " · ${formatTimestamp(file.lastModified)}" else "",
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            formatSize(file.size) +
+                                            if (file.type == 0)
+                                                " · ${formatTimestamp(file.lastModified)}" else "",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                        if (file.type == 0) {
+                                            // T-107：同步状态图标（图标+颜色双通道，对齐 Windows ResolveBrowseState）
+                                            val (stateIcon, stateColor) = syncStateChannel(file.state)
+                                            Spacer(Modifier.width(6.dp))
+                                            Icon(
+                                                stateIcon,
+                                                syncStateLabel(file.state),
+                                                modifier = Modifier.size(14.dp),
+                                                tint = stateColor
+                                            )
+                                        }
+                                    }
                                 },
                                 colors = ListItemDefaults.colors(
                                     containerColor = if (isSelected)
