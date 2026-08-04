@@ -4939,7 +4939,7 @@
       "title": "删除冲突对话框补齐『仍删除（强制）』选项 + 远程版本信息 + 缺失文件容错",
       "dimension": "function",
       "priority": "P1",
-      "status": "in-progress",
+      "status": "acceptance",
       "batch": 9,
       "findingId": "F-140",
       "dependsOn": [],
@@ -4975,7 +4975,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "取舍：删除冲突『强制删除走 baseVersion=0』对齐 Android 弹窗语义（服务端 baseVersion=0=不校验，语义正确），并顺带修复 7.3 异常恢复路径（FileNotFoundException 逃逸）。",
+      "note": "取舍：删除冲突『强制删除走 baseVersion=0』对齐 Android 弹窗语义（服务端 FileOperationService.DeleteAsync 仅 baseVersion>0 才做冲突检测，baseVersion=0=不校验直接删，语义正确），并顺带修复 7.3 异常恢复路径（FileNotFoundException 逃逸）。\n执行（T-098）：改动文件清单——CloudPan.Client.Core/Services/SyncEngine.cs（ConflictInfo 追加 Operation 字段=SyncOperation? 标识删除冲突；ConflictResolution 追加 ForceDelete）；CloudPan.Client.Core/Services/SyncEngine.Conflicts.cs（HandleDeleteConflictAsync 改 async：①从本地快照填充 RemoteHash/RemoteSize/RemoteModifiedTime（对齐上传冲突 409 分支语义），对话框云盘版本显示真实值；②catch FileNotFoundException——本地文件已被其他路径删除/重命名竞态时跳过冲突入列、经 ErrorOccurred 触发服务端 409 白话提示、返回 true 处理完成不抛异常；③ConflictInfo.Operation=SyncOperation.Delete 标记删除冲突；OnConflictResolved 追加 ForceDelete 分支入队 Delete+BaseVersion=0 强制删除）；CloudPan.Client.UI/UI/ConflictResolutionDialog.cs（conflict.Operation==SyncOperation.Delete 时在对比版本后追加『仍删除（强制）』按钮→ResolveConflict(ForceDelete)，红色边框对齐 Android 弹窗）；CloudPan.Client.UI/UI/MainWindow.Conflicts.cs（ResolveConflict 日志 switch 加 ForceDelete 分支）；CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 _errorHandler 字段+Dispose 退订+InvokeProcessQueueAsync 辅助，+3 测试：ProcessDelete_服务端409_选择仍删除强制_以baseVersion0强制删除（ForceDelete→入队 Delete baseVersion=0→服务端/本地/快照全删）、ProcessDelete_服务端409_冲突信息带真实远程版本（RemoteHash/RemoteSize/RemoteModifiedTime/Operation 断言）、ProcessDelete_服务端409_本地文件缺失_不抛异常给白话提示（不触发冲突、ErrorOccurred 白话提示、队列移除不重试））。验证：dotnet test --filter 'SyncEngine|Conflict' 83/83 通过（含新 3 测试）；grep ConflictResolutionDialog.cs 含『仍删除』、SyncEngine.Conflicts.cs 含 RemoteHash/RemoteSize/FileNotFoundException 有匹配；dotnet test CloudPan.Tests -c Release 346/346 通过（原 343+新 3）；dotnet build CloudPan.sln -c Release 0 错误 0 警告。commit a4bf344。",
       "updatedAt": "2026-08-04"
     },
     {
