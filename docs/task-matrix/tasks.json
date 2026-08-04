@@ -4939,7 +4939,7 @@
       "title": "删除冲突对话框补齐『仍删除（强制）』选项 + 远程版本信息 + 缺失文件容错",
       "dimension": "function",
       "priority": "P1",
-      "status": "todo",
+      "status": "in-progress",
       "batch": 9,
       "findingId": "F-140",
       "dependsOn": [],
@@ -4976,7 +4976,7 @@
       "attempts": 0,
       "statusReason": null,
       "note": "取舍：删除冲突『强制删除走 baseVersion=0』对齐 Android 弹窗语义（服务端 baseVersion=0=不校验，语义正确），并顺带修复 7.3 异常恢复路径（FileNotFoundException 逃逸）。",
-      "updatedAt": null
+      "updatedAt": "2026-08-04"
     },
     {
       "id": "T-099",

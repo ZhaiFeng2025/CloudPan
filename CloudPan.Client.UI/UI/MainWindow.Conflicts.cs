@@ -154,6 +154,7 @@ public partial class MainWindow
             ConflictResolution.KeepLocal => $"冲突解决: 保留本机版本 — {fileName}",
             ConflictResolution.KeepRemote => $"冲突解决: 保留服务端版本 — {fileName}",
             ConflictResolution.KeepBoth => $"冲突解决: 保留两者 — {fileName}",
+            ConflictResolution.ForceDelete => $"冲突解决: 仍删除（强制） — {fileName}",
             _ => $"冲突解决: {fileName}"
         });
 

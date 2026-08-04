@@ -172,6 +172,30 @@ internal static class ConflictResolutionDialog
         optionPanel.Controls.Add(btnCompare, 0, 3);
         optionPanel.Controls.Add(BuildOptionDesc("同时打开本机与云盘两个版本查看后再决定"), 1, 3);
 
+        // T-098：删除冲突（队列项为 Delete 操作，HandleDeleteConflictAsync 标记 Operation）——
+        // 追加『仍删除（强制）』选项，对齐 Android 弹窗语义（baseVersion=0 强制删除），
+        // 让用户从冲突对话框完成删除意图，不再被迫撤销删除。
+        if (conflict.Operation == SyncOperation.Delete)
+        {
+            optionPanel.RowCount = 5;
+            Button btnForceDelete = new Button
+            {
+                Text = "仍删除（强制）",
+                Height = 32,
+                Dock = DockStyle.Fill,
+                FlatStyle = FlatStyle.Flat,
+            };
+            btnForceDelete.FlatAppearance.BorderColor = CloudPanColors.ErrorRed;
+            void OnForceDeleteClick(object? s, EventArgs e)
+            {
+                dialog.Close();
+                window.ResolveConflict(conflict, ConflictResolution.ForceDelete);
+            }
+            btnForceDelete.Click += OnForceDeleteClick;
+            optionPanel.Controls.Add(btnForceDelete, 0, 4);
+            optionPanel.Controls.Add(BuildOptionDesc("强制删除云盘上的文件（其他设备的修改会丢失）"), 1, 4);
+        }
+
         layout.Controls.Add(optionPanel, 0, 4);
 
         // 安全默认：默认「保留两者」（不丢任何内容），回车即按推荐项解决

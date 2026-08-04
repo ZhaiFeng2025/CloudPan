@@ -56,6 +56,9 @@ public class SyncEngineTests : IDisposable
     /// <summary>重配引导测试事件处理器（Dispose 中退订，满足 CP300 事件订阅可退订规则）。</summary>
     private Action? _reconfigHandler;
 
+    /// <summary>同步错误测试事件处理器（T-098：删除冲突本地文件缺失容错断言白话提示）。</summary>
+    private Action<string, ErrorAttribution, SyncOperation>? _errorHandler;
+
     public void Dispose()
     {
         if (_conflictHandler != null)
@@ -66,7 +69,22 @@ public class SyncEngineTests : IDisposable
         {
             _engine.ReconfigurationRequired -= _reconfigHandler;
         }
+        if (_errorHandler != null)
+        {
+            _engine.ErrorOccurred -= _errorHandler;
+        }
         try { Directory.Delete(_tempDir, recursive: true); } catch { }
+    }
+
+    /// <summary>反射调用内部 ProcessQueueAsync（现有测试通用模式）。</summary>
+    private async Task InvokeProcessQueueAsync()
+    {
+        var method = typeof(SyncEngine).GetMethod("ProcessQueueAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+        Task? task = (Task?)method!.Invoke(_engine, [CancellationToken.None]);
+        Assert.NotNull(task);
+        await task;
     }
 
     // ============================================================
@@ -814,6 +832,157 @@ public class SyncEngineTests : IDisposable
             Assert.NotNull(await dbFinal.RemoteSnapshots.FindAsync("/del-conflict.txt"));
             int remaining = await dbFinal.SyncQueue.CountAsync(q => q.FilePath == "/del-conflict.txt");
             Assert.Equal(1, remaining);
+        }
+    }
+
+    // T-098：删除冲突『仍删除（强制）』——用户从冲突对话框选择 ForceDelete，
+    // 以 baseVersion=0 入队强制删除：服务端直接删（不校验版本）、本地删除、快照清理。
+    [Fact]
+    public async Task ProcessDelete_服务端409_选择仍删除强制_以baseVersion0强制删除()
+    {
+        // 服务端 v2（另一设备已修改），本机快照 v1，本地文件存在（删除意图真实）
+        string filePath = Path.Combine(_syncRoot, "del-force.txt");
+        await File.WriteAllTextAsync(filePath, "本地待删内容");
+        _api.Files["/del-force.txt"] = ("hash-v2", 8, 2);
+
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.Add(new RemoteSnapshot
+            {
+                Path = "/del-force.txt", Type = (int)FileType.File,
+                Size = new FileInfo(filePath).Length, Version = 1,
+                State = (int)FileState.Synced, Hash = "hash-v1"
+            });
+            await setupDb.SaveChangesAsync();
+        }
+
+        await _engine.EnqueueLocalChangeAsync("/del-force.txt", SyncOperation.Delete);
+
+        // 第一次处理队列 → 服务端 409 → 转入冲突流程（删除未生效）
+        await InvokeProcessQueueAsync();
+        Assert.True(File.Exists(filePath));
+
+        // 用户选择『仍删除（强制）』
+        await _engine.OnConflictResolved("/del-force.txt", ConflictResolution.ForceDelete);
+
+        // 新队列项为 Delete + BaseVersion=0（强制，不校验版本）
+        await using (var dbAfterResolve = await _dbFactory.CreateDbContextAsync())
+        {
+            var item = await dbAfterResolve.SyncQueue.FirstOrDefaultAsync(q => q.FilePath == "/del-force.txt");
+            Assert.NotNull(item);
+            Assert.Equal((int)SyncOperation.Delete, item!.Operation);
+            Assert.Equal(0, item.BaseVersion);
+        }
+
+        // 第二次处理队列 → baseVersion=0 → 服务端直接删除 + 本地删除 + 快照清理
+        await InvokeProcessQueueAsync();
+
+        Assert.False(_api.Files.ContainsKey("/del-force.txt")); // 服务端已删
+        Assert.False(File.Exists(filePath)); // 本地已删
+        await using (var dbFinal = await _dbFactory.CreateDbContextAsync())
+        {
+            Assert.Null(await dbFinal.RemoteSnapshots.FindAsync("/del-force.txt")); // 快照已清理
+            Assert.Equal(0, await dbFinal.SyncQueue.CountAsync(q => q.FilePath == "/del-force.txt")); // 队列已空
+        }
+    }
+
+    // T-098：删除冲突远程版本信息从本地快照填充——RemoteHash/RemoteSize/RemoteModifiedTime
+    // 为真实值而非『未知』（对齐上传冲突 409 语义），冲突对话框云盘版本面板展示真实值。
+    [Fact]
+    public async Task ProcessDelete_服务端409_冲突信息带真实远程版本()
+    {
+        string filePath = Path.Combine(_syncRoot, "del-remote.txt");
+        await File.WriteAllTextAsync(filePath, "本地待删内容");
+        _api.Files["/del-remote.txt"] = ("hash-v2", 8, 2);
+
+        DateTime remoteModifiedUtc = new DateTime(2026, 8, 2, 9, 30, 0, DateTimeKind.Utc);
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.Add(new RemoteSnapshot
+            {
+                Path = "/del-remote.txt", Type = (int)FileType.File,
+                Size = new FileInfo(filePath).Length, Version = 1,
+                State = (int)FileState.Synced, Hash = "hash-v1",
+                LastModified = remoteModifiedUtc.ToString("O") // 快照记录远程真实修改时间
+            });
+            await setupDb.SaveChangesAsync();
+        }
+
+        await _engine.EnqueueLocalChangeAsync("/del-remote.txt", SyncOperation.Delete);
+
+        ConflictInfo? conflictInfo = null;
+        _conflictHandler = ci => { conflictInfo = ci; };
+        _engine.ConflictDetected += _conflictHandler;
+        try
+        {
+            await InvokeProcessQueueAsync();
+        }
+        finally
+        {
+            _engine.ConflictDetected -= _conflictHandler;
+            _conflictHandler = null;
+        }
+
+        Assert.NotNull(conflictInfo);
+        Assert.Equal(SyncOperation.Delete, conflictInfo!.Operation); // 删除冲突标记（UI 识别依据）
+        Assert.Equal("hash-v1", conflictInfo.RemoteHash); // 远程哈希来自快照，非「未知」
+        Assert.Equal(new FileInfo(filePath).Length, conflictInfo.RemoteFileSize);
+        Assert.NotNull(conflictInfo.RemoteModifiedTime);
+        Assert.Equal(remoteModifiedUtc, conflictInfo.RemoteModifiedTime!.Value.ToUniversalTime());
+    }
+
+    // T-098：删除冲突本地文件缺失容错——409 到达前本地文件已被其他路径删除（双删/重命名竞态），
+    // FileNotFoundException 不逃逸到 ProcessQueueAsync 泛化 catch：跳过冲突入列、
+    // 按服务端 409 白话提示返回处理结果、不抛异常（CLAUDE.md 7.3 异常恢复路径）。
+    [Fact]
+    public async Task ProcessDelete_服务端409_本地文件缺失_不抛异常给白话提示()
+    {
+        string filePath = Path.Combine(_syncRoot, "del-gone.txt");
+        await File.WriteAllTextAsync(filePath, "将被删除");
+        _api.Files["/del-gone.txt"] = ("hash-v2", 8, 2);
+
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.Add(new RemoteSnapshot
+            {
+                Path = "/del-gone.txt", Type = (int)FileType.File,
+                Size = new FileInfo(filePath).Length, Version = 1,
+                State = (int)FileState.Synced, Hash = "hash-v1"
+            });
+            await setupDb.SaveChangesAsync();
+        }
+
+        await _engine.EnqueueLocalChangeAsync("/del-gone.txt", SyncOperation.Delete);
+
+        // 模拟 409 到达前本地文件被其他路径删除/重命名（双删/重命名竞态）
+        File.Delete(filePath);
+
+        int conflictCount = 0;
+        ErrorAttribution? attribution = null;
+        SyncOperation? errOp = null;
+        _conflictHandler = _ => conflictCount++;
+        _engine.ConflictDetected += _conflictHandler;
+        _errorHandler = (p, a, o) => { attribution = a; errOp = o; };
+        _engine.ErrorOccurred += _errorHandler;
+        try
+        {
+            await InvokeProcessQueueAsync(); // 不抛异常（FileNotFoundException 被捕获）
+        }
+        finally
+        {
+            _engine.ConflictDetected -= _conflictHandler;
+            _conflictHandler = null;
+            _engine.ErrorOccurred -= _errorHandler;
+            _errorHandler = null;
+        }
+
+        Assert.Equal(0, conflictCount); // 跳过冲突入列（本地文件缺失，无本地版本可展示）
+        Assert.NotNull(attribution); // 服务端 409 白话提示已触发
+        Assert.Equal(SyncOperation.Delete, errOp);
+        // 队列项处理完成（返回 true 移除），不再死循环重试
+        await using (var dbFinal = await _dbFactory.CreateDbContextAsync())
+        {
+            Assert.Equal(0, await dbFinal.SyncQueue.CountAsync(q => q.FilePath == "/del-gone.txt"));
         }
     }
 

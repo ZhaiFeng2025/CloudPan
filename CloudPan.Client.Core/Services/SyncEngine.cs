@@ -15,7 +15,9 @@ public record ConflictInfo(
     DateTime? RemoteModifiedTime,
     long LocalFileSize,
     long? RemoteFileSize,
-    string? RemoteHash
+    string? RemoteHash,
+    /// <summary>产生冲突的同步操作（删除冲突为 Delete，普通编辑冲突为 null）。UI 据此识别删除冲突追加『仍删除（强制）』选项（T-098）。</summary>
+    SyncOperation? Operation = null
 );
 
 /// <summary>同步引擎状态详情——包含阶段、文件级进度、字节级进度、当前传输文件和传输速率。</summary>
@@ -38,7 +40,9 @@ public enum ConflictResolution
     /// <summary>保留服务端版本，覆盖本地。</summary>
     KeepRemote,
     /// <summary>保留两者——本地文件重命名备份，下载服务端版本到原始路径。</summary>
-    KeepBoth
+    KeepBoth,
+    /// <summary>仍删除（强制）：仅删除冲突可选——以 baseVersion=0 强制删除服务端并删除本地（对齐 Android 弹窗语义）。</summary>
+    ForceDelete
 }
 
 /// <summary>
