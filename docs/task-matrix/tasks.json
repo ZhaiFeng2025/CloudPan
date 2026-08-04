@@ -4749,7 +4749,7 @@
       "title": "Serilog 装配单源化 + CentralPackageVersions 统一版本",
       "dimension": "simplicity",
       "priority": "P2",
-      "status": "in-progress",
+      "status": "acceptance",
       "batch": 8,
       "findingId": "F-138",
       "dependsOn": [],
@@ -4779,7 +4779,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
+      "note": "改动文件：Directory.Build.props（Serilog 系列版本单源化，$(SerilogVersion) 等 5 个常量）；新增 CloudPan.Infrastructure/Logging/SerilogFactory.cs（WriteTo.Console+WriteTo.File+输出模板唯一装配点）；Infrastructure.csproj（新增 Serilog/Sinks 引用）；ClientBootstrap.cs 与 Server.Host/Program.cs（改调 SerilogFactory.CreateLogger，客户端无 Microsoft 覆盖、服务端保留 Microsoft/Microsoft.AspNetCore→Warning 既有策略）；Client.Core/Server.UI/Server.Host csproj（Serilog 系列版本改 $(...) 引用，sinks 移至 Infrastructure）。验证：grep 'Serilog' Directory.Build.props 见 CentralPackageVersions 条目；grep 'LoggerConfiguration' 两端装配点无匹配；dotnet build CloudPan.sln -c Release 全绿（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 343/343 通过。取舍：NuGet CPM 实测为全仓库启用（Directory.Build.props 中 ManagePackageVersionsCentrally 不生效，且启用会强制 NU1008 集中全部约 28 包），超出本任务 Serilog-only 范围，故用 MSBuild 属性常量单源化（等价效果、零侵入）。",
       "updatedAt": "2026-08-04"
     }
   ]
