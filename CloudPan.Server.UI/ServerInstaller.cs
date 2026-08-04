@@ -5,29 +5,38 @@ namespace CloudPan.Server.UI;
 
 /// <summary>
 /// 服务端安装向导——带界面的安装程序。
+/// 安装步骤/安装流程外提为 ServerInstallSteps/ServerInstallFlow 协作类（T-110）。
 /// </summary>
 public partial class ServerInstaller : Form
 {
     private readonly Label _titleLabel = null!;
-    private readonly Label _statusLabel = null!;
-    private readonly ProgressBar _progressBar = null!;
-    private readonly Button _installBtn = null!;
-    private readonly Button _closeBtn = null!;
-    private readonly TextBox _tokenBox = null!;
-    private readonly Panel _tokenPanel = null!;
-    private readonly Panel _tokenBorder = null!;
-    private readonly Panel _stepPanel = null!;
-    private readonly Panel _tokenArea = null!; // 用于 InstallAsync 中控制可见性
+    internal readonly Label _statusLabel = null!;
+    internal readonly ProgressBar _progressBar = null!;
+    internal readonly Button _installBtn = null!;
+    internal readonly Button _closeBtn = null!;
+    internal readonly TextBox _tokenBox = null!;
+    internal readonly Panel _tokenPanel = null!;
+    internal readonly Panel _tokenBorder = null!;
+    internal readonly Panel _stepPanel = null!;
+    internal readonly Panel _tokenArea = null!; // 用于安装流程中控制可见性
     private readonly Panel _syncDirPanel = null!;
-    private readonly TextBox _syncDirBox = null!;
+    internal readonly TextBox _syncDirBox = null!;
     private Button _copyBtn = null!; // 复制按钮（提升为字段以便具名事件处理器访问）
-    private int _currentStep = -1; // -1:未开始, 0-4:步骤中, 5:全部完成
-    private int _flashCount; // 闪烁动画计数
-    private Color _flashColor; // 闪烁动画绿色
-    private Color _flashOriginalColor; // 闪烁动画起始边框色
+    internal int _currentStep = -1; // -1:未开始, 0-4:步骤中, 5:全部完成
+    internal int _flashCount; // 闪烁动画计数
+    internal Color _flashColor; // 闪烁动画绿色
+    internal Color _flashOriginalColor; // 闪烁动画起始边框色
+
+    // T-110：安装步骤/安装流程外提协作类（只存引用，惰性访问控件）
+    private readonly ServerInstallSteps _steps;
+    private readonly ServerInstallFlow _flow;
 
     public ServerInstaller()
     {
+        // 职责外提协作类（T-110）：构造于控件初始化前（只存引用，惰性访问控件）
+        _steps = new ServerInstallSteps(this);
+        _flow = new ServerInstallFlow(this, _steps);
+
         // 管理员权限预检
         using WindowsIdentity identity = WindowsIdentity.GetCurrent();
         WindowsPrincipal principal = new WindowsPrincipal(identity);
@@ -84,7 +93,7 @@ public partial class ServerInstaller : Form
             Height = 48,
             BackColor = CloudPanColors.BackgroundWhite
         };
-        _stepPanel.Paint += StepPanel_Paint;
+        _stepPanel.Paint += _steps.StepPanel_Paint;
 
         // ========== 主体区域 ==========
         Panel bodyPanel = new Panel
@@ -346,7 +355,7 @@ public partial class ServerInstaller : Form
         _tokenBox.Width = _tokenPanel.Width - 100;
     }
 
-    private async void InstallBtn_Click(object? sender, EventArgs e) => await InstallAsync();
+    private async void InstallBtn_Click(object? sender, EventArgs e) => await _flow.InstallAsync();
 
     private void CloseBtn_Click(object? sender, EventArgs e) => Close();
 

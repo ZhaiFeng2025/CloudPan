@@ -3,7 +3,7 @@
  "title": "Server.UI 巨型控件真实拆分（ServerInstaller/SettingsPage/ServerWindow 聚合 ≤400 + 删豁免登记）",
  "dimension": "architecture",
  "priority": "P0",
- "status": "todo",
+ "status": "acceptance",
  "batch": 10,
  "findingId": "F-151",
  "dependsOn": [],
@@ -40,6 +40,6 @@
  ],
  "attempts": 0,
  "statusReason": null,
- "note": null,
- "updatedAt": null
+ "note": "改动文件：新增 internal 协作类 9 个（ServerInstallSteps/ServerInstallFlow、SettingsFormBuilder/SettingsSaveLogic/SettingsPageGuides、ServerWindowLayout/ServerDeviceListView/ServerLogSink/ServerStatCards）；删除 partial 6 个（ServerInstaller.Install/Process/Steps、SettingsPage.Guide、ServerWindow.Data）；改造主类 5 个（ServerInstaller、SettingsPage+Events、ServerWindow+Events，公开 API 零变化，事件处理器保留在声明类）；CodeQualityTests 豁免表删除 ServerInstaller/SettingsPage/ServerWindow 3 项登记。验证：dotnet build CloudPan.sln -c Release 成功（0 警告 0 错误）；dotnet test --filter CodeQualityTests 5 项中 4 通过，唯一失败为 WebSocketHandler（464>400，T-111 范围）——本任务 3 类型全部转绿；全量 dotnet test 365/366 通过，仅剩 WebSocketHandler（T-111）。行为断言 wc 聚合：ServerInstaller=369、SettingsPage=194（118+76）、ServerWindow=152（101+51），均 ≤400。",
+ "updatedAt": "2026-08-04"
 }

@@ -121,14 +121,10 @@ public class CodeQualityTests
         // T-099 起『聚合≤TargetCeiling』断言硬约束：重校准为当前聚合使断言可绿；强制兑现力由
         // Deadline（批次 9 完成 → 必须 ≤400）承载，到期未拆=测试失败，不再以登记合法化。
         // T-109 真实拆分后移除：SetupForm（1091→273）/FileBrowserView（847→253）/
-        // SettingsForm（684→176）/TrayAppContext（522→140），逻辑外提为 internal 协作类，达 ≤400 从表移除。
+        // SettingsForm（684→176）/TrayAppContext（522→140）；T-110 真实拆分后移除：
+        // ServerInstaller（861→369）/SettingsPage（549→194）/ServerWindow（525→152），
+        // 逻辑外提为 internal 协作类，达 ≤400 从表移除。
         // （ApiClient 聚合 562→323：T-097 删除手写 GetThumbnailAsync 后已 ≤400，T-099 按『达 ≤400 从表移除』移出）
-        new("CloudPan.Server.UI.ServerInstaller", 861, 861, "批次 9：安装步骤拆分后 ≤400",
-            "T-070 范围外既有大型类型，记录现状上限防膨胀。"),
-        new("CloudPan.Server.UI.SettingsPage", 549, 549, "批次 9：设置页分区块后 ≤400",
-            "T-070 范围外既有大型类型，记录现状上限防膨胀。"),
-        new("CloudPan.Server.UI.ServerWindow", 525, 525, "批次 9：服务端窗口视图拆分后 ≤400",
-            "T-070 范围外既有大型类型，记录现状上限防膨胀。"),
         new("CloudPan.Server.Core.WebSocketHandler", 464, 464, "批次 9：WS 消息分发拆分后 ≤400",
             "T-070 范围外既有大型类型，记录现状上限防膨胀。"),
     };

@@ -5,23 +5,32 @@ using CloudPan.Infrastructure.Security;
 
 namespace CloudPan.Server.UI;
 
-/// <summary>ServerInstaller 部分类：Windows 服务安装主流程与完成后的地址/Token 展示。</summary>
-public partial class ServerInstaller
+/// <summary>安装向导安装流程协作类（T-110）：Windows 服务注册/进程执行/完成后的地址与 Token 展示。逻辑从 ServerInstaller 外提。</summary>
+internal sealed class ServerInstallFlow
 {
+    private readonly ServerInstaller _form;
+    private readonly ServerInstallSteps _steps;
+
+    public ServerInstallFlow(ServerInstaller form, ServerInstallSteps steps)
+    {
+        _form = form;
+        _steps = steps;
+    }
+
     // =================================================================
     //  安装流程
     // =================================================================
-    private async Task InstallAsync()
+    internal async Task InstallAsync()
     {
-        _installBtn.Enabled = false;
-        _progressBar.Visible = true;
-        SetStatusText("正在安装服务...");
-        _statusLabel.ForeColor = CloudPanColors.TextSecondary;
+        _form._installBtn.Enabled = false;
+        _form._progressBar.Visible = true;
+        _steps.SetStatusText("正在安装服务...");
+        _form._statusLabel.ForeColor = CloudPanColors.TextSecondary;
 
         try
         {
             // 同步目录输入验证
-            string syncDir = _syncDirBox.Text.Trim();
+            string syncDir = _form._syncDirBox.Text.Trim();
             if (string.IsNullOrEmpty(syncDir))
             {
                 syncDir = Path.Combine(
@@ -29,9 +38,9 @@ public partial class ServerInstaller
             }
             else if (syncDir.IndexOfAny(Path.GetInvalidPathChars()) >= 0)
             {
-                SetStatusText("同步目录路径包含非法字符，请重新输入。");
-                _statusLabel.ForeColor = CloudPanColors.ErrorRed;
-                _installBtn.Enabled = true;
+                _steps.SetStatusText("同步目录路径包含非法字符，请重新输入。");
+                _form._statusLabel.ForeColor = CloudPanColors.ErrorRed;
+                _form._installBtn.Enabled = true;
                 return;
             }
 
@@ -46,8 +55,8 @@ public partial class ServerInstaller
                     MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
                 if (overwrite != DialogResult.Yes)
                 {
-                    SetStatusText("已取消安装。");
-                    _installBtn.Enabled = true;
+                    _steps.SetStatusText("已取消安装。");
+                    _form._installBtn.Enabled = true;
                     return;
                 }
             }
@@ -60,16 +69,16 @@ public partial class ServerInstaller
             // ========================================
             // 第一步：清理旧服务（忽略错误）
             // ========================================
-            SetStep(0);
-            SetStatusText("正在清理旧服务...");
+            _steps.SetStep(0);
+            _steps.SetStatusText("正在清理旧服务...");
             await Task.Run(() => RunExe("sc.exe", "stop", "CloudPanServer"));
             await Task.Run(() => RunExe("sc.exe", "delete", "CloudPanServer"));
 
             // ========================================
             // 第二步：创建新服务
             // ========================================
-            SetStep(1);
-            SetStatusText("正在创建服务...");
+            _steps.SetStep(1);
+            _steps.SetStatusText("正在创建服务...");
             string exePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "CloudPan.Server.exe");
             if (!File.Exists(exePath))
             {
@@ -78,10 +87,10 @@ public partial class ServerInstaller
 
             if (!File.Exists(exePath))
             {
-                SetStatusText($"未找到服务可执行文件：{exePath}\n请确保程序文件完整，然后重试。");
-                _statusLabel.ForeColor = CloudPanColors.ErrorRed;
-                _progressBar.Visible = false;
-                _installBtn.Enabled = true;
+                _steps.SetStatusText($"未找到服务可执行文件：{exePath}\n请确保程序文件完整，然后重试。");
+                _form._statusLabel.ForeColor = CloudPanColors.ErrorRed;
+                _form._progressBar.Visible = false;
+                _form._installBtn.Enabled = true;
                 return;
             }
 
@@ -94,10 +103,10 @@ public partial class ServerInstaller
             if (!createOk)
             {
                 string errDetail = GetLastCmdError() ?? "";
-                SetStatusText($"创建服务失败：{errDetail}\n1. 是否以管理员身份运行\n2. 可执行文件路径是否正确\n然后点击「开始安装」重试");
-                _statusLabel.ForeColor = CloudPanColors.ErrorRed;
-                _progressBar.Visible = false;
-                _installBtn.Enabled = true;
+                _steps.SetStatusText($"创建服务失败：{errDetail}\n1. 是否以管理员身份运行\n2. 可执行文件路径是否正确\n然后点击「开始安装」重试");
+                _form._statusLabel.ForeColor = CloudPanColors.ErrorRed;
+                _form._progressBar.Visible = false;
+                _form._installBtn.Enabled = true;
                 return;
             }
 
@@ -110,8 +119,8 @@ public partial class ServerInstaller
             // ========================================
             // 第三步：启动服务（失败则回滚）
             // ========================================
-            SetStep(2);
-            SetStatusText("正在启动服务...");
+            _steps.SetStep(2);
+            _steps.SetStatusText("正在启动服务...");
             bool startOk = await Task.Run(() => RunExe("sc.exe", "start", "CloudPanServer"));
             // 轮询等待服务进入 RUNNING 状态（首次启动可能因初始化延迟）
             bool serviceReady = false;
@@ -125,38 +134,38 @@ public partial class ServerInstaller
             if (!startOk && !serviceReady)
             {
                 string errDetail = GetLastCmdError() ?? "";
-                SetStatusText($"服务启动失败：{errDetail}，正在回滚...");
+                _steps.SetStatusText($"服务启动失败：{errDetail}，正在回滚...");
                 await Task.Run(() => RunExe("sc.exe", "stop", "CloudPanServer"));
                 await Task.Run(() => RunExe("sc.exe", "delete", "CloudPanServer"));
                 // 注意：防火墙规则尚未添加（步骤 3），此处不删除
-                _statusLabel.ForeColor = CloudPanColors.ErrorRed;
-                _progressBar.Visible = false;
-                _installBtn.Enabled = true;
+                _form._statusLabel.ForeColor = CloudPanColors.ErrorRed;
+                _form._progressBar.Visible = false;
+                _form._installBtn.Enabled = true;
                 return;
             }
 
             // ========================================
             // 第四步：防火墙规则（失败不阻塞）
             // ========================================
-            SetStep(3);
-            SetStatusText("正在添加防火墙规则...");
+            _steps.SetStep(3);
+            _steps.SetStatusText("正在添加防火墙规则...");
             await Task.Run(() => RunExe("netsh.exe", "advfirewall", "firewall", "delete", "rule", "name=CloudPan"));
             await Task.Run(() =>
                 RunExe("netsh.exe", "advfirewall", "firewall", "add", "rule",
                     "name=CloudPan", "dir=in", "action=allow", "protocol=TCP", $"localport={SpecPorts.HttpPort}"));
-            SetStatusText("已添加防火墙规则");
+            _steps.SetStatusText("已添加防火墙规则");
 
             // ========================================
             // 第五步：等待 Token 生成
             // ========================================
-            SetStep(4);
-            SetStatusText("等待服务初始化... (已等待 0 秒)");
+            _steps.SetStep(4);
+            _steps.SetStatusText("等待服务初始化... (已等待 0 秒)");
             string tokenPath = Path.Combine(syncDir, ".cloudpan", "token.txt");
 
             for (int i = 0; i < 30; i++)
             {
                 await Task.Delay(1000);
-                SetStatusText($"等待服务初始化... (已等待 {i + 1} 秒)");
+                _steps.SetStatusText($"等待服务初始化... (已等待 {i + 1} 秒)");
                 if (File.Exists(tokenPath))
                 {
                     string token;
@@ -169,42 +178,42 @@ public partial class ServerInstaller
                     if (!string.IsNullOrEmpty(token))
                     {
                         // 显示 Token 并触发成功动画
-                        _tokenBox.Text = FormatToken(token);
-                        _tokenArea.Visible = true;
-                        SetStep(5); // 全部完成
-                        _statusLabel.ForeColor = CloudPanColors.SuccessGreen;
+                        _form._tokenBox.Text = FormatToken(token);
+                        _form._tokenArea.Visible = true;
+                        _steps.SetStep(5); // 全部完成
+                        _form._statusLabel.ForeColor = CloudPanColors.SuccessGreen;
                         string serverAddr = GetLocalIpAddress();
-                        SetStatusText("安装成功！请在笔记本上运行 CloudPan.Client.exe");
-                        AddServerAddressLabel(serverAddr, _tokenPanel);
-                        FlashSuccessBorder();
+                        _steps.SetStatusText("安装成功！请在笔记本上运行 CloudPan.Client.exe");
+                        AddServerAddressLabel(serverAddr, _form._tokenPanel);
+                        _steps.FlashSuccessBorder();
                         break;
                     }
                 }
             }
 
-            if (!_tokenBox.IsDisposed && string.IsNullOrEmpty(_tokenBox.Text))
+            if (!_form._tokenBox.IsDisposed && string.IsNullOrEmpty(_form._tokenBox.Text))
             {
                 // 超时：不调用 SetStep(5)，保留步骤 4 蓝色状态，视觉上表明"未完成"
-                SetStatusText($"安装完成但 Token 未就绪（Token 将在服务首次启动后生成）\n请稍后查看：{syncDir}\\.cloudpan\\token.txt");
-                _statusLabel.ForeColor = CloudPanColors.WarningOrange;
+                _steps.SetStatusText($"安装完成但 Token 未就绪（Token 将在服务首次启动后生成）\n请稍后查看：{syncDir}\\.cloudpan\\token.txt");
+                _form._statusLabel.ForeColor = CloudPanColors.WarningOrange;
             }
 
-            _progressBar.Visible = false;
-            _installBtn.Visible = false;
-            _closeBtn.Visible = true;
-            _closeBtn.Focus();
-            DialogResult = DialogResult.OK; // 通知调用方安装成功，应退出进程避免端口冲突
+            _form._progressBar.Visible = false;
+            _form._installBtn.Visible = false;
+            _form._closeBtn.Visible = true;
+            _form._closeBtn.Focus();
+            _form.DialogResult = DialogResult.OK; // 通知调用方安装成功，应退出进程避免端口冲突
         }
         catch (Exception ex)
         {
-            SetStatusText($"安装失败: {ex.Message}\n已自动尝试回滚，请修复后重试。");
-            _statusLabel.ForeColor = CloudPanColors.ErrorRed;
+            _steps.SetStatusText($"安装失败: {ex.Message}\n已自动尝试回滚，请修复后重试。");
+            _form._statusLabel.ForeColor = CloudPanColors.ErrorRed;
             await Task.Run(() => RunExe("sc.exe", "stop", "CloudPanServer"));
             await Task.Run(() => RunExe("sc.exe", "delete", "CloudPanServer"));
             // 防火墙规则可能尚未添加，delete 已幂等，留作清理
             await Task.Run(() => RunExe("netsh.exe", "advfirewall", "firewall", "delete", "rule", "name=CloudPan"));
-            _progressBar.Visible = false;
-            _installBtn.Enabled = true;
+            _form._progressBar.Visible = false;
+            _form._installBtn.Enabled = true;
         }
     }
 
@@ -303,4 +312,36 @@ public partial class ServerInstaller
             Enumerable.Range(0, (token.Length + 15) / 16)
                 .Select(i => token.Substring(i * 16, Math.Min(16, token.Length - i * 16))));
     }
+
+    // =================================================================
+    //  进程执行（sc/netsh 直调与 cmd 管道），统一经 ProcessRunner 单点
+    // =================================================================
+
+    /// <summary>
+    /// 直接运行可执行文件（绕过 cmd.exe），经 ProcessRunner 的 ArgumentList 自动转义。
+    /// 失败时错误详情通过 LastRunCmdError 存储。
+    /// </summary>
+    private static bool RunExe(string exeName, params string[] args)
+    {
+        ProcessResult result = ProcessRunner.Run(exeName, args);
+        LastRunCmdError = result.ErrorMessage;
+        return result.Success;
+    }
+
+    /// <summary>
+    /// 仅用于需要 cmd 管道（如 | find）的命令——参数必须硬编码、无用户输入。
+    /// 切勿将用户可控的路径/文本传入此方法。
+    /// </summary>
+    private static bool RunCmd(string command)
+    {
+        ProcessResult result = ProcessRunner.Run("cmd.exe", null,
+            new ProcessRunnerOptions { UseCmd = true, CmdCommand = command });
+        LastRunCmdError = result.ErrorMessage;
+        return result.Success;
+    }
+
+    private static string? LastRunCmdError;
+
+    /// <summary>获取最近一次命令调用的错误详情。</summary>
+    private static string? GetLastCmdError() => LastRunCmdError;
 }

@@ -3,19 +3,26 @@ using CloudPan.Infrastructure.Design;
 
 namespace CloudPan.Server.UI;
 
-/// <summary>ServerInstaller 部分类：步骤指示器绘图、状态文字与 Token 成功闪烁动画。</summary>
-public partial class ServerInstaller
+/// <summary>安装向导步骤指示器协作类（T-110）：步骤绘图、状态文字与 Token 成功闪烁动画。逻辑从 ServerInstaller 外提。</summary>
+internal sealed class ServerInstallSteps
 {
+    private readonly ServerInstaller _form;
+
+    public ServerInstallSteps(ServerInstaller form)
+    {
+        _form = form;
+    }
+
     // =================================================================
     //  步骤指示器绘图
     // =================================================================
-    private void StepPanel_Paint(object? sender, PaintEventArgs e)
+    internal void StepPanel_Paint(object? sender, PaintEventArgs e)
     {
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
         string[] steps = new[] { "清理", "安装", "启动", "防火墙", "就绪" };
-        int w = _stepPanel.Width;
+        int w = _form._stepPanel.Width;
         int startX = 30;
         int endX = w - 30;
         int stepW = endX - startX > 0 ? (endX - startX) / (steps.Length - 1) : 60;
@@ -27,13 +34,13 @@ public partial class ServerInstaller
         {
             int cx = startX + i * stepW;
 
-            bool completed = _currentStep > i;
-            bool current = _currentStep == i;
+            bool completed = _form._currentStep > i;
+            bool current = _form._currentStep == i;
 
             Color circleColor, textColor;
             bool filled;
 
-            if (completed || _currentStep >= steps.Length)
+            if (completed || _form._currentStep >= steps.Length)
             {
                 circleColor = CloudPanColors.SuccessGreen;
                 textColor = CloudPanColors.SuccessGreen;
@@ -57,8 +64,8 @@ public partial class ServerInstaller
             {
                 int prevCx = startX + (i - 1) * stepW;
                 // 前序步骤（i-1）已完成 = 连接线绿色；前序步骤是当前步骤 = 蓝色
-                bool prevDone = _currentStep > i - 1 || _currentStep >= steps.Length;
-                bool prevCurrent = _currentStep == i - 1;
+                bool prevDone = _form._currentStep > i - 1 || _form._currentStep >= steps.Length;
+                bool prevCurrent = _form._currentStep == i - 1;
                 Color lineColor;
                 if (prevDone)
                 {
@@ -110,37 +117,37 @@ public partial class ServerInstaller
     /// <summary>
     /// 切换到指定步骤（0‑based），更新进度条并重绘步骤指示器
     /// </summary>
-    private void SetStep(int stepIndex)
+    internal void SetStep(int stepIndex)
     {
-        _currentStep = stepIndex;
+        _form._currentStep = stepIndex;
         // 进度条最大值为 5（5 步：清理/安装/启动/防火墙/就绪），步骤 0-4 各占 20%
-        _progressBar.Value = Math.Clamp(stepIndex + 1, 0, _progressBar.Maximum);
-        _stepPanel.Invalidate();
+        _form._progressBar.Value = Math.Clamp(stepIndex + 1, 0, _form._progressBar.Maximum);
+        _form._stepPanel.Invalidate();
     }
 
     /// <summary>
     /// 设置状态文字并自适应高度
     /// </summary>
-    private void SetStatusText(string text)
+    internal void SetStatusText(string text)
     {
-        _statusLabel.Text = text;
-        int textWidth = _statusLabel.Width - _statusLabel.Padding.Horizontal;
+        _form._statusLabel.Text = text;
+        int textWidth = _form._statusLabel.Width - _form._statusLabel.Padding.Horizontal;
         if (textWidth > 0)
         {
-            var size = TextRenderer.MeasureText(text, _statusLabel.Font,
+            var size = TextRenderer.MeasureText(text, _form._statusLabel.Font,
                 new Size(textWidth, 0), TextFormatFlags.WordBreak);
-            _statusLabel.Height = size.Height + _statusLabel.Padding.Vertical + 8;
+            _form._statusLabel.Height = size.Height + _form._statusLabel.Padding.Vertical + 8;
         }
     }
 
     /// <summary>
     /// Token 显示成功动画：绿色边框闪烁 3 次后稳定
     /// </summary>
-    private void FlashSuccessBorder()
+    internal void FlashSuccessBorder()
     {
-        _flashOriginalColor = _tokenBorder.BackColor;
-        _flashColor = CloudPanColors.SuccessGreen;
-        _flashCount = 0;
+        _form._flashOriginalColor = _form._tokenBorder.BackColor;
+        _form._flashColor = CloudPanColors.SuccessGreen;
+        _form._flashCount = 0;
         System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer { Interval = CloudPanEffects.DurationNormal };
         timer.Tick += FlashTimer_Tick;
         timer.Start();
@@ -149,14 +156,14 @@ public partial class ServerInstaller
     /// <summary>闪烁动画 Timer 回调：交替显示原色/绿色，3 次后停在绿色并释放 Timer。</summary>
     private void FlashTimer_Tick(object? sender, EventArgs e)
     {
-        _flashCount++;
-        _tokenBorder.BackColor = _flashCount % 2 == 1 ? _flashColor : _flashOriginalColor;
-        if (_flashCount >= 5) // 3 次闪烁后停在绿色
+        _form._flashCount++;
+        _form._tokenBorder.BackColor = _form._flashCount % 2 == 1 ? _form._flashColor : _form._flashOriginalColor;
+        if (_form._flashCount >= 5) // 3 次闪烁后停在绿色
         {
             var timer = (System.Windows.Forms.Timer)sender!;
             timer.Stop();
             timer.Dispose();
-            _tokenBorder.BackColor = _flashColor;
+            _form._tokenBorder.BackColor = _form._flashColor;
         }
     }
 }

@@ -3,18 +3,25 @@ using CloudPan.Server.Core;
 
 namespace CloudPan.Server.UI;
 
-/// <summary>SettingsPage 部分类：同步根变更/连接钥匙轮换的影响面确认与重配引导（F-34/T-034）。</summary>
-public partial class SettingsPage
+/// <summary>设置页影响面引导协作类（T-110）：同步根变更/连接钥匙轮换的影响面确认与重配引导（F-34/T-034）。逻辑从 SettingsPage 外提。</summary>
+internal sealed class SettingsPageGuides
 {
+    private readonly SettingsPage _form;
+
+    public SettingsPageGuides(SettingsPage form)
+    {
+        _form = form;
+    }
+
     /// <summary>
     /// 查询已配对设备并生成白话影响面摘要（F-34/T-034）：改同步根/轮换 Token 时，所有设备都需重配。
     /// 文案使用家庭场景白话——Token 称「连接钥匙」、服务器地址称「家庭服务器地址」。
     /// </summary>
-    private async Task<string> BuildDeviceImpactAsync()
+    internal async Task<string> BuildDeviceImpactAsync()
     {
         try
         {
-            List<AdminDeviceItem> devices = await _statusService.GetDevicesAsync();
+            List<AdminDeviceItem> devices = await _form._statusService.GetDevicesAsync();
             if (devices.Count == 0)
             {
                 return "暂无已配对的设备";
@@ -30,13 +37,13 @@ public partial class SettingsPage
         }
         catch (Exception ex)
         {
-            _log($"读取设备清单失败: {ex.Message}");
+            _form._log($"读取设备清单失败: {ex.Message}");
             return "已配对设备清单读取失败";
         }
     }
 
     /// <summary>同步根变更确认：列出影响面 + 明确不迁移 + 重配引导。返回 DialogResult。</summary>
-    private DialogResult ConfirmSyncRootChange(string impact)
+    internal DialogResult ConfirmSyncRootChange(string impact)
     {
         return MessageBox.Show(
             $"更改同步根目录后，新目录将从空开始重新同步（全新数据库、全新连接钥匙 Token）。\n\n" +
@@ -49,7 +56,7 @@ public partial class SettingsPage
     }
 
     /// <summary>连接钥匙轮换确认：列出影响面（所有已配对设备需重配）。返回 DialogResult。</summary>
-    private DialogResult ConfirmTokenRotation(string impact)
+    internal DialogResult ConfirmTokenRotation(string impact)
     {
         return MessageBox.Show(
             $"将重新生成家庭共享「连接钥匙」（Token）。{impact}。\n\n" +
