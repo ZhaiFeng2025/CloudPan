@@ -357,6 +357,10 @@ public partial class SyncEngine : IDisposable
     public Task<bool> RestoreTrashAsync(TrashItem item, CancellationToken ct = default)
         => _manage.RestoreTrashAsync(item, ct);
 
+    /// <inheritdoc cref="SyncManageService.RestoreTrashResolveAsync"/>
+    public Task<bool> RestoreTrashResolveAsync(TrashItem item, RestoreConflictMode mode, CancellationToken ct = default)
+        => _manage.RestoreTrashResolveAsync(item, mode, ct);
+
     /// <inheritdoc cref="SyncManageService.EmptyTrashAsync"/>
     public Task<bool> EmptyTrashAsync(CancellationToken ct = default)
         => _manage.EmptyTrashAsync(ct);

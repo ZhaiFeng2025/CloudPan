@@ -209,10 +209,15 @@ class FileRepository(private val settings: SettingsStore) {
     /**
      * 恢复回收站条目（POST /api/trash/restore）。
      * metaFileName = 条目 TrashFileName + ".json"（对齐服务端 MoveToTrashAsync 写盘命名）。
+     * 目标位置已有同名文件时服务端返回 409（T-078 收敛）→ 抛 FileConflictException，
+     * 由 UI 给具体原因与下一步（改名/删除同名文件后重试），不再泛化『恢复失败，请稍后重试』（T-094/F-136）。
      */
     suspend fun restoreTrash(trashFileName: String): Result<Unit> {
         return safeCall {
             val r = api().restoreTrash(RestoreTrashRequestDto("$trashFileName.json"))
+            if (r.code() == 409) {
+                throw FileConflictException("恢复失败：目标位置已有同名文件")
+            }
             if (!r.isSuccessful) {
                 throw Exception("恢复失败: ${r.code()} ${r.message()}")
             }

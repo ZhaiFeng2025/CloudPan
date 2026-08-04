@@ -269,8 +269,12 @@ public partial class MainWindow
                     return;
                 }
 
-                bool ok = await _engine.RestoreTrashAsync(item);
-                AddLog(ok ? $"已恢复: {item.OriginalPath}" : $"恢复失败: {item.OriginalPath}");
+                // T-094/F-136：恢复失败不再静默 AddLog——冲突弹白话原因+覆盖/改名选项，其余失败也弹可见提示
+                bool ok = await RestoreConflictDialog.RestoreAsync(_engine, AddLog, item, dialog);
+                if (ok)
+                {
+                    AddLog($"已恢复: {item.OriginalPath}");
+                }
                 var refreshed = await _engine.GetTrashAsync();
                 RefreshList(refreshed);
                 if (refreshed.Count == 0)
@@ -281,6 +285,7 @@ public partial class MainWindow
             catch (Exception ex)
             {
                 AddLog($"恢复失败: {ex.Message}");
+                MessageBox.Show(dialog, $"恢复失败：{ex.Message}", "恢复失败", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
         restoreBtn.Click += OnRestoreClick;

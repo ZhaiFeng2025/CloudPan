@@ -5,6 +5,17 @@ using Microsoft.Extensions.Logging;
 namespace CloudPan.Client.Core.Services;
 
 /// <summary>
+/// T-094/F-136：恢复目标已被同名重建（CONFLICT）时的处理方式。
+/// Overwrite=同名目标移入回收站后重试恢复（被恢复内容胜出，旧目标可回收站找回）；
+/// RenameTarget=同名目标改名释放原路径后重试恢复（两文件并存）。
+/// </summary>
+public enum RestoreConflictMode
+{
+    Overwrite,
+    RenameTarget,
+}
+
+/// <summary>
 /// 同步引擎管理操作服务（T-070 拆分）：回收站（T-014）、分享（T-018）、版本历史（T-018）。
 /// 只读/管理侧操作，不触碰同步状态机的可变状态（计数器/事件/锁），依赖注入 ApiClient/DbContextFactory。
 /// </summary>
@@ -64,6 +75,71 @@ internal sealed class SyncManageService
             _logger.LogWarning(ex, "恢复回收站失败: {Path}", item.OriginalPath);
             return false;
         }
+    }
+
+    /// <summary>
+    /// T-094/F-136：恢复回收站条目时目标已被同名重建（服务端 409 CONFLICT）的可操作收敛——
+    /// 按用户选择处理同名目标后重试恢复，一键解决冲突，避免『点了没反应』死端。
+    /// 返回 true=恢复成功；false=目标已变化/处理失败（不抛异常，UI 据此提示）。
+    /// </summary>
+    public async Task<bool> RestoreTrashResolveAsync(TrashItem item, RestoreConflictMode mode, CancellationToken ct = default)
+    {
+        try
+        {
+            // 同名目标可能已被处理，先直接重试一次
+            try
+            {
+                await _api.RestoreTrashAsync(item.TrashFileName + ".json", ct);
+                return true;
+            }
+            catch (System.Net.Http.HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                _logger.LogInformation("恢复冲突：目标已存在，按 {Mode} 收敛: {Path}", mode, item.OriginalPath);
+            }
+
+            // 处理同名目标，释放原路径
+            if (mode == RestoreConflictMode.Overwrite)
+            {
+                // 覆盖：同名目标移入回收站（服务端软删 + 本地副本删除；失败则不再继续）
+                await DeleteForTrashAsync(item.OriginalPath, ct);
+            }
+            else
+            {
+                // 改名：同名目标追加「（恢复冲突）」后缀释放原路径，两文件并存。
+                // baseVersion 取本地快照版本，无快照（目标未同步过）时用 0 = 不校验（对齐 T-089 语义）。
+                await using var store = await _storeFactory.CreateStoreAsync(ct);
+                int version = (await store.GetSnapshotAsync(item.OriginalPath, ct))?.Version ?? 0;
+                await _api.MoveAsync(item.OriginalPath, RestoreConflictNewPath(item.OriginalPath), version, ct);
+                // 本地快照/副本跟随由增量同步按版本对账（服务端版本递增触发变更检测），此处不手工改快照。
+            }
+
+            // 重试恢复
+            await _api.RestoreTrashAsync(item.TrashFileName + ".json", ct);
+            return true;
+        }
+        catch (System.Net.Http.HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Conflict)
+        {
+            _logger.LogWarning(ex, "恢复冲突收敛后仍冲突（目标已变化）: {Path}", item.OriginalPath);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "恢复冲突收敛失败: {Path}", item.OriginalPath);
+            return false;
+        }
+    }
+
+    /// <summary>恢复冲突改名目标的新路径：同名目标追加「（恢复冲突）」后缀释放原路径。</summary>
+    private static string RestoreConflictNewPath(string originalPath)
+    {
+        string p = originalPath.TrimEnd('/');
+        string dir = p.Contains('/') ? p[..p.LastIndexOf('/')] : "";
+        string name = p[(p.LastIndexOf('/') + 1)..];
+        int dot = name.LastIndexOf('.');
+        string baseName = dot > 0 ? name[..dot] : name;
+        string ext = dot > 0 ? name[dot..] : "";
+        string newName = $"{baseName}（恢复冲突）{ext}";
+        return dir.Length == 0 ? $"/{newName}" : $"{dir}/{newName}";
     }
 
     /// <summary>清空回收站。</summary>

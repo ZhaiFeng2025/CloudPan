@@ -4673,7 +4673,7 @@
       "title": "回收站恢复失败白话反馈 + 覆盖/改名选项（两端对齐）",
       "dimension": "ux",
       "priority": "P2",
-      "status": "todo",
+      "status": "in-progress",
       "batch": 8,
       "findingId": "F-136",
       "dependsOn": [],
@@ -4703,8 +4703,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "服务端 CONFLICT 已由 T-078 收敛，本任务补齐两端 UI 可操作引导。",
-      "updatedAt": null
+      "note": "服务端 CONFLICT 已由 T-078 收敛，本任务补齐两端 UI 可操作引导。\n执行：SyncManageService 新增 RestoreConflictMode+RestoreTrashResolveAsync（覆盖=同名目标移回收站后重试、改名=目标追加（恢复冲突）后缀后重试）；SyncEngine 暴露委托；新增 RestoreConflictDialog 独立 internal 类（MainWindow 聚合行数门禁），OnRestoreClick 冲突弹『已有同名文件，恢复会造成覆盖』+改名/覆盖/取消，其余失败弹 MessageBox 不再静默 AddLog；Android restoreTrash 409→FileConflictException，TrashDialog 显示原因+下一步。验证：dotnet build -c Release 0警告0错误、dotnet test 343/343 通过、AC1 grep 通过。",
+      "updatedAt": "2026-08-04"
     },
     {
       "id": "T-095",

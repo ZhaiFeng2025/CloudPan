@@ -1200,9 +1200,16 @@ private fun TrashDialog(
                 val meta = selectedMeta
                 if (meta != null) {
                     scope.launch {
-                        val ok = repository.restoreTrash(meta).isSuccess
-                        snackbarHostState.showSnackbar(if (ok) "已恢复" else "恢复失败，请稍后重试")
-                        if (ok) refresh()
+                        val result = repository.restoreTrash(meta)
+                        val msg = when {
+                            result.isSuccess -> "已恢复"
+                            // T-094/F-136：恢复失败给具体原因与下一步，不再『恢复失败，请稍后重试』死端
+                            result.exceptionOrNull() is FileConflictException ->
+                                "恢复失败：目标位置已有同名文件，请先删除或改名原位置的同名文件后，再重试恢复"
+                            else -> "恢复失败：${result.exceptionOrNull().toUserMessage()}"
+                        }
+                        snackbarHostState.showSnackbar(msg)
+                        if (result.isSuccess) refresh()
                     }
                 }
             }) { Text("恢复选中") }
