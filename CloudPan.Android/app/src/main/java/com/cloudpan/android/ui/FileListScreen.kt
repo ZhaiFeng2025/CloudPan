@@ -1156,6 +1156,17 @@ fun FileListScreen(
                     }
                 } else if (viewMode == "grid") {
                     // T-113：照片墙网格视图（yyyy-MM 分组，点击进入全屏预览）
+                    // T-113：网格照片墙自动翻页（T-059 分页）——hasMore 时连续增量加载，
+                    // 目录照片 >200 项时网格也能滚动浏览全部（仅文件元数据翻页，缩略图仍按需加载）
+                    LaunchedEffect(viewMode, hasMore, isLoadingMore) {
+                        if (viewMode == "grid" && hasMore && !isLoadingMore) {
+                            val cur = nextCursor
+                            if (cur != null && cur != lastAutoLoadCursor) {
+                                lastAutoLoadCursor = cur
+                                loadMore()
+                            }
+                        }
+                    }
                     if (photos.isEmpty()) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
@@ -1170,7 +1181,7 @@ fun FileListScreen(
                                 )
                                 Spacer(Modifier.height(16.dp))
                                 Text(
-                                    "此文件夹暂无照片",
+                                    if (hasMore) "正在加载照片……" else "此文件夹暂无照片",
                                     style = MaterialTheme.typography.titleMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
