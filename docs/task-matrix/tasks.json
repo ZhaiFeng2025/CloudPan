@@ -4983,7 +4983,7 @@
       "title": "行数门禁豁免兑现断言（聚合≤TargetCeiling + 截止批次到期≤400）+ SyncEngine/MainWindow 真实拆分",
       "dimension": "architecture",
       "priority": "P2",
-      "status": "in-progress",
+      "status": "acceptance",
       "batch": 9,
       "findingId": "F-141",
       "dependsOn": [],
