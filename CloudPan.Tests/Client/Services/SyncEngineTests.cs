@@ -1225,8 +1225,42 @@ public class SyncEngineTests : IDisposable
         var trashItem = await _engine.DeleteForTrashAsync("/local-only.txt");
 
         Assert.False(File.Exists(localPath));
-        Assert.Null(trashItem);          // 无服务端记录，无从回收站撤销
+        Assert.Null(trashItem);          // 无服务端记录，无从回收站撤销（=成功）
         Assert.Empty(_api.TrashItems);   // 未进回收站
+    }
+
+    [Fact]
+    public async Task DeleteForTrash_服务端删除失败_抛异常而非返回null()
+    {
+        // T-115：服务端删除失败须抛出异常（删除未生效，本地副本保留），不得返回 null 伪装成功——
+        // 否则 UI 一律记『已删除』、失败不计数、不弹「成功 N / 失败 M」汇总。
+        string localPath = Path.Combine(_syncRoot, "photo.jpg");
+        await File.WriteAllTextAsync(localPath, "jpeg-data");
+        _api.Files["/photo.jpg"] = ("mock-hash", 9, 6); // 服务端当前版本已高于客户端快照 v5
+        await using (var setupDb = await _dbFactory.CreateDbContextAsync())
+        {
+            setupDb.RemoteSnapshots.Add(new RemoteSnapshot
+            {
+                Path = "/photo.jpg", Type = (int)FileType.File,
+                Hash = "mock-hash", Size = 9, Version = 5, State = (int)FileState.Synced
+            });
+            await setupDb.SaveChangesAsync();
+        }
+
+        // 服务端删除失败（409 版本冲突，对齐 MockApiClient.DeleteAsync 语义）→ 抛异常
+        await Assert.ThrowsAsync<System.Net.Http.HttpRequestException>(
+            () => _engine.DeleteForTrashAsync("/photo.jpg"));
+
+        // 本地副本保留（删除未生效）
+        Assert.True(File.Exists(localPath));
+        // 服务端文件保留、未进回收站
+        Assert.True(_api.Files.ContainsKey("/photo.jpg"));
+        Assert.Empty(_api.TrashItems);
+        // 快照保留（未清）
+        await using (var dbCheck = await _dbFactory.CreateDbContextAsync())
+        {
+            Assert.NotNull(await dbCheck.RemoteSnapshots.FindAsync("/photo.jpg"));
+        }
     }
 
     [Fact]

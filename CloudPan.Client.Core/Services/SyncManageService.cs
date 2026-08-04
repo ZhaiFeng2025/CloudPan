@@ -160,14 +160,16 @@ internal sealed class SyncManageService
     /// <summary>
     /// 删除文件浏览视图中的文件/目录（T-014，默认进回收站）：
     /// 有服务端记录 → 调 /api/files/delete（软删墓碑传播 + 移入回收站，T-005 已下沉），并清快照；
-    /// 本地副本即时删除。返回可撤销的回收站条目（供 5 秒内撤销）；本地仅存文件（无服务端记录）直接删本地，返回 null。
+    /// 本地副本即时删除。返回可撤销的回收站条目（供 5 秒内撤销）；本地仅存文件（无服务端记录）直接删本地，返回 null（=成功，无可撤销项）。
+    /// T-115：服务端删除失败时抛出异常（删除未生效，本地副本保留），由调用方计入失败——
+    /// null 不再含『失败』语义，仅表示『删除成功但无回收站撤销条目』，消除双语义。
     /// </summary>
     public async Task<TrashItem?> DeleteForTrashAsync(string path, CancellationToken ct = default)
     {
         await using var store = await _storeFactory.CreateStoreAsync(ct);
         var snapshot = await store.GetSnapshotAsync(path);
 
-        // 1. 有服务端记录 → 先调服务端删除（进回收站 + 墓碑传播），失败则本地保留（删除未生效）
+        // 1. 有服务端记录 → 先调服务端删除（进回收站 + 墓碑传播），失败则抛异常（删除未生效，本地副本保留）
         if (snapshot != null)
         {
             try
@@ -177,7 +179,7 @@ internal sealed class SyncManageService
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "服务端删除失败，本地副本保留: {Path}", path);
-                return null;
+                throw;
             }
 
             // 清快照（目录删除时子路径快照一并清除，避免后续扫描重复删除）。
@@ -216,7 +218,7 @@ internal sealed class SyncManageService
 
         if (snapshot == null)
         {
-            return null; // 本地仅存文件：无服务端记录，无从回收站撤销
+            return null; // 本地仅存文件：无服务端记录，无从回收站撤销（=成功，非失败）
         }
 
         // 3. 查回收站条目供撤销（撤销 = 恢复）

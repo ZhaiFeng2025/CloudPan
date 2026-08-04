@@ -32,8 +32,8 @@
    "command": "dotnet test CloudPan.Tests -c Release && dotnet build CloudPan.sln -c Release"
   }
  ],
- "attempts": 0,
- "statusReason": null,
- "note": "改动：MainWindow.Browser.cs（双击打开/下载入队/导入失败弹 ErrorAttribution 白话提示：原因+下一步，保留 AddLog）；MainWindow.Trash.cs（批量删除/撤销改逐项计数，失败弹「成功 N / 失败 M」汇总对话框，async void 保留顶层 try-catch）；TrashDialog.cs（清空回收站 ok=false 与 catch 均弹可见提示）。验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 372 全部通过。",
+ "attempts": 2,
+ "statusReason": "打回（AC-2 未达成 + 独立复查实质缺陷）：DeleteForTrashAsync 返回 null 存在双语义——snapshot 存在但服务端删除失败→return null（『删除未生效，本地副本保留』=失败，SyncManageService.cs:177-181）；snapshot==null 本地仅存文件→删本地后 return null（=成功，:217-220）。MainWindow.Trash.cs:42 对两种 null 一律按成功处理（AddLog『已删除』+ failed 不计数）。复现路径：多选 2 个已同步文件后断开服务端网络点删除→每项 await DeleteAsync 抛异常→return null→UI AddLog『已删除』、撤销 Snackbar 显示、无『成功 0/失败 2』汇总、两个本地文件实际保留。期望：失败项计入 failed 并弹「成功 N / 失败 M」汇总（AC-2 行为断言，不可达）；实际：失败被伪装成『已删除』。另：失败场景 AddLog 文案误记『已删除: {name}』（应『删除失败』）；双击打开失败归因『同步失败（未知错误）』对本地 Process.Start 场景语义错位（ErrorAttribution 兜底，T-106 先例测试已认可，可接受但待人工确认文案）。",
+ "note": "重做（attempts=2，2026-08-04）：修复 DeleteForTrashAsync null 双语义（打回主因）。修复设计：服务端删除失败由『return null』改为『log + throw』（保留原异常类型，UI 逐项 catch 自然计入 failed），null 恢复单一语义=删除成功但无回收站撤销条目（本地仅存文件 / 回收站查询失败），消除『失败伪装成功』。调用点兼容：返回签名 Task<TrashItem?> 未变，SyncEngine 包装器/UI/RestoreTrashResolveAsync 均无需改签名；RestoreTrashResolveAsync Overwrite 路径利用既有 try-catch（409→false、其余→false），异常传播即正确失败处理，无行为回归。UI（MainWindow.Trash.cs:41-55）无需改动：失败项经 catch 计入 failed、AddLog『删除失败: {name} — {msg}』（不再记『已删除』）、failed>0 弹「成功 N / 失败 M」汇总，AC-2 可达。改动文件：1) CloudPan.Client.Core/Services/SyncManageService.cs（DeleteForTrashAsync：服务端删除失败 catch 改 throw; XML 注释澄清 null 单一语义）；2) CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 DeleteForTrash_服务端删除失败_抛异常而非返回null：409 版本冲突→抛异常、本地副本/服务端文件/快照均保留）。验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.sln -c Release 373 全过（372 原用例 + 1 新用例），filter 单跑新用例通过。",
  "updatedAt": "2026-08-04"
 }
