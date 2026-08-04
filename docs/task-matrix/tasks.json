@@ -5180,7 +5180,7 @@
       "title": "Windows 缩略图本地缓存 LRU/时间回收（对齐 T-088 语义）",
       "dimension": "function",
       "priority": "P2",
-      "status": "todo",
+      "status": "in-progress",
       "batch": 9,
       "findingId": "F-146",
       "dependsOn": [],
@@ -5212,7 +5212,7 @@
       "attempts": 0,
       "statusReason": null,
       "note": "服务端 .thumbnails 回收由 T-088 落地，本任务补齐客户端 %LocalAppData% 缓存维度。",
-      "updatedAt": null
+      "updatedAt": "2026-08-04"
     },
     {
       "id": "T-105",
