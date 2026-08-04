@@ -5336,7 +5336,7 @@
       "title": "Windows 浏览卡顿修复（快照缓存/事件驱动刷新，去除每 5 秒全树枚举）",
       "dimension": "ux",
       "priority": "P2",
-      "status": "in-progress",
+      "status": "acceptance",
       "batch": 9,
       "findingId": "F-150",
       "dependsOn": [],
@@ -5367,7 +5367,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "对应批次 8 承诺项（浏览卡顿进批次 9）；与 T-083 右键菜单/多选同区域，改动集中在 SyncBrowseService 与 Browser 刷新链路。",
+      "note": "对应批次 8 承诺项（浏览卡顿进批次 9）；与 T-083 右键菜单/多选同区域，改动集中在 SyncBrowseService 与 Browser 刷新链路。执行(T-108)：改动文件清单——新增 CloudPan.Client.Core/Services/BrowseLocalIndex.cs + BrowseLocalIndex.Watchers.cs（FileSystemWatcher 增量维护本地文件/目录缓存，懒构建+每 ScanIntervalMinutes 兜底重建+ .syncignore 变更重建）；新增 SyncBrowseService.Cache.cs（/api/tree 快照内存缓存 + 组合数据版本）；SyncBrowseService.cs 查询改走缓存 + Task.Run 后台执行（消除 AllDirectories 全树递归枚举与快照全表读取，本地仅存项尺寸读取前先按视图范围过滤）；SyncEngine.cs 增 RefreshBrowserDataAsync 委托 + Dispose 释放浏览缓存；MainWindow.Browser.cs 定时器版本感知（仅数据变化才重渲染）+ LoadBrowserAsync 先后台刷新快照缓存；MainWindow.cs 增 _lastBrowserVersion；新增 CloudPan.Tests/Benchmarks/BrowseQueryBenchmarks.cs（数万文件浏览查询基准）。验证：AC1 grep -n 'AllDirectories' SyncBrowseService.cs 无匹配（已移 BrowseLocalIndex 后台缓存路径）；AC3 dotnet test CloudPan.Tests -c Release 366 通过 0 失败 + dotnet build CloudPan.sln -c Release 0 警告 0 错误。AC2 手动（数万文件滚动流畅）与基准运行命令：dotnet run -c Release --project CloudPan.Tests -- --filter *BrowseQuery*",
       "updatedAt": "2026-08-04"
     }
   ]
