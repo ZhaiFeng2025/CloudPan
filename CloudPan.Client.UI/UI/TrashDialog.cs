@@ -122,6 +122,12 @@ internal static class TrashDialog
 
                 bool ok = await engine.EmptyTrashAsync();
                 addLog(ok ? "已清空回收站" : "清空回收站失败");
+                if (!ok)
+                {
+                    // T-115：主动清空失败弹可见提示（服务端异常已吞为 false，给通用白话下一步），不再只写默认折叠的日志栏
+                    MessageBox.Show(dialog, "清空回收站失败，请检查网络连接后重试。", "清空回收站",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
                 var refreshed = await engine.GetTrashAsync();
                 RefreshList(refreshed);
                 if (refreshed.Count == 0)
@@ -131,7 +137,11 @@ internal static class TrashDialog
             }
             catch (Exception ex)
             {
+                // T-115：主动清空失败弹白话提示（原因+下一步），不再只写默认折叠的日志栏
+                ErrorAttribution attribution = ErrorAttribution.FromException(ex);
                 addLog($"清空回收站失败: {ex.Message}");
+                MessageBox.Show(dialog, $"清空回收站失败：{attribution.Message}。{attribution.NextStep}", "清空回收站",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
         emptyBtn.Click += OnEmptyClick;

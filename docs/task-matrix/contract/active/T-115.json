@@ -3,7 +3,7 @@
  "title": "Windows 用户主动操作失败统一白话弹窗（对齐 ErrorAttribution，不再只 AddLog）",
  "dimension": "ux",
  "priority": "P2",
- "status": "todo",
+ "status": "acceptance",
  "batch": 10,
  "findingId": "F-155",
  "dependsOn": [],
@@ -34,6 +34,6 @@
  ],
  "attempts": 0,
  "statusReason": null,
- "note": null,
- "updatedAt": null
+ "note": "改动：MainWindow.Browser.cs（双击打开/下载入队/导入失败弹 ErrorAttribution 白话提示：原因+下一步，保留 AddLog）；MainWindow.Trash.cs（批量删除/撤销改逐项计数，失败弹「成功 N / 失败 M」汇总对话框，async void 保留顶层 try-catch）；TrashDialog.cs（清空回收站 ok=false 与 catch 均弹可见提示）。验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 372 全部通过。",
+ "updatedAt": "2026-08-04"
 }

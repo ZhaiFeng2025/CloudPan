@@ -159,7 +159,11 @@ public partial class MainWindow
             }
             catch (Exception ex)
             {
+                // T-115：主动打开失败弹白话提示（原因+下一步），不再只写默认折叠的日志栏
+                ErrorAttribution attribution = ErrorAttribution.FromException(ex);
                 AddLog($"打开文件失败: {item.Path} — {ex.Message}");
+                MessageBox.Show(this, $"无法打开文件：{attribution.Message}。{attribution.NextStep}", "打开文件",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             return;
         }
@@ -208,7 +212,11 @@ public partial class MainWindow
         }
         catch (Exception ex)
         {
+            // T-115：主动下载入队失败弹白话提示（原因+下一步），不再只写默认折叠的日志栏
+            ErrorAttribution attribution = ErrorAttribution.FromException(ex);
             AddLog($"下载入队失败: {relativePath} — {ex.Message}");
+            MessageBox.Show(this, $"下载文件失败：{attribution.Message}。{attribution.NextStep}", "下载文件",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
@@ -228,7 +236,11 @@ public partial class MainWindow
         }
         catch (Exception ex)
         {
+            // T-115：主动导入失败弹白话提示（原因+下一步），不再只写默认折叠的日志栏
+            ErrorAttribution attribution = ErrorAttribution.FromException(ex);
             AddLog($"导入文件失败: {ex.Message}");
+            MessageBox.Show(this, $"导入文件失败：{attribution.Message}。{attribution.NextStep}", "导入文件",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
