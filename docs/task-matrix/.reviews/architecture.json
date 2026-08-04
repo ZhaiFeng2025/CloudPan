@@ -2,121 +2,73 @@
   {
     "dimension": "architecture",
     "severity": "P1",
-    "location": "CloudPan.Client.Core/Services/SyncPath.cs:43-47; SyncEngine.Changes.cs:176; SyncEngine.FullScan.cs:302; FileWatcherService.cs:198-216",
-    "problem": "客户端没有与服务器对等的『路径安全统一防线』。SyncPath.ToLocalPath 直接 Path.Combine(syncRoot, relativePath.TrimStart('/')) 无任何越界校验；SyncEngine.Changes/FulllScan 与 FileWatcherService 对来自服务端（文件树/WS 事件/分享）的相对路径同样裸拼到同步根后落盘。服务器端规则 8.5 强制『路径→绝对路径必须经 ValidatePath』，客户端整端缺失；且 NormalizePath 加的 \\\\?\\ 前缀在 Windows 上不做 `..` 归一化，越界行为更隐蔽。",
-    "why": "规则 8.5 是项目绑定约束（KB §1 违反即 P0 级）：客户端把服务端下发的相对路径写入磁盘，被攻陷/被恶意分享的服务端或服务端路径拼接 bug 用 ../ 即可把文件写出同步根；防线两端缺一端即不成立，违背『纵深防御单点』意图。",
-    "suggestion": "在 Client.Core 提供与服务器对等的 LocalPathValidator：ToLocalPath 前先校验 relativePath 经 Path.GetFullPath 后仍以 syncRoot 为前缀，所有 SyncEngine/FileWatcherService 落盘路径统一经它；复用规则 8.5 语义并补客户端单测。"
-  },
-  {
-    "dimension": "architecture",
-    "severity": "P1",
-    "location": "CloudPan.Client.Core/Services/IApiClient.cs + ApiClient*.cs(601 行); CloudPan.Android/app/src/main/java/com/cloudpan/android/data/CloudPanApi.kt:1-12; CloudPan.CodeGen/Program.cs(generators 字典仅输出 SpecRoutes/DTO)",
-    "problem": "规则 0（最高优先级）明确『HttpClient 接口：C# ApiClient、Kotlin Retrofit interface 从 endpoints 生成』。现状 CodeGen 的 ApiClientGenerator 只生成 SpecRoutes.g.cs 路由常量；C# IApiClient/ApiClient（含 ChunkedUpload/Trash/ShareVersion 等 6 个 partial）与 Kotlin CloudPanApi.kt 的方法签名（@Query/@Body/@Path 参数绑定）全部手工维护，CodeGen 注释自述『Controller 骨架仅作参考，实际业务逻辑需手写，不再自动生成』——将『接口骨架』也一并排除在生成之外。",
-    "why": "契约驱动头号规则在客户端侧失守：spec 增/改端点时，C# 与 Kotlin 两套 HTTP 客户端须各改一处，且 --verify 只比对 SpecRoutes/DTO 检不出方法签名漂移；跨三语种手工翻译正是契约驱动要消灭的头号缺陷（AI 长链路双端必然漂移）。",
-    "suggestion": "ApiClientGenerator 扩展生成 C# HttpClient 方法骨架与 Kotlin Retrofit 接口（spec 需补结构化参数段：query/body/path/part 映射），纳入同一 --verify 管线；落地前先补齐缺失端点方法，杜绝手工翻译回归。"
+    "location": "shared-spec.json:580（/api/thumbnails 无 clientMethod）；CloudPan.Contract/IApiClient.Thumbnails.cs:14-16；CloudPan.Client.Core/Services/ApiClient.cs:76；CloudPan.Android/.../data/Generated/CloudPanApi.g.kt（全缺）",
+    "problem": "GET /api/thumbnails 端点在 shared-spec.json 中只有路由声明（无 clientMethod 段），因此 C# 侧由手工 partial（IApiClient.Thumbnails.cs 的 GetThumbnailAsync(path,width)）补充、ApiClient.cs:76 手写实现，且 width/path 两个查询参数完全没有进 spec；Kotlin 端 CloudPanApi.g.kt 根本没有任何缩略图方法。双端客户端方法签名脱离契约，--verify 检不出漂移。",
+    "why": "契约驱动是项目最高优先级规则（规则 0）——『C# ApiClient、Kotlin Retrofit interface 从 endpoints 生成』。缩略图端点是唯一走『手工 partial + 参数不进 spec』的路由，spec 增/改缩略图参数时 C# 与 Kotlin 不会同步，正好落入契约驱动要消灭的双端漂移缺陷；且 Kotlin 整端缺该能力。",
+    "suggestion": "在 shared-spec.json 的 /api/thumbnails 端点补 clientMethod（含 path 查询参数、width 参数与响应类型），删除 IApiClient.Thumbnails.cs 手工 partial，改由 CodeGen 生成并纳入 --verify，两端同步覆盖。"
   },
   {
     "dimension": "architecture",
     "severity": "P2",
-    "location": "CloudPan.Infrastructure/Storage/FileStorageService.cs:28-33,80-134; CloudPan.Server.Core/Versions/VersionCommitHelper.cs:208",
-    "problem": "规则 8.5 要求『所有路径→绝对路径转换必须经 ValidatePath』，但 FileStorageService.GetAbsolutePath 本身不做校验，AtomicWriteAsync/OpenRead/Delete/Move/CreateDirectory/StoreVersionAsync 全部直接 GetAbsolutePath 落盘；安全完全依赖每个调用方记得先调 ValidatePath。VersionCommitHelper.DeleteOrphanArchive:208 用 Path.Combine(_storage.GetAbsolutePath(\"/\"), \".cloudpan\", \".versions\", archiveStoragePath) 直拼绕过校验。",
-    "why": "『统一防线』应是收敛单点而非约定；防线退化为约定后，任一新增调用点漏调即形成越界写/读，防线形同虚设，且本次审查确实检出了上传链路仅靠 Controller 兜底（见下条）。",
-    "suggestion": "将 ValidatePath 内建到转换与写入口：GetAbsolutePath 内部强制校验（失败抛异常或返回结果对象），AtomicWriteAsync/Move/CreateDirectory/OpenRead 先校验再落盘；DeleteOrphanArchive 改为经 Storage 专用删除方法，消除直拼路径。"
+    "location": "CloudPan.Contract/FileHasher.cs:1；CloudPan.Contract/SyncIgnoreParser.cs:1（非 Generated 目录手工逻辑）",
+    "problem": "CloudPan.Contract 作为『契约层 = spec 生成物 + 传输协议抽象』，却包含两个非生成的手工实现：FileHasher（SHA-256 哈希工具，被 Infrastructure.FileStorageService 与 Client.Core 共用）与 SyncIgnoreParser（客户端忽略规则解析，仅 Client.Core 使用）。它们既非 spec 生成物也非传输抽象，属基础设施/客户端领域工具，按『基础设施单一实现：两端共性设施必须在 Infrastructure』应落位 Infrastructure，而非契约层。",
+    "why": "契约层混入手工基础设施逻辑会稀释『唯一事实来源』语义：后续新增哈希/忽略规则相关改动会直接改契约层而绕开 spec 生成管线；且 SyncIgnoreParser 是纯客户端逻辑，放共享契约层使服务端无谓暴露客户端规则实现，破坏分层纯度。",
+    "suggestion": "将 FileHasher 与 SyncIgnoreParser 下沉到 CloudPan.Infrastructure（Client.Core 与 FileStorageService 均已引用 Infrastructure，依赖方向不变），Contract 层只保留 spec 生成物与传输抽象（DownloadResult/IApiClient.Config 属传输抽象可保留）。"
   },
   {
     "dimension": "architecture",
     "severity": "P2",
-    "location": "CloudPan.Server.Host/Controllers/FilesController.cs:84,90; CloudPan.Server.Core/Upload/UploadService.cs:69",
-    "problem": "UploadService 直接 _storage.AtomicWriteAsync(path, ...) 从未调用 ValidatePath——上传路径唯一的越界闸门是 FilesController.Upload 里的 _storage.ValidatePath(path) 与手工 path.StartsWith('/') 归一；同时 FilesController 构造注入 IFileStorageService（Infrastructure），控制器承担了领域层校验与路径归一职责。",
-    "why": "『Controller 只做 HTTP 适配，禁止在 Controller 自行拼接路径』：上传链路防御依赖控制器记得校验，UploadService 被其他入口调用（未来后台写入/测试）即无校验；控制器直碰 Infrastructure 使边界被污染。",
-    "suggestion": "路径校验下沉到 UploadService 开头（与 ChunkedUploadService/FileOperationService 一致），FilesController 删除 IFileStorageService 依赖与手工归一，仅做参数绑定与错误码映射。"
+    "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs:139-156,162-207；豁免登记 :102-103（SyncEngine Ceiling 2200 / Target 2050 / 批次 8 达 ≤400）",
+    "problem": "SyncEngine 聚合 2123 行仍远超其自身下降目标 2050（距 400 规则上限 5 倍），且豁免登记的截止描述『批次 8：拆出传输/队列逻辑后 ≤400』所指向的批次已全部 done 仍未达标；测试『所有public类型_聚合行数不超上限』只校验 Ceiling(2200)、『豁免表_持续下降约束』只校验 TargetCeiling<Ceiling 与聚合<T070 基线，均未校验 聚合<=TargetCeiling 与截止批次是否兑现。",
+    "why": "单类行数 ≤400（规则 8）对最大类型退化为『有下降意图、无强制兑现』：豁免测试只验证目标比上限小，不验证实际行数小于目标，导致 400 门禁对 SyncEngine 无限期放宽，批次 8 完成而目标未达成也被视为通过，违反『以登记方式把违规合法化』应被阻止的初衷。",
+    "suggestion": "CodeQualityTests 增加断言：聚合行数 <= TargetCeiling（不只看 Ceiling），并校验 Deadline 批次已 done 的类型必须 ≤400；SyncEngine 继续拆（传输/队列已拆出，剩余耦合需以状态机子类或事件驱动重构收敛）。"
   },
   {
     "dimension": "architecture",
     "severity": "P2",
-    "location": "CloudPan.Client.Core/Services/SyncEngine.Changes.cs:3,53,71; SyncEngine.Conflicts.cs:3,27; SyncBrowseService.cs:60-263",
-    "problem": "T-068 已将 ClientDbContext/实体/迁移下沉 Infrastructure，但 Client.Core 领域层仍直接依赖 EF Core：SyncEngine/SyncBrowseService 大量使用 IDbContextFactory<ClientDbContext> + LINQ（ToListAsync/SaveChangesAsync/FirstOrDefaultAsync），csproj 直引 Microsoft.EntityFrameworkCore.Sqlite 与 EF Design。",
-    "why": "『基础设施单一实现：持久化在 Infrastructure，领域独立可单测』：领域层直接写 EF LINQ 使同步状态机与持久化技术强耦合，替换存储/InMemory 单测成本高，持久化边界未真正封闭。",
-    "suggestion": "引入 Repository/Store 抽象（IClientStore/SyncQueueStore）置于 Infrastructure，Client.Core 只依赖抽象；或至少将 SyncEngine 散落的 EF 查询集中到一个 ClientStore，杜绝领域层直接 ToListAsync。"
-  },
-  {
-    "dimension": "architecture",
-    "severity": "P2",
-    "location": "CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.Finalize.cs:102,131-133",
-    "problem": "分块上传 Finalize 阶段直接用 IOFile.Move(record.TempPath, targetPath, overwrite:true) 与 IOFile.Delete 操作文件系统，绕过 IFileStorageService 的原子写/路径校验统一防线；普通上传 UploadService 走 _storage.AtomicWriteAsync，两条上传链的文件操作分叉。",
-    "why": "『路径安全统一防线』要求所有文件操作经 Storage：分块上传直接裸 IOFile 使原子写/重试/路径策略在两条上传链上不一致，T-051/T-056 收敛上传逻辑的一致性被文件操作层打破。",
-    "suggestion": "为 IFileStorageService 增加 MoveTempAsync（目标路径校验 + 原子语义）供 Finalize 使用，ChunkedUpload 与普通上传统一走 Storage 抽象，移除 Finalize 内 IOFile.* 裸调用。"
-  },
-  {
-    "dimension": "architecture",
-    "severity": "P2",
-    "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs:82-177",
-    "problem": "CodeQualityTests 用豁免表给最大类型登记过渡上限（SyncEngine 2300→2200、MainWindow 2600→2500、SetupForm 1074→1091 等），规则 8.8『单类行数 ≤400』对这些类型实质豁免；虽有『TargetCeiling < Ceiling 只降不升』递减约束，但主状态机/主窗体仍 2000+ 行（partial 聚合）。",
-    "why": "规则意图是控制单类复杂度与可测性；2000+ 行状态机/主窗体即便有下降计划，当前理解/维护/单测成本仍高，门禁与规则意图仍脱节。",
-    "suggestion": "在保持递减约束前提下，把 SyncEngine 状态机（队列/传输/全量扫描/冲突）与 MainWindow（浏览器/设置/托盘）真正拆为独立职责类，而非靠 partial+豁免表延续。"
+    "location": "CloudPan.Server.Core/Thumbnails/ThumbnailService.cs:245-249；CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.cs:93-97；CloudPan.Infrastructure/Storage/FileStorageService.cs:13,20-22",
+    "problem": "元数据目录路径有两套并存且互不相通：FileStorageService 构造时创建中央 {syncRoot}/.cloudpan/.thumbnails（仅创建从未被读用，死代码）；ThumbnailService 实际按『源文件所在目录/.cloudpan/.thumbnails』就近写缩略图；ChunkedUploadService 又按『文件父目录/.cloudpan/{guid}.chunk.tmp』写分块临时文件。三处都在 Server.Core 手工 Path.Combine 拼接元数据路径，未收敛到 Storage 单点。",
+    "why": "『基础设施单一实现：文件存储/路径安全在 Infrastructure』与『路径→绝对路径必须经 Storage』被架空：元数据目录布局散落在 ThumbnailService/ChunkedUploadService 两处手工拼，FileStorageService 持有的中央 _thumbnailsDir 成为无人消费的死目录；任一服务改布局（如缩略图改集中存储）需同步改多处，且新增遍历（EnumerateThumbnailCacheDirs）与写入各走一套约定。",
+    "suggestion": "将元数据目录布局（.versions/.thumbnails/分块临时目录）收敛到 FileStorageService 单一接口（如 GetThumbnailCachePath(filePath)/GetChunkTempPath(filePath)），ThumbnailService/ChunkedUploadService 只调 Storage，删除 FileStorageService 未使用的中央 _thumbnailsDir 或统一其为唯一布局。"
   },
   {
     "dimension": "architecture",
     "severity": "P3",
-    "location": "CloudPan.Server.UI/CloudPan.Server.UI.csproj:19,29-33; CloudPan.Server.Host/Hosting/IHostUIBridge.cs:6-8; UIBridgeLocator.cs:11-38",
-    "problem": "桥契约 IHostUIBridge 定义在 Server.Host，Server.UI 编译期引用 Server.Host 实现它（UI→Host 反向边仍在）；运行时接入靠 UIBridgeLocator 反射（LoadFromAssemblyPath）+ 构建后复制 dll 的 MSBuild Target，发布链路依赖目录约定。",
-    "why": "目标架构要求 Host/UI 只向下依赖 Core/Infrastructure/Contract；桥契约放 Host 使 UI 无法脱离组合根独立编译/复用，反射+复制 dll 的接入链脆弱（发布脚本/目录变化即失效）。",
-    "suggestion": "将 IHostUIBridge 与 UIBridgeLocator 下沉到 Server.Core（host-contract 子命名空间），UI 与 Host 都只依赖 Core，消除反向边与复制 dll 的构建 hack。"
+    "location": "CloudPan.Server.Host/Controllers/FilesController.ChunkedUpload.cs:56-59",
+    "problem": "分块上传 Controller 仍手写路径归一（if (!path.StartsWith('/')) path = \"/\" + path;），而普通上传 FilesController.Upload 已按 F-132 把路径归一与校验下沉到 UploadService；ChunkedUploadService 内部也未做归一（只 ValidatePath）。两端上传路径处理边界不一致。",
+    "why": "『Controller 只做 HTTP 适配，禁止在 Controller 自行处理路径』：分块上传路径归一留在 Host 层，与 Upload/FileOperation 的『归一+校验下沉 Core』约定分裂，后续若在 Core 直接调用 ChunkedUploadService 会绕过归一（StartsWith('/') 假设失效）。",
+    "suggestion": "把分块上传的路径归一下沉到 ChunkedUploadService.ReceiveChunkAsync 开头（与 UploadService 对齐），Controller 仅做参数绑定；或至少在 Core 内统一一个路径归一入口。"
   },
   {
     "dimension": "architecture",
     "severity": "P3",
-    "location": "CloudPan.Contract/FileHasher.cs:1-21; CloudPan.Contract/SyncIgnoreParser.cs:1-166",
-    "problem": "契约层（定位为 spec 生成物 + 传输协议抽象，零业务逻辑）仍含两份手工工具：FileHasher（File.OpenRead + SHA-256，做文件 I/O）与 SyncIgnoreParser（glob→正则/读写 .syncignore）；Infrastructure 的 FileStorageService.ComputeHashAsync 又转调 FileHasher，形成双层链路。",
-    "why": "契约层混入文件系统实现，归属混乱；文件哈希/忽略规则是两端共用基础设施工具，应放 Infrastructure 单一实现，避免契约层承担业务工具职责。",
-    "suggestion": "把 FileHasher 与 SyncIgnoreParser 下沉到 CloudPan.Infrastructure（Storage/Hashing、Storage/SyncIgnore），Contract 只保留生成物与协议抽象；或登记『两端共用工具例外』理由。"
+    "location": "CloudPan.Server.Host/Program.cs:155 行（组合根超 150 行指导线）",
+    "problem": "CLAUDE.md 规则 8 目标架构要求『薄组合根（Program.cs < 150 行）』，当前 Program.cs 共 155 行，略超；且内联了 ShowError 静态方法与 TrayAppRunner.RunAsync 分支，组合根已含 5 行以上的启动展示逻辑。",
+    "why": "组合根行数门禁是分层纪律的一部分——超限会随批次继续膨胀（服务注册/中间件/启动信息都在加），违背『薄组合根』约束方向。",
+    "suggestion": "将 ShowError、Kestrel 端口解析、服务注册表等外提（如 Hosting/ServiceRegistrar），把 Program.cs 压回 150 行以内，纳入 CodeQualityTests 单文件行数门禁验证。"
   },
   {
     "dimension": "architecture",
     "severity": "P3",
-    "location": "CloudPan.Server.Host/Controllers/HealthController.cs:52,69-71,82-86,103-205",
-    "problem": "PairingPage 直接 Path.Combine(syncRoot, \".cloudpan\", \"token.txt\") 手拼路径展示 token 文件位置（该路径知识在 SecretStore/DatabaseInitializer 三处重复）+ SecretStore.ReadToken 直读密钥文件 + 内嵌 100+ 行 HTML 视图；同时 GetHealth/GetVersion 硬编码 \"1.0.0\"，与程序集/契约版本存在漂移风险。",
-    "why": "『Controller 只做 HTTP 适配』：控制器承担视图渲染与路径拼接职责，且路径常量多处置复削弱路径安全单一来源；硬编码版本使契约与代码易漂移。",
-    "suggestion": "配对页数据（token/路径/端口/scheme）下沉为 PairingService 返回 DTO，Controller 只绑定渲染；token 路径经统一常量（如 SecretStore.TokenPath 或 MetadataPaths）；版本从程序集/ContractManifest 读取。"
+    "location": "CloudPan.Contract/Generated/ClientApi.g.cs:1-2；CloudPan.Client.Core/Generated/ApiClient.g.cs:1-2（及全部 .g.cs/.g.kt）",
+    "problem": "CLAUDE.md 规定生成文件头部标注『// AUTO-GENERATED from shared-spec.json v{version} — DO NOT EDIT』，实际头部为『// AUTO-GENERATED from shared-spec.json』+ 次行『// 版本: 1.8.0  日期: ...』，v{version} 未内联、无『— DO NOT EDIT』字样。",
+    "why": "生成物头注释是契约驱动可识别性的硬性约定（人/工具据此判断可否手改），格式漂移会让『DO NOT EDIT』提醒弱化，与文档约束不一致。",
+    "suggestion": "CodeGen 生成模板统一改为 CLAUDE.md 规定的『// AUTO-GENERATED from shared-spec.json v{version} — DO NOT EDIT』头注释，重跑生成并同步 --verify。"
   },
   {
     "dimension": "architecture",
     "severity": "P3",
-    "location": "CloudPan.Server.Host/Program.cs:66-67,160",
-    "problem": "组合根 Program.cs 160 行（略超『薄组合根 <150』约定），并直接注册原始值单例 AddSingleton(syncRoot)（string）与 AddSingleton(typeof(int), httpPort)，以原始类型为键注入配置。",
-    "why": "以 string/int 原始类型注册服务使 DI 契约不明确（同类型多实例冲突、装配无法校验），配置通道未收敛为专用类型，组合根行数超目标。",
-    "suggestion": "将 syncRoot/httpPort 收敛为 ServerSettings record 注册单例并减薄 Program.cs；或把 StartupSettingsResolver 解析结果作为显式构造参数传入领域服务而非经 DI 原始类型注入。"
+    "location": "CloudPan.Client.Core/Services/ErrorAttribution.cs vs CloudPan.Android/.../data/ErrorAttribution.kt",
+    "problem": "错误白话归因（异常类型→中文原因+下一步）在 C# 与 Kotlin 双端各有一份手工实现，注释仅『语义对齐』，非从 shared-spec.json 生成；两端文案与判定规则靠人工同步，无 verify 约束。",
+    "why": "双端客户端生成使命下，跨端业务判定（错误归因）手工复刻存在两端漂移风险：C# 新增异常分支 Kotlin 可能漏同步，导致同一错误两端口径不一致。",
+    "suggestion": "短期将归因规则表结构化进 shared-spec.json（如 errorAttribution 段：异常类型/状态码→原因+下一步），CodeGen 生成两端归因数据；无法契约化的文案则明确登记为『纯内部类型例外』。"
   },
   {
     "dimension": "architecture",
     "severity": "P3",
-    "location": "CloudPan.Client.Core/Composition/ClientBootstrap.cs:245,397",
-    "problem": "客户端组合根 ClientBootstrap 397 行，同时承载配置解析/DPAPI/建库重建/完整性检查/健康探测；HealthCheckAsync(...).GetAwaiter().GetResult() 在启动路径同步阻塞（healthCts 5 秒）。",
-    "why": "『薄组合根』意图只做装配：建库/重建/完整性/健康探测是可下沉为领域/基础设施服务的能力，放组合根使组合根难以测试；同步阻塞调用违反异步生命周期模式，可能在 UI 启动路径卡顿。",
-    "suggestion": "把数据库初始化/完整性检查/健康探测拆分到 Infrastructure 的 DatabaseBootstrapper 与 Client.Core 的 ConnectionProbe 服务，组合根只留装配与编排，健康检查改用 await。"
-  },
-  {
-    "dimension": "architecture",
-    "severity": "P3",
-    "location": "CloudPan.Server.Host/Hosting/UdpDiscoveryHostedService.cs:57-58",
-    "problem": "UDP 局域网发现响应体仍由手拼字符串构建（\"{\\\"server\\\":\\\"http://\" + host + ... ），无转义、无 spec 定义、无生成的响应 DTO 类型；客户端以 JsonDocument 字符串解析。",
-    "why": "发现协议是跨进程契约：手拼 JSON 既无法被 --verify 覆盖，也缺类型安全（字段/大小写改动静默），spec 的 api 区未登记该端点，契约驱动对非 HTTP 通道空白。",
-    "suggestion": "在 shared-spec.json 登记 UDP 发现响应消息（server/name/version 字段），生成 DTO 并 JsonSerializer 序列化/反序列化，替代手拼字符串。"
-  },
-  {
-    "dimension": "architecture",
-    "severity": "P3",
-    "location": "CloudPan.Client.Core/Services/FileWatcherService.cs:73-80",
-    "problem": "定时全量扫描的 System.Threading.Timer 与 FileSystemWatcher 线程常驻领域层（Client.Core），调度/线程职责未上移到组合根；虽已按 7.2 用 Task.Run+全量 try-catch，但领域类仍直接持有调度计时器。",
-    "why": "服务器端规则 8.6『定时任务用 IHostedService、禁止裸 Timer 散落』的精神在客户端同样适用；领域层持有调度线程使状态机与宿主生命周期耦合、难以脱离 WinForms/宿主单测。",
-    "suggestion": "由 Client.UI 组合根驱动扫描节拍（WinForms Timer 或 HostedService 触发 FullScanAsync），FileWatcherService 只暴露 Start/Stop 与文件事件；若保留 Core 内 Timer，需按规则登记例外理由。"
-  },
-  {
-    "dimension": "architecture",
-    "severity": "P3",
-    "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/BackupLogEntity.kt:15-16; OfflineCacheEntity.kt:9-10",
-    "problem": "spec 已定义 entities.BackupLog/OfflineCache 且 Kotlin 生成器（KotlinDtoGenerator）只生成 DTO 不生成 Room @Entity；BackupLogEntity/OfflineCacheEntity 仍手工对表，本地扩展字段（如 retryCount）无生成通道。",
-    "why": "契约驱动要求实体从 spec 生成：spec 改字段（增列/改类型）后 Android 本地 Room 实体静默漂移且 --verify 无法覆盖，与 C# 侧客户端实体已生成（ClientEntities.g.cs）不对称。",
-    "suggestion": "Kotlin 生成器扩展生成 Room @Entity（或生成字段映射校验测试），把本地扩展字段在 spec 标注为 android-local 例外，纳入 --verify 一致性扫描。"
+    "location": "CloudPan.Client.Core/Composition/ClientBootstrap.cs:392 行（含 203/233/363/373 直接创建 ClientDbContext）",
+    "problem": "ClientBootstrap 作为客户端组合根（392 行，逼近 400 上限）位于 Client.Core，并多处直接 new/使用 ClientDbContext（建库/完整性检查/重建/迁移），绕开 T-093 IClientStore 抽象；组合根同时承担配置解析/DPAPI/DI 装配/健康检查等多职责，行数已到门禁临界。",
+    "why": "Client.Core 组合根应保持薄且经抽象触碰持久化；直接在 Core 组合根持 EF 类型 + 392 行聚合使 Client.Core 的『领域层独立可单测』纯度下降，且逼近 400 行门禁，下一批次任何新增都可能越线。",
+    "suggestion": "将建库/迁移/完整性检查下沉到 Infrastructure（如 ClientDbFactory/IClientStoreFactory 扩展），ClientBootstrap 仅做 DI 装配，并拆分配置解析与健康检查为独立类以控行数。"
   }
 ]
