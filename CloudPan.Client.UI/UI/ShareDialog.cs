@@ -8,7 +8,8 @@ namespace CloudPan.Client.UI;
 
 /// <summary>
 /// 分享对话框（T-099 从 MainWindow 下沉为独立 internal 类，以满足 MainWindow 聚合行数门禁）：
-/// 生成/复制/撤销分享链接。服务端仅提供创建/撤销端点（无列表端点），故「管理分享」= 生成后直接撤销该链接。
+/// 生成/复制/撤销分享链接；「管理分享」入口（T-112）列出历史分享链接供查看/撤销
+/// （服务端新增 GET /api/shares 列表端点，替代原「生成后即撤销」的受限能力）。
 /// </summary>
 internal static class ShareDialog
 {
@@ -108,6 +109,17 @@ internal static class ShareDialog
             ForeColor = CloudPanColors.TextOnPrimary,
         };
         genBtn.FlatAppearance.BorderColor = CloudPanColors.AccentBlue;
+        // T-112：「管理分享」入口——列出历史分享链接供查看/撤销（RightToLeft：先添加在右）
+        Button manageBtn = new Button
+        {
+            Text = "管理分享",
+            Width = 100,
+            Height = CloudPanSpacing.MinTouchSize,
+            FlatStyle = FlatStyle.Flat,
+            Margin = new Padding(0, 0, 8, 0),
+        };
+        manageBtn.FlatAppearance.BorderColor = CloudPanColors.ButtonBorderGray;
+        genRow.Controls.Add(manageBtn);
         genRow.Controls.Add(genBtn);
         root.Controls.Add(genRow, 0, 3);
 
@@ -228,6 +240,21 @@ internal static class ShareDialog
             }
         }
         genBtn.Click += OnGenerateClick;
+
+        // T-112：「管理分享」入口——打开历史分享列表对话框（查看/撤销）
+        void OnManageClick(object? s, EventArgs e)
+        {
+            try
+            {
+                ShareManageDialog.Show(dialog, engine, addLog);
+            }
+            catch (Exception ex)
+            {
+                ErrorAttribution attribution = ErrorAttribution.FromException(ex);
+                statusLabel.Text = $"打开管理分享失败：{attribution.Message}。{attribution.NextStep}";
+            }
+        }
+        manageBtn.Click += OnManageClick;
 
         void OnCopyClick(object? s, EventArgs e)
         {

@@ -45,6 +45,17 @@ public class ShareController : ControllerBase
     }
 
     /// <summary>
+    /// GET /api/shares — 分享链接列表（当前设备创建，不含 token 等敏感字段）。
+    /// </summary>
+    [HttpGet(SpecRoutes.SharesGet)]
+    public async Task<IActionResult> ListShares()
+    {
+        string deviceId = HttpContext.Items["DeviceId"] as string ?? "unknown";
+        var shares = await _sharing.ListSharesAsync(deviceId);
+        return Ok(new ShareListResponse(shares.ToArray()));
+    }
+
+    /// <summary>
     /// DELETE /api/shares/{shareId} — 撤销分享链接。
     /// </summary>
     [HttpDelete(SpecRoutes.SharesByShareId)]

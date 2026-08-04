@@ -255,6 +255,14 @@ public class MockApiClient : IApiClient
         return Task.FromResult(Shares.Remove(shareId));
     }
 
+    /// <summary>获取分享链接列表（模拟服务端 GET /api/shares；mock 未记录 filePath，用 shareId 占位）。</summary>
+    public Task<List<ShareListItem>> GetSharesAsync(CancellationToken ct = default)
+    {
+        string now = DateTime.UtcNow.ToString("O");
+        return Task.FromResult(Shares.Values.Select(d => new ShareListItem(
+            d.ShareId, d.ShareId, false, d.ExpiresAt, d.MaxDownloads, 0, now)).ToList());
+    }
+
     /// <summary>获取文件历史版本列表（模拟服务端 /api/versions）。</summary>
     public Task<List<VersionItem>> GetVersionsAsync(string path, int limit = 50, CancellationToken ct = default)
     {

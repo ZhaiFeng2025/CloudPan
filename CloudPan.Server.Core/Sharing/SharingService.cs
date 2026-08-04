@@ -89,6 +89,26 @@ public class SharingService : ISharingService
     }
 
     /// <inheritdoc />
+    public async Task<List<ShareListItem>> ListSharesAsync(string deviceId)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var shares = await db.Shares
+            .Where(s => s.CreatedBy == deviceId)
+            .OrderByDescending(s => s.CreatedAt)
+            .ToListAsync();
+
+        // 响应不含敏感字段：PasswordHash/CreatedBy 不外发，仅 hasPassword 布尔表示是否有密码
+        return shares.Select(s => new ShareListItem(
+            s.Id,
+            s.FilePath,
+            !string.IsNullOrEmpty(s.PasswordHash),
+            s.ExpiresAt,
+            s.MaxDownloads,
+            s.UsedDownloads,
+            s.CreatedAt)).ToList();
+    }
+
+    /// <inheritdoc />
     public async Task<ShareInfoResult> GetShareInfoAsync(string shareId, string? password = null)
     {
         await using var db = await _dbFactory.CreateDbContextAsync();

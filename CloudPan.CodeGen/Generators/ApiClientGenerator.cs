@@ -37,25 +37,25 @@ public static class ApiClientGenerator
         sb.AppendLine("public static class SpecRoutes");
         sb.AppendLine("{");
 
-        foreach (var ep in spec.Api.Endpoints)
+        // 同 path 多 HTTP 方法消歧（T-112）：非首个方法常量名追加方法后缀
+        // （POST /api/shares → Shares 保持原名，GET /api/shares → SharesGet），C#/Kotlin 两端同规则
+        var routeEntries = BuildRouteEntries(spec);
+
+        foreach (var (name, method, path, description) in routeEntries)
         {
-            string name = ToConstantName(ep.Path);
-            string method = ep.Method.ToUpperInvariant();
             sb.AppendLine("    /// <summary>");
-            sb.AppendLine($"    /// {EscapeString(ep.Description)}（{method} {ep.Path}）");
+            sb.AppendLine($"    /// {EscapeString(description)}（{method} {path}）");
             sb.AppendLine("    /// </summary>");
-            sb.AppendLine($"    public const string {name} = \"{ep.Path}\";");
+            sb.AppendLine($"    public const string {name} = \"{path}\";");
             sb.AppendLine();
         }
 
         sb.AppendLine("    /// <summary>(路由常量名, HTTP 方法, 路径) 索引，供 DiffAgainstSpecEndpoints 交叉校验。</summary>");
         sb.AppendLine("    private static readonly (string Name, string Method, string Path)[] RouteIndex =");
         sb.AppendLine("    {");
-        foreach (var ep in spec.Api.Endpoints)
+        foreach (var (name, method, path, _) in routeEntries)
         {
-            string name = ToConstantName(ep.Path);
-            string method = ep.Method.ToUpperInvariant();
-            sb.AppendLine($"        (\"{name}\", \"{method}\", \"{ep.Path}\"),");
+            sb.AppendLine($"        (\"{name}\", \"{method}\", \"{path}\"),");
         }
         sb.AppendLine("    };");
         sb.AppendLine();
@@ -138,6 +138,38 @@ public static class ApiClientGenerator
     }
 
     private static string EscapeString(string s) => s.Replace("\"", "\\\"");
+
+    /// <summary>
+    /// 生成 (常量名, HTTP 方法, 路径, 描述) 路由条目列表。
+    /// 同 path 多 HTTP 方法时，非首个方法常量名追加方法后缀（如 GET /api/shares → SharesGet），
+    /// 首个方法保持原名（POST /api/shares → Shares，向后兼容）。C#/Kotlin 两端同规则（T-112）。
+    /// </summary>
+    private static List<(string Name, string Method, string Path, string Description)> BuildRouteEntries(SpecDocument spec)
+    {
+        var entries = new List<(string, string, string, string)>();
+        var methodSeq = new Dictionary<string, int>();
+        foreach (var ep in spec.Api.Endpoints)
+        {
+            int seq = methodSeq.GetValueOrDefault(ep.Path, 0);
+            methodSeq[ep.Path] = seq + 1;
+            string name = seq == 0
+                ? ToConstantName(ep.Path)
+                : ToConstantName(ep.Path) + MethodSuffix(ep.Method);
+            entries.Add((name, ep.Method.ToUpperInvariant(), ep.Path, ep.Description));
+        }
+        return entries;
+    }
+
+    /// <summary>HTTP 方法 → 常量名后缀（GET → Get，POST → Post，DELETE → Delete 等）。</summary>
+    private static string MethodSuffix(string method) => method.ToUpperInvariant() switch
+    {
+        "GET" => "Get",
+        "POST" => "Post",
+        "PUT" => "Put",
+        "DELETE" => "Delete",
+        "PATCH" => "Patch",
+        _ => method[..1] + method[1..].ToLowerInvariant()
+    };
 
     // ============================================================
     // 客户端接口签名生成（T-086）

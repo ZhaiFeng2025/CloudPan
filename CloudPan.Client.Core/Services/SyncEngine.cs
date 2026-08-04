@@ -384,6 +384,10 @@ public partial class SyncEngine : IDisposable
     public Task<bool> RevokeShareAsync(string shareId, CancellationToken ct = default)
         => _manage.RevokeShareAsync(shareId, ct);
 
+    /// <inheritdoc cref="SyncManageService.GetSharesAsync"/>
+    public Task<List<ShareListItem>> GetSharesAsync(CancellationToken ct = default)
+        => _manage.GetSharesAsync(ct);
+
     /// <inheritdoc cref="SyncManageService.GetVersionHistoryAsync"/>
     public Task<List<VersionItem>> GetVersionHistoryAsync(string path, int limit = 50, CancellationToken ct = default)
         => _manage.GetVersionHistoryAsync(path, limit, ct);

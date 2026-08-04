@@ -61,6 +61,42 @@ public class SharingServiceTests : Infrastructure.TestBase
     }
 
     [Fact]
+    public async Task ListShares_创建后包含_撤销后不含()
+    {
+        var (svc, _) = await CreateServiceAsync();
+
+        var created = await svc.CreateShareAsync("/test.txt", null, null, null, "dev-1");
+        Assert.True(created.Success);
+
+        var list = await svc.ListSharesAsync("dev-1");
+        Assert.Contains(list, s => s.ShareId == created.ShareId);
+
+        var revoked = await svc.RevokeShareAsync(created.ShareId!);
+        Assert.True(revoked.Success);
+
+        var after = await svc.ListSharesAsync("dev-1");
+        Assert.DoesNotContain(after, s => s.ShareId == created.ShareId);
+    }
+
+    [Fact]
+    public async Task ListShares_带密码与次数限制_标记hasPassword()
+    {
+        var (svc, _) = await CreateServiceAsync();
+        var created = await svc.CreateShareAsync("/test.txt", "secret", null, 3, "dev-1");
+        Assert.True(created.Success);
+
+        var list = await svc.ListSharesAsync("dev-1");
+        var item = Assert.Single(list);
+        Assert.Equal(created.ShareId, item.ShareId);
+        Assert.Equal("/test.txt", item.FilePath);
+        Assert.True(item.HasPassword);   // 有密码 → hasPassword=true（PasswordHash 不外发）
+        Assert.Equal(3, item.MaxDownloads);
+        Assert.Equal(0, item.UsedDownloads);
+        Assert.Null(item.ExpiresAt);
+        Assert.False(string.IsNullOrEmpty(item.CreatedAt));
+    }
+
+    [Fact]
     public async Task GetShareInfo_过期分享_标记Expired()
     {
         var (svc, _) = await CreateServiceAsync();

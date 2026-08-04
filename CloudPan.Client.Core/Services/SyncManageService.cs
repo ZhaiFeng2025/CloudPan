@@ -261,6 +261,20 @@ internal sealed class SyncManageService
         }
     }
 
+    /// <summary>获取当前设备创建的分享链接列表（管理入口展示/撤销，T-112）。失败返回空列表。</summary>
+    public async Task<List<ShareListItem>> GetSharesAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            return await _api.GetSharesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "获取分享列表失败");
+            return new List<ShareListItem>();
+        }
+    }
+
     /// <summary>获取文件历史版本列表（按版本倒序）。失败返回空列表。</summary>
     public async Task<List<VersionItem>> GetVersionHistoryAsync(string path, int limit = 50, CancellationToken ct = default)
     {

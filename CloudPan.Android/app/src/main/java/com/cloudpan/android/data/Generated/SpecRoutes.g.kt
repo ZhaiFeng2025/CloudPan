@@ -1,5 +1,5 @@
 // AUTO-GENERATED from shared-spec.json
-// 版本: 1.10.0  日期: 2026-08-04
+// 版本: 1.11.0  日期: 2026-08-04
 // 源: shared-spec.json → api.endpoints（Retrofit 路由常量，与 C# SpecRoutes.g.cs 同源）
 // 请勿手工编辑 — 重新生成: dotnet run --project CloudPan.CodeGen
 
@@ -99,6 +99,11 @@ object SpecRoutes
      * 创建分享链接（POST /api/shares）
      */
     const val Shares = "api/shares"
+
+    /**
+     * 分享链接列表（当前设备创建，不含 token 等敏感字段）（GET /api/shares）
+     */
+    const val SharesGet = "api/shares"
 
     /**
      * 撤销分享链接（DELETE /api/shares/{shareId}）

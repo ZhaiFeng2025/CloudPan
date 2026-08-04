@@ -258,6 +258,19 @@ class FileRepository(private val settings: SettingsStore) {
     }
 
     /**
+     * 撤销分享链接（DELETE /api/shares/{shareId}，T-112——由 CodeGen 从 spec 生成 revokeShare 并接线）。
+     * 404（分享已失效/不存在）返回 false（撤销失败），对齐 C# RevokeShareAsync notFoundReturns=false 语义。
+     */
+    suspend fun revokeShare(shareId: String): Result<Boolean> {
+        return safeCall {
+            val r = api().revokeShare(shareId)
+            if (r.code() == 404) return@safeCall false
+            if (!r.isSuccessful) throw Exception("撤销分享失败: ${r.code()} ${r.message()}")
+            true
+        }
+    }
+
+    /**
      * 上传文件。
      * baseVersion 为乐观并发基准版本（T-089：调用方经 resolveBaseVersion 先查目标文件当前版本，
      * 或复用列表 fileEntry.version），不再恒传 0；服务端当前版本更高时返回 409（FileConflictException），

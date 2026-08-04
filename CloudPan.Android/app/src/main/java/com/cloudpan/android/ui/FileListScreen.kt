@@ -1,5 +1,9 @@
 package com.cloudpan.android.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
 import android.os.Environment
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
@@ -180,6 +184,8 @@ fun FileListScreen(
     var isSearching by remember { mutableStateOf(false) }
     var sortBy by remember { mutableStateOf("name") }
     var selectedFile by remember { mutableStateOf<FileEntryDto?>(null) }
+    // T-112：分享目标文件（打开分享对话框：生成链接 + 复制/发送 + 撤销）
+    var shareTarget by remember { mutableStateOf<FileEntryDto?>(null) }
     var isDownloading by remember { mutableStateOf(false) }
     var downloadProgress by remember { mutableStateOf(0f) }
     var downloadBytes by remember { mutableStateOf(0L) }
@@ -569,6 +575,18 @@ fun FileListScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    // T-112：分享入口（仅非下载中可点），复用当前选中文件生成分享链接；
+                    // 先关闭下载对话框，避免两个 AlertDialog 叠放
+                    if (!isDownloading) {
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedButton(
+                            onClick = {
+                                selectedFile = null
+                                shareTarget = file
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("生成分享链接") }
+                    }
                 }
             },
             confirmButton = {
@@ -741,6 +759,16 @@ fun FileListScreen(
             repository = repository,
             snackbarHostState = snackbarHostState,
             onDismiss = { showTrashDialog = false }
+        )
+    }
+
+    // T-112：分享对话框（生成分享链接 + 复制/系统发送 + 撤销）
+    shareTarget?.let { file ->
+        ShareDialog(
+            file = file,
+            repository = repository,
+            snackbarHostState = snackbarHostState,
+            onDismiss = { shareTarget = null }
         )
     }
 
@@ -1206,6 +1234,119 @@ fun FileListScreen(
             )
         }
     }
+}
+
+// ---- T-112：分享对话框（生成链接 + 复制/系统发送 + 撤销，对齐 Windows ShareDialog 生成后即撤销语义的扩展） ----
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ShareDialog(
+    file: FileEntryDto,
+    repository: FileRepository,
+    snackbarHostState: SnackbarHostState,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var isCreating by remember { mutableStateOf(false) }
+    var isRevoking by remember { mutableStateOf(false) }
+    var shareId by remember { mutableStateOf<String?>(null) }
+    var shareUrl by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = { if (!isCreating && !isRevoking) onDismiss() },
+        icon = { Icon(Icons.Default.Share, null) },
+        title = { Text("分享文件") },
+        text = {
+            Column(Modifier.fillMaxWidth()) {
+                Text(fileName(file.path), fontWeight = FontWeight.Medium)
+                Spacer(Modifier.height(4.dp))
+                if (shareUrl == null) {
+                    Text(
+                        "生成分享链接后，家人可在任意设备的浏览器中打开下载",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                isCreating = true
+                                val r = repository.createShare(file.path)
+                                if (r.isSuccess) {
+                                    val data = r.getOrNull()?.data
+                                    shareId = data?.shareId
+                                    shareUrl = data?.url
+                                } else {
+                                    snackbarHostState.showSnackbar(
+                                        "创建分享失败：${r.exceptionOrNull().toUserMessage()}"
+                                    )
+                                    onDismiss()
+                                }
+                                isCreating = false
+                            }
+                        },
+                        enabled = !isCreating,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (isCreating) "生成中……" else "生成分享链接")
+                    }
+                } else {
+                    OutlinedTextField(
+                        value = shareUrl ?: "",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("分享链接") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "点击「复制链接」或「发送」分享给家人",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row {
+                        TextButton(onClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText("分享链接", shareUrl))
+                            snackbarHostState.showSnackbar("链接已复制")
+                        }) { Text("复制链接") }
+                        TextButton(onClick = {
+                            val send = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, shareUrl)
+                            }
+                            context.startActivity(Intent.createChooser(send, "分享链接"))
+                        }) { Text("发送") }
+                        TextButton(
+                            onClick = {
+                                val id = shareId
+                                if (id != null) {
+                                    scope.launch {
+                                        isRevoking = true
+                                        val r = repository.revokeShare(id)
+                                        val ok = r.isSuccess && r.getOrNull() == true
+                                        snackbarHostState.showSnackbar(
+                                            if (ok) "已撤销分享" else "撤销失败（分享可能已失效）"
+                                        )
+                                        if (ok) onDismiss()
+                                        isRevoking = false
+                                    }
+                                }
+                            },
+                            enabled = !isRevoking,
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) { Text("撤销分享") }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("关闭") } }
+    )
 }
 
 // ---- T-050：回收站对话框（最近删除列表 + 恢复/清空，对齐 Windows T-014） ----

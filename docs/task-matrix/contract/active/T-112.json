@@ -3,7 +3,7 @@
  "title": "分享列表端点 + 双端管理入口（GET /api/shares + 撤销 + Android 接线）",
  "dimension": "function",
  "priority": "P1",
- "status": "todo",
+ "status": "acceptance",
  "batch": 10,
  "findingId": "F-152",
  "dependsOn": [],
@@ -45,6 +45,6 @@
  ],
  "attempts": 0,
  "statusReason": null,
- "note": null,
- "updatedAt": null
+ "note": "改动清单：① shared-spec.json v1.10.0→1.11.0：新增 GET /api/shares 列表端点 + clientMethod（GetSharesAsync/getShares）；api.responses 新增 ShareListResponse/ShareListItem（不含 PasswordHash/CreatedBy 敏感字段）；DELETE /api/shares/{shareId} 移除 kotlin:false（Kotlin revokeShare 由 CodeGen 生成）。② CodeGen ApiClientGenerator/KotlinApiGenerator：SpecRoutes 同 path 多 HTTP 方法常量名消歧（POST /api/shares→Shares 保持原名，GET /api/shares→SharesGet），C#/Kotlin 两端一致，纳入 --verify。③ 生成物更新：ApiResponses/ClientApi/SpecRoutes/ContractManifest/ApiClient.g.cs + CloudPanApi/Dtos/SpecRoutes.g.kt（getShares/revokeShare/ShareListResponse/ShareListItem）。④ 服务端：ISharingService/SharingService 加 ListSharesAsync(deviceId)（复用 SharingService，不含敏感字段）；ShareController 加 GET /api/shares（SpecRoutes.SharesGet）。⑤ Windows：SyncManageService/SyncEngine 加 GetSharesAsync；ShareDialog 加「管理分享」入口；新增 ShareManageDialog（ListView 列表 + 撤销选中 + 刷新）。⑥ Android：FileRepository 加 revokeShare（404→false 对齐 C#）；FileListScreen 加分享对话框（生成链接+复制/系统发送/撤销），createShare 死代码接线为真实可用。⑦ Tests：MockApiClient 实现 GetSharesAsync；SharingServiceTests 加 ListShares 创建→列表含→撤销→不含 + hasPassword/次数/过期断言。验证：dotnet run --project CloudPan.CodeGen -- --verify 通过（版本治理+15 产物一致）；dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test -c Release 372/372 通过（含 --filter Share 17 项）；Android SDK 本机未安装无法编译（环境限制，AC5 手动验证留验收者）。",
+ "updatedAt": "2026-08-04"
 }

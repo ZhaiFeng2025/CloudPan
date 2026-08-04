@@ -1,3 +1,4 @@
+using CloudPan.Contract;
 using CloudPan.Infrastructure.Models;
 
 namespace CloudPan.Server.Core;
@@ -34,6 +35,9 @@ public interface ISharingService
 
     /// <summary>撤销分享链接。</summary>
     Task<ShareRevokeResult> RevokeShareAsync(string shareId);
+
+    /// <summary>列出当前设备创建的分享链接（不含 token/密码哈希等敏感字段，供管理入口展示）。</summary>
+    Task<List<ShareListItem>> ListSharesAsync(string deviceId);
 
     /// <summary>获取分享访问信息（过期/密码/下载上限校验 + 文件名与大小）。</summary>
     Task<ShareInfoResult> GetShareInfoAsync(string shareId, string? password = null);

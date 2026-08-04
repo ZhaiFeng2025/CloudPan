@@ -3,7 +3,7 @@
   "$id": "cloudpan-shared-spec",
   "title": "CloudPan 共享定义",
   "description": "所有枚举、实体、端点、字段名、错误码、配置值的唯一事实来源。所有代码和文档引用本文件，禁止各自重复定义。",
-  "version": "1.10.0",
+  "version": "1.11.0",
   "date": "2026-08-04",
   "_changelog": [
     { "version": "1.0.0", "date": "2026-07-28", "changes": [
@@ -72,6 +72,11 @@
     ]},
     { "version": "1.10.0", "date": "2026-08-04", "changes": [
       "api.endpoints 分块上传两端补 clientMethod Kotlin 生成：POST /api/files/upload/chunk（kind=multipart，补 chunk/chunkIndex/totalChunks/fileHash 参数，kotlinName=uploadChunk，新参数 csharp=false 保持 C# 接口签名不变）与 GET /api/files/upload/chunk/status（kotlinName=getChunkStatus）；C# 侧仍标 manual 保留手工实现（T-105）"
+    ]},
+    { "version": "1.11.0", "date": "2026-08-04", "changes": [
+      "api.endpoints 新增 GET /api/shares 列表端点（列出当前设备创建分享：path/有密码/过期时间/maxDownloads/已用次数/createdAt）+ clientMethod（C# GetSharesAsync / Kotlin getShares）；api.responses 新增 ShareListResponse/ShareListItem（不含 token 等敏感字段）（T-112）",
+      "DELETE /api/shares/{shareId} clientMethod 移除 kotlin:false（Kotlin revokeShare 由 CodeGen 生成并接线，T-112）",
+      "CodeGen SpecRoutes 同 path 多 HTTP 方法常量名消歧：非首个方法加方法后缀（POST /api/shares → Shares，GET /api/shares → SharesGet），C#/Kotlin 两端一致（T-112）"
     ]}
   ],
 
@@ -629,9 +634,13 @@
               { "name": "maxDownloads", "in": "body", "dto": "CreateShareRequestDto", "type": "int", "optional": true }
             ] }
         ] },
+      { "method": "GET", "path": "/api/shares", "auth": "token", "description": "分享链接列表（当前设备创建，不含 token 等敏感字段）",
+        "clientMethod": [
+          { "name": "GetSharesAsync", "kotlinName": "getShares", "response": "ShareListResponse", "returns": "List<ShareListItem>", "unwraps": "Data", "params": [] }
+        ] },
       { "method": "DELETE", "path": "/api/shares/{shareId}", "auth": "token", "description": "撤销分享链接",
         "clientMethod": [
-          { "name": "RevokeShareAsync", "kotlinName": "revokeShare", "kind": "delete", "kotlin": false,
+          { "name": "RevokeShareAsync", "kotlinName": "revokeShare", "kind": "delete",
             "returns": "bool", "notFoundReturns": "false",
             "params": [
               { "name": "shareId", "in": "path", "wireName": "shareId", "type": "string" }
@@ -732,6 +741,14 @@
       "ShareCreateData": {
         "description": "创建分享链接响应 data",
         "fields": ["shareId: string", "url: string", "expiresAt: string?", "maxDownloads: int?"]
+      },
+      "ShareListResponse": {
+        "description": "GET /api/shares 响应包装",
+        "fields": ["data: ShareListItem[]"]
+      },
+      "ShareListItem": {
+        "description": "分享链接列表条目（管理入口展示用，不含 PasswordHash/CreatedBy 等敏感字段）",
+        "fields": ["shareId: string", "filePath: string", "hasPassword: bool", "expiresAt: string?", "maxDownloads: int?", "usedDownloads: int", "createdAt: string"]
       },
       "ShareRevokeResponse": {
         "description": "DELETE /api/shares/{shareId} 响应包装",

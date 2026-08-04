@@ -1,5 +1,5 @@
 // AUTO-GENERATED from shared-spec.json
-// 版本: 1.10.0  日期: 2026-08-04
+// 版本: 1.11.0  日期: 2026-08-04
 // 源: shared-spec.json → api.endpoints[].clientMethod（Retrofit interface，与 C# ClientApi.g.cs 同源）
 // 请勿手工编辑 — 重新生成: dotnet run --project CloudPan.CodeGen
 
@@ -101,6 +101,18 @@ interface CloudPanApi {
      */
     @POST(SpecRoutes.Shares)
     suspend fun createShare(@Body request: CreateShareRequestDto): Response<ShareCreateResponse>
+
+    /**
+     * 分享链接列表（当前设备创建，不含 token 等敏感字段）（GET /api/shares）
+     */
+    @GET(SpecRoutes.Shares)
+    suspend fun getShares(): Response<ShareListResponse>
+
+    /**
+     * 撤销分享链接（DELETE /api/shares/{shareId}）
+     */
+    @DELETE(SpecRoutes.SharesByShareId)
+    suspend fun revokeShare(@Path("shareId") shareId: String): Response<Unit>
 
     /**
      * 回收站文件列表（GET /api/trash）

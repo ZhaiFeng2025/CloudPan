@@ -1,5 +1,5 @@
 // AUTO-GENERATED from shared-spec.json
-// 版本: 1.10.0  日期: 2026-08-04
+// 版本: 1.11.0  日期: 2026-08-04
 // 源: shared-spec.json → enums + entities.apiMapping + api.responses + api.errorResponse
 // 请勿手工编辑 — 重新生成: dotnet run --project CloudPan.CodeGen
 
@@ -282,6 +282,22 @@ data class ShareCreateData(
     @SerializedName("url") val url: String,
     @SerializedName("expiresAt") val expiresAt: String?,
     @SerializedName("maxDownloads") val maxDownloads: Int?
+)
+
+// GET /api/shares 响应包装
+data class ShareListResponse(
+    @SerializedName("data") val data: List<ShareListItem>
+)
+
+// 分享链接列表条目（管理入口展示用，不含 PasswordHash/CreatedBy 等敏感字段）
+data class ShareListItem(
+    @SerializedName("shareId") val shareId: String,
+    @SerializedName("filePath") val filePath: String,
+    @SerializedName("hasPassword") val hasPassword: Boolean,
+    @SerializedName("expiresAt") val expiresAt: String?,
+    @SerializedName("maxDownloads") val maxDownloads: Int?,
+    @SerializedName("usedDownloads") val usedDownloads: Int,
+    @SerializedName("createdAt") val createdAt: String
 )
 
 // DELETE /api/shares/{shareId} 响应包装
