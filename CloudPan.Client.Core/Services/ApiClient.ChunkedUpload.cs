@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using CloudPan.Contract;
+using CloudPan.Infrastructure.Storage;
 using Microsoft.Extensions.Logging;
 
 namespace CloudPan.Client.Core.Services;

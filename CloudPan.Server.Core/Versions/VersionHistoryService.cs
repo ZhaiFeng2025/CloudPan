@@ -100,7 +100,7 @@ public class VersionHistoryService : IVersionHistoryService
 
         // 3. 计算新版本号与哈希（对 tmp 计算，不依赖已覆盖的目标文件）
         int newVersion = await _version.NextVersionAsync();
-        string hash = await _storage.ComputeHashAsync(tmpPath);
+        string hash = await FileHasher.ComputeSha256Async(tmpPath);
         long size = new IOFileInfo(tmpPath).Length;
 
         // 4. 单事务 DB 写入（经 VersionCommitHelper：存档记录 + FileEntry 更新 + 回滚记录）。

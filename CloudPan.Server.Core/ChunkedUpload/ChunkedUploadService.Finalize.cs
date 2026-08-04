@@ -29,7 +29,7 @@ public partial class ChunkedUploadService
         }
 
         // b. 校验完整文件 SHA-256
-        string actualHash = await _storage.ComputeHashAsync(record.TempPath);
+        string actualHash = await FileHasher.ComputeSha256Async(record.TempPath);
         if (!string.Equals(actualHash, fileHash, StringComparison.OrdinalIgnoreCase))
         {
             SafeDeleteTemp(record.TempPath);
@@ -75,7 +75,7 @@ public partial class ChunkedUploadService
         }
 
         // 对临时文件计算哈希与大小（不依赖已覆盖的目标文件）
-        string hash = await _storage.ComputeHashAsync(record.TempPath);
+        string hash = await FileHasher.ComputeSha256Async(record.TempPath);
         long uploadFileSize = new FileInfo(record.TempPath).Length;
 
         // —— 阶段 2：DB 事务（同一 DbContext，经 VersionCommitHelper 单点提交）——

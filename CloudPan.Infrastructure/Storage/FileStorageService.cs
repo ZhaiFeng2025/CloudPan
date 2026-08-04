@@ -1,5 +1,3 @@
-using CloudPan.Contract;
-
 namespace CloudPan.Infrastructure.Storage;
 
 /// <summary>
@@ -90,13 +88,6 @@ public class FileStorageService : IFileStorageService
     }
 
     /// <summary>
-    /// 计算文件的 SHA-256 哈希（64 字符十六进制）。
-    /// 单一实现委托给 CloudPan.Contract.FileHasher（T-017 收敛，哈希策略只改一处）。
-    /// </summary>
-    public async Task<string> ComputeHashAsync(string absolutePath, CancellationToken ct = default)
-        => await FileHasher.ComputeSha256Async(absolutePath, ct);
-
-    /// <summary>
     /// 原子写入：先写 .tmp → 校验哈希 → rename 到目标路径。
     /// 返回 null 表示成功，否则返回错误信息。
     /// </summary>
@@ -124,7 +115,7 @@ public class FileStorageService : IFileStorageService
             // 校验哈希
             if (expectedHash != null)
             {
-                string actualHash = await ComputeHashAsync(tmpPath, ct);
+                string actualHash = await FileHasher.ComputeSha256Async(tmpPath, ct);
                 if (!string.Equals(actualHash, expectedHash, StringComparison.OrdinalIgnoreCase))
                 {
                     File.Delete(tmpPath);

@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 
-namespace CloudPan.Contract;
+namespace CloudPan.Infrastructure.Storage;
 
 /// <summary>
 /// 纯文件哈希共享工具（两端唯一实现）。

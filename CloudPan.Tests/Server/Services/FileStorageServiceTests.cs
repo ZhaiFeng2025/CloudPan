@@ -160,8 +160,8 @@ public class FileStorageServiceTests : Infrastructure.TestBase
         byte[] content = new byte[] { 1, 2, 3, 4, 5 };
         await File.WriteAllBytesAsync(filePath, content);
 
-        string hash1 = await svc.ComputeHashAsync(filePath);
-        string hash2 = await svc.ComputeHashAsync(filePath);
+        string hash1 = await FileHasher.ComputeSha256Async(filePath);
+        string hash2 = await FileHasher.ComputeSha256Async(filePath);
 
         Assert.Equal(hash1, hash2);
         Assert.Equal(64, hash1.Length); // SHA-256: 64 hex chars

@@ -1,6 +1,7 @@
 using System.Globalization;
 using CloudPan.Contract;
 using CloudPan.Infrastructure.Models;
+using CloudPan.Infrastructure.Storage;
 using Microsoft.Extensions.Logging;
 
 namespace CloudPan.Client.Core.Services;

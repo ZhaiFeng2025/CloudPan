@@ -5022,7 +5022,7 @@
       "title": "FileHasher/SyncIgnoreParser 下沉 Infrastructure + 删除 ComputeHashAsync 转发",
       "dimension": "architecture",
       "priority": "P2",
-      "status": "todo",
+      "status": "in-progress",
       "batch": 9,
       "findingId": "F-142",
       "dependsOn": [],
@@ -5055,7 +5055,7 @@
       "attempts": 0,
       "statusReason": null,
       "note": "与 T-099 不冲突：T-099 拆分 SyncEngine/MainWindow，本任务仅移动工具类位置与删转发，改动面独立。",
-      "updatedAt": null
+      "updatedAt": "2026-08-04"
     },
     {
       "id": "T-101",

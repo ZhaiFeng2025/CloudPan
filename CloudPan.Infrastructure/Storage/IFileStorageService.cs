@@ -7,7 +7,6 @@ public interface IFileStorageService
 {
     string GetAbsolutePath(string relativePath);
     string? ValidatePath(string relativePath);
-    Task<string> ComputeHashAsync(string absolutePath, CancellationToken ct = default);
     Task<string?> AtomicWriteAsync(string relativePath, Stream content, string? expectedHash, CancellationToken ct = default);
     FileStream OpenRead(string relativePath);
     bool Exists(string relativePath);

@@ -54,8 +54,8 @@ public class PathValidationBenchmarks
     [Benchmark]
     public string? ValidatePath() => _storage!.ValidatePath(RelativePath);
 
-    /// <summary>文件 SHA-256 计算（生产路径 ComputeHashAsync）</summary>
+    /// <summary>文件 SHA-256 计算（生产路径 FileHasher）</summary>
     [Benchmark]
     public async Task<string> HashFile()
-        => await _storage!.ComputeHashAsync("/hash_target.bin");
+        => await FileHasher.ComputeSha256Async("/hash_target.bin");
 }

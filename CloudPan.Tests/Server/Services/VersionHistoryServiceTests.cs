@@ -126,7 +126,7 @@ public class VersionHistoryServiceTests : Infrastructure.TestBase
             // 3. 索引与磁盘一致：FileEntry.CurrentHash == 磁盘哈希（客户端下载校验不再失败进入重试循环）
             var entry = await db.FileEntries.FindAsync("/file.txt");
             Assert.NotNull(entry);
-            Assert.Equal(await storage.ComputeHashAsync(targetPath), entry!.CurrentHash);
+            Assert.Equal(await FileHasher.ComputeSha256Async(targetPath), entry!.CurrentHash);
             Assert.Equal(13, entry.CurrentSize);
 
             // 4. 无本次回滚残留的孤儿版本记录（本次存档 + 回滚记录均已移除；仅剩上传 v2 时产生的存档记录）

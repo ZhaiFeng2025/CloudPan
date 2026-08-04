@@ -67,7 +67,7 @@ public sealed class ConflictBackupHelper
 
         // 原子写冲突副本（统一原子性：先 .tmp → rename，消除分块侧 IOFile.Copy 裸拷分叉）
         await _storage.AtomicWriteAsync(conflictPath, content, expectedHash: null);
-        string conflictHash = await _storage.ComputeHashAsync(_storage.GetAbsolutePath(conflictPath));
+        string conflictHash = await FileHasher.ComputeSha256Async(_storage.GetAbsolutePath(conflictPath));
         long fileSize = _storage.GetSize(conflictPath);
         var conflictEntry = await _index.UpsertFileAsync(
             conflictPath, FileType.File, conflictHash, fileSize,

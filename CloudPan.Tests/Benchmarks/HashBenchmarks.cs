@@ -55,10 +55,10 @@ public class HashBenchmarks
     [Benchmark]
     public byte[] Sha256InMemory() => SHA256.HashData(_data);
 
-    /// <summary>文件 SHA-256（生产路径 FileStorageService.ComputeHashAsync）</summary>
+    /// <summary>文件 SHA-256（生产路径 FileHasher）</summary>
     [Benchmark]
     public async Task<string> Sha256File()
-        => await _storage!.ComputeHashAsync(_storage.GetAbsolutePath("/hash_target.bin"));
+        => await FileHasher.ComputeSha256Async(_storage!.GetAbsolutePath("/hash_target.bin"));
 
     /// <summary>原子写入：写 .tmp → 校验哈希 → rename（生产路径 AtomicWriteAsync）</summary>
     [Benchmark]

@@ -1,5 +1,6 @@
 using CloudPan.Client.Core.Models;
 using CloudPan.Contract;
+using CloudPan.Infrastructure.Storage;
 using Microsoft.Extensions.Logging;
 
 namespace CloudPan.Client.Core.Services;

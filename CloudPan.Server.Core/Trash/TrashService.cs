@@ -146,7 +146,7 @@ public class TrashService : ITrashService
             }
 
             // 重建索引
-            string? hash = entry.IsDirectory ? null : await _storage.ComputeHashAsync(targetPath);
+            string? hash = entry.IsDirectory ? null : await FileHasher.ComputeSha256Async(targetPath);
             int newVersion = await _version.NextVersionAsync();
             var type = entry.IsDirectory ? FileType.Directory : FileType.File;
             await _index.UpsertFileAsync(entry.OriginalPath, type, hash,
@@ -300,7 +300,7 @@ public class TrashService : ITrashService
             }
             else
             {
-                string hash = await _storage.ComputeHashAsync(fullPath);
+                string hash = await FileHasher.ComputeSha256Async(fullPath);
                 long size = new FileInfo(fullPath).Length;
                 await _index.UpsertFileAsync(relPath, FileType.File, hash, size, ts, ver);
             }

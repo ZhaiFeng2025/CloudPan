@@ -86,7 +86,7 @@ public class UploadService : IUploadService
             targetWritten = true;
 
             // 4. 计算新哈希
-            string hash = await _storage.ComputeHashAsync(_storage.GetAbsolutePath(path), ct);
+            string hash = await FileHasher.ComputeSha256Async(_storage.GetAbsolutePath(path), ct);
 
             // 5. 『提交新版本』：存档记录 + 裁剪 + upsert FileEntry + 审计日志，单事务单点提交（VersionCommitHelper）
             await _versionCommit.CommitNewVersionInTransactionAsync(

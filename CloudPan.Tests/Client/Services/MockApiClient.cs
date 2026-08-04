@@ -1,5 +1,6 @@
 using CloudPan.Client.Core.Services;
 using CloudPan.Contract;
+using CloudPan.Infrastructure.Storage;
 
 namespace CloudPan.Tests.Client.Services;
 
