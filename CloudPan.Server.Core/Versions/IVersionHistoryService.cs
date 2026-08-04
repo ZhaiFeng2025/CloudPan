@@ -1,4 +1,5 @@
 using CloudPan.Contract;
+using CloudPan.Infrastructure.Persistence;
 
 namespace CloudPan.Server.Core;
 
@@ -23,4 +24,11 @@ public interface IVersionHistoryService
 
     /// <summary>回滚文件到指定历史版本：先存档当前版本、再用历史文件原子覆盖目标、更新索引。</summary>
     Task<VersionRestoreResult> RestoreAsync(string filePath, int version, string deviceId);
+
+    /// <summary>
+    /// 版本历史跟随重命名：按前缀把该路径（及目录子树）VersionRecords.FilePath 迁移到新路径
+    /// （T-103/F-145）。须在调用方事务内执行（db 为调用方上下文，与 FileEntry 路径更新同事务），
+    /// 由 FileOperationService.MoveAsync 经 FileIndexService.MoveAsync 的 extraDbWork 注入。
+    /// </summary>
+    Task UpdateVersionPathAsync(CloudPanDbContext db, string oldPath, string newPath, bool isDirectory);
 }

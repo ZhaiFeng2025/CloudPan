@@ -25,12 +25,13 @@ public class VersionHistoryServiceTests : Infrastructure.TestBase
         var version = new VersionService(dbFactory);
         var syncLog = new SyncLogService(dbFactory, NullLogger<SyncLogService>.Instance);
         var helper = new VersionCommitHelper(storage, NullLogger<VersionCommitHelper>.Instance);
+        var versions = new VersionHistoryService(dbFactory, storage, index, version, syncLog, helper);
         var fileOps = new FileOperationService(storage, index, version,
             new TrashService(storage, index, version, NullLogger<TrashService>.Instance),
             syncLog, new ConflictBackupHelper(storage, index, version, syncLog),
+            versions,
             NullLogger<FileOperationService>.Instance);
         var upload = new UploadService(storage, fileOps, version, dbFactory, NullLogger<UploadService>.Instance, helper);
-        var versions = new VersionHistoryService(dbFactory, storage, index, version, syncLog, helper);
         return Task.FromResult((versions, storage, upload));
     }
 

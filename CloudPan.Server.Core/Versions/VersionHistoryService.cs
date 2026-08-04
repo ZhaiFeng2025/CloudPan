@@ -48,6 +48,31 @@ public class VersionHistoryService : IVersionHistoryService
     }
 
     /// <inheritdoc />
+    public async Task UpdateVersionPathAsync(
+        CloudPanDbContext db, string oldPath, string newPath, bool isDirectory)
+    {
+        if (!isDirectory)
+        {
+            // 文件：精确匹配该路径的版本记录迁移到新路径
+            await db.Database.ExecuteSqlRawAsync(
+                "UPDATE VersionRecord SET FilePath = {0} WHERE FilePath = {1}",
+                newPath, oldPath);
+            return;
+        }
+
+        // 目录：目录自身条目（如有——版本记录仅由文件上传产生，目录自身一般无）+ 全部后代前缀迁移。
+        // SQLite SUBSTR 为 1 基索引，前缀长度 +1 即剩余部分起点（对齐 FileIndexService.MoveAsync 子树迁移）。
+        string oldPrefix = oldPath.TrimEnd('/') + "/";
+        string newPrefix = newPath.TrimEnd('/') + "/";
+        await db.Database.ExecuteSqlRawAsync(
+            "UPDATE VersionRecord SET FilePath = {0} || SUBSTR(FilePath, {1}) WHERE FilePath LIKE {2}",
+            newPrefix, oldPrefix.Length + 1, oldPrefix + "%");
+        await db.Database.ExecuteSqlRawAsync(
+            "UPDATE VersionRecord SET FilePath = {0} WHERE FilePath = {1}",
+            newPath, oldPath);
+    }
+
+    /// <inheritdoc />
     public async Task<VersionRestoreResult> RestoreAsync(string filePath, int version, string deviceId)
     {
         await using var db = await _dbFactory.CreateDbContextAsync();

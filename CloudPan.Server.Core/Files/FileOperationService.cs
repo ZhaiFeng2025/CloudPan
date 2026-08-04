@@ -14,6 +14,7 @@ public class FileOperationService : IFileOperationService
     private readonly ITrashService _trash;
     private readonly ISyncLogService _syncLog;
     private readonly ConflictBackupHelper _conflictBackup;
+    private readonly IVersionHistoryService _versionHistory;
     private readonly ILogger<FileOperationService> _logger;
 
     public FileOperationService(
@@ -23,6 +24,7 @@ public class FileOperationService : IFileOperationService
         ITrashService trash,
         ISyncLogService syncLog,
         ConflictBackupHelper conflictBackup,
+        IVersionHistoryService versionHistory,
         ILogger<FileOperationService> logger)
     {
         _storage = storage;
@@ -31,6 +33,7 @@ public class FileOperationService : IFileOperationService
         _trash = trash;
         _syncLog = syncLog;
         _conflictBackup = conflictBackup;
+        _versionHistory = versionHistory;
         _logger = logger;
     }
 
@@ -143,7 +146,11 @@ public class FileOperationService : IFileOperationService
 
         // 先执行 DB 索引更新（不含审计日志），成功后再移动物理文件，最后写入审计日志
         int newVersion = await _version.NextVersionAsync();
-        await _index.MoveAsync(oldPath, newPath, newVersion, isDirectory);
+        // T-103/F-145：版本历史跟随重命名——与 FileEntry 路径更新同事务，按前缀迁移
+        // VersionRecords.FilePath（文件精确 / 目录子树前缀）。旧路径记录消失后，T-088
+        // PurgeOrphanVersionArchivesAsync 在记录删除时不再被旧路径引用滞留，旧存档可正常回收。
+        await _index.MoveAsync(oldPath, newPath, newVersion, isDirectory,
+            extraDbWork: db => _versionHistory.UpdateVersionPathAsync(db, oldPath, newPath, isDirectory));
 
         // 移动物理文件——失败时回滚 DB 索引
         try
@@ -165,8 +172,12 @@ public class FileOperationService : IFileOperationService
         catch (Exception ex)
         {
             _logger.LogError(ex, "物理文件移动失败，正在回滚 DB 索引: {Old} → {New}", oldPath, newPath);
-            // 回滚 DB：将索引移回原路径
-            try { await _index.MoveAsync(newPath, oldPath, newVersion, isDirectory); }
+            // 回滚 DB：将索引移回原路径（版本历史同步迁回，保持 DB 与 FS 一致）
+            try
+            {
+                await _index.MoveAsync(newPath, oldPath, newVersion, isDirectory,
+                    extraDbWork: db => _versionHistory.UpdateVersionPathAsync(db, newPath, oldPath, isDirectory));
+            }
             catch (Exception rollbackEx) { _logger.LogError(rollbackEx, "回滚 DB 索引失败——需手动修复: {Old}", oldPath); }
             return new FileMoveResult(false, null, null, null,
                 new DomainError(HttpErrorCode.INTERNAL_ERROR, $"文件移动失败: {ex.Message}", "文件移动失败，请检查磁盘空间和权限"));

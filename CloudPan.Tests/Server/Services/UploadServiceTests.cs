@@ -21,13 +21,15 @@ public class UploadServiceTests : Infrastructure.TestBase
         var index = new FileIndexService(dbFactory);
         var version = new VersionService(dbFactory);
         var syncLog = new SyncLogService(dbFactory, NullLogger<SyncLogService>.Instance);
+        var helper = new VersionCommitHelper(storage, NullLogger<VersionCommitHelper>.Instance);
+        var versions = new VersionHistoryService(dbFactory, storage, index, version, syncLog, helper);
         var fileOps = new FileOperationService(storage, index, version,
             new TrashService(storage, index, version, NullLogger<TrashService>.Instance),
             syncLog, new ConflictBackupHelper(storage, index, version, syncLog),
+            versions,
             NullLogger<FileOperationService>.Instance);
         var svc = new UploadService(storage, fileOps, version, dbFactory,
-            NullLogger<UploadService>.Instance,
-            new VersionCommitHelper(storage, NullLogger<VersionCommitHelper>.Instance));
+            NullLogger<UploadService>.Instance, helper);
         return Task.FromResult((svc, index, version));
     }
 

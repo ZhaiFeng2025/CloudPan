@@ -266,8 +266,11 @@ public class FileIndexService : IFileIndexService
     /// <summary>
     /// 移动/重命名文件条目（递归处理子文件）。
     /// 使用 SQLite 原生 UPDATE 直接修改主键（SQLite 允许），避免两步提交的数据丢失风险。
+    /// extraDbWork 在事务内、FileEntry 路径更新之后执行（调用方注入的版本历史前缀迁移，
+    /// T-103/F-145——VersionRecord.FilePath 是 FileEntry.Path 的外键，必须与父键同事务迁移）。
     /// </summary>
-    public async Task MoveAsync(string oldPath, string newPath, int newVersion, bool isDirectory)
+    public async Task MoveAsync(string oldPath, string newPath, int newVersion, bool isDirectory,
+        Func<CloudPanDbContext, Task>? extraDbWork = null)
     {
         await using var db = await _dbFactory.CreateDbContextAsync();
         await using var tx = await db.Database.BeginTransactionAsync();
@@ -276,6 +279,10 @@ public class FileIndexService : IFileIndexService
 
         try
         {
+            // T-103/F-145：父键 UPDATE 被 VersionRecord FK 即时检查阻止，defer 到提交校验——
+            // 本事务同时经 extraDbWork 迁移 VersionRecords，提交时引用一致。
+            await db.Database.ExecuteSqlRawAsync("PRAGMA defer_foreign_keys=ON;");
+
             // 原子更新主条目路径
             await db.Database.ExecuteSqlRawAsync(
                 "UPDATE FileEntry SET Path = {0}, Version = {1}, LastModified = {2} WHERE Path = {3}",
@@ -293,6 +300,11 @@ public class FileIndexService : IFileIndexService
                 await db.Database.ExecuteSqlRawAsync(
                     "UPDATE FileEntry SET Path = {0} || SUBSTR(Path, {1}), Version = {2} WHERE Path LIKE {3}",
                     newPrefix, oldPrefix.Length + 1, newVersion, oldPrefix + "%");
+            }
+
+            if (extraDbWork != null)
+            {
+                await extraDbWork(db);
             }
 
             await tx.CommitAsync();

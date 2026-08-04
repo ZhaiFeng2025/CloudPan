@@ -1,8 +1,10 @@
 using System.Text;
 using CloudPan.Contract;
+using CloudPan.Infrastructure.Models;
 using CloudPan.Infrastructure.Persistence;
 using CloudPan.Infrastructure.Storage;
 using CloudPan.Server.Core;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -24,10 +26,106 @@ public class FileOperationServiceTests : Infrastructure.TestBase
         var version = new VersionService(dbFactory);
         var trash = trashOverride ?? new TrashService(storage, index, version, NullLogger<TrashService>.Instance);
         var syncLog = new SyncLogService(dbFactory, NullLogger<SyncLogService>.Instance);
+        var helper = new VersionCommitHelper(storage, NullLogger<VersionCommitHelper>.Instance);
+        var versions = new VersionHistoryService(dbFactory, storage, index, version, syncLog, helper);
         var svc = new FileOperationService(storage, index, version, trash, syncLog,
             new ConflictBackupHelper(storage, index, version, syncLog),
+            versions,
             NullLogger<FileOperationService>.Instance);
         return Task.FromResult((svc, index));
+    }
+
+    /// <summary>
+    /// 完整领域服务装配（含 VersionHistoryService / UploadService，供版本历史跟随重命名测试使用）。
+    /// FileIndexService 注入 storage——孤儿存档清理（PurgeOrphanVersionArchivesAsync）生效。
+    /// </summary>
+    private Task<(FileOperationService svc, FileIndexService index, VersionHistoryService versions,
+        UploadService upload, IDbContextFactory<CloudPanDbContext> dbFactory)> CreateFullServiceAsync()
+        => CreateFullServiceAsync(CreateServerDbFactory());
+
+    private Task<(FileOperationService svc, FileIndexService index, VersionHistoryService versions,
+        UploadService upload, IDbContextFactory<CloudPanDbContext> dbFactory)> CreateFullServiceAsync(
+        IDbContextFactory<CloudPanDbContext> dbFactory)
+    {
+        var storage = new FileStorageService(SyncRoot);
+        var index = new FileIndexService(dbFactory, storage);
+        var version = new VersionService(dbFactory);
+        var syncLog = new SyncLogService(dbFactory, NullLogger<SyncLogService>.Instance);
+        var helper = new VersionCommitHelper(storage, NullLogger<VersionCommitHelper>.Instance);
+        var trash = new TrashService(storage, index, version, NullLogger<TrashService>.Instance);
+        var versions = new VersionHistoryService(dbFactory, storage, index, version, syncLog, helper);
+        var svc = new FileOperationService(storage, index, version, trash, syncLog,
+            new ConflictBackupHelper(storage, index, version, syncLog),
+            versions,
+            NullLogger<FileOperationService>.Instance);
+        var upload = new UploadService(storage, svc, version, dbFactory, NullLogger<UploadService>.Instance, helper);
+        return Task.FromResult((svc, index, versions, upload, dbFactory));
+    }
+
+    /// <summary>
+    /// 生产对齐 dbFactory：连接串 Foreign Keys=True 启用外键约束（等价 PRAGMA foreign_keys=ON，
+    /// 且 Microsoft.Data.Sqlite 池复用连接时该设置持久）。用于验证 FK 生效时重命名带版本历史文件
+    /// 不再触发 FOREIGN KEY constraint failed（FileIndexService.MoveAsync 内 defer_foreign_keys
+    /// 使 FileEntry 父键与 VersionRecords 子键同事务迁移、提交时引用一致）。
+    /// </summary>
+    private IDbContextFactory<CloudPanDbContext> CreateServerDbFactoryWithFk()
+    {
+        string dbPath = Path.Combine(TempDir, "test_fk.db");
+        var options = new DbContextOptionsBuilder<CloudPanDbContext>()
+            .UseSqlite($"Data Source={dbPath};Foreign Keys=True")
+            .Options;
+
+        using CloudPanDbContext db = new CloudPanDbContext(options);
+        db.Database.EnsureCreated();
+        db.Devices.Add(new Device
+        {
+            Id = "server",
+            Name = "服务端",
+            Person = null,
+            LastSeen = DateTime.UtcNow.ToString("O"),
+            Online = 1,
+            RegisteredAt = DateTime.UtcNow.ToString("O")
+        });
+        db.AppConfigs.Add(new AppConfig { Key = "global_version", Value = "0" });
+        db.SaveChanges();
+
+        return new SimpleDbFactory(options);
+    }
+
+    private sealed class SimpleDbFactory : IDbContextFactory<CloudPanDbContext>
+    {
+        private readonly DbContextOptions<CloudPanDbContext> _options;
+        public SimpleDbFactory(DbContextOptions<CloudPanDbContext> options) => _options = options;
+        public CloudPanDbContext CreateDbContext() => new(_options);
+    }
+
+    /// <summary>同一文件连续三次上传，产生 2 条历史版本记录（第二次存档 v1、第三次存档 v2）与 2 个 .versions 存档文件。</summary>
+    private static async Task SeedVersionHistoryAsync(UploadService upload, string path, string deviceId = "server")
+    {
+        await using var s1 = new MemoryStream(Encoding.UTF8.GetBytes("版本1 内容"));
+        await upload.UploadAsync(path, s1, 12, 0, DateTime.UtcNow.ToString("O"), deviceId);
+        await using var s2 = new MemoryStream(Encoding.UTF8.GetBytes("版本2 内容稍长一些"));
+        await upload.UploadAsync(path, s2, 20, 0, DateTime.UtcNow.ToString("O"), deviceId);
+        await using var s3 = new MemoryStream(Encoding.UTF8.GetBytes("版本3 内容再次更新"));
+        await upload.UploadAsync(path, s3, 21, 0, DateTime.UtcNow.ToString("O"), deviceId);
+    }
+
+    private string VersionArchivePath(string storagePath) =>
+        Path.Combine(SyncRoot, ".cloudpan", ".versions", storagePath);
+
+    /// <summary>把 .versions 存档 mtime 回拨 1 小时，越过 T-088 孤儿回收的 10 分钟在途保护窗。</summary>
+    private void BackdateAllArchives()
+    {
+        string dir = Path.Combine(SyncRoot, ".cloudpan", ".versions");
+        if (!Directory.Exists(dir))
+        {
+            return;
+        }
+        DateTime old = DateTime.UtcNow.AddHours(-1);
+        foreach (string file in Directory.EnumerateFiles(dir))
+        {
+            File.SetLastWriteTimeUtc(file, old);
+        }
     }
 
     /// <summary>模拟移入回收站失败的 ITrashService（如 File.Move 抛 IOException——目标被占用/磁盘错误）。</summary>
@@ -173,6 +271,122 @@ public class FileOperationServiceTests : Infrastructure.TestBase
         // 原文件与目标文件均未被改动（DB 与 FS 一致）
         Assert.NotNull(await index.GetByPathAsync("/old.txt"));
         Assert.NotNull(await index.GetByPathAsync("/target.txt"));
+    }
+
+    /// <summary>
+    /// T-103/F-145：重命名文件后版本历史随文件移动——新路径 GetVersionsAsync 可查、旧路径不可达；
+    /// 存档仍被迁移后的记录引用（回拨 mtime 后孤儿回收不误删仍在使用的存档）。
+    /// </summary>
+    [Fact]
+    public async Task Move_重命名文件_版本历史跟随新路径旧路径不可达()
+    {
+        var (svc, index, versions, upload, _) = await CreateFullServiceAsync();
+        await SeedVersionHistoryAsync(upload, "/photos/img.jpg");
+
+        // 迁移前：旧路径有 2 条历史记录
+        Assert.Equal(2, (await versions.GetVersionsAsync("/photos/img.jpg", 10)).Count);
+
+        var result = await svc.MoveAsync("/photos/img.jpg", "/backup/img.jpg", 0, "dev-1");
+        Assert.True(result.Success);
+
+        // 新路径版本历史可查（随文件移动，2 条记录原样迁移）
+        Assert.Equal(2, (await versions.GetVersionsAsync("/backup/img.jpg", 10)).Count);
+        // 旧路径不可达
+        Assert.Empty(await versions.GetVersionsAsync("/photos/img.jpg", 10));
+        // 存档仍被迁移后的记录引用——孤儿回收不误删
+        BackdateAllArchives();
+        Assert.Equal(0, await index.PurgeOrphanVersionArchivesAsync());
+        // 物理文件已移动
+        Assert.False(File.Exists(Path.Combine(SyncRoot, "photos", "img.jpg")));
+        Assert.True(File.Exists(Path.Combine(SyncRoot, "backup", "img.jpg")));
+    }
+
+    /// <summary>
+    /// T-103/F-145：重命名目录后整棵子树的版本历史前缀迁移——新路径可查、旧路径不可达。
+    /// </summary>
+    [Fact]
+    public async Task Move_重命名目录_子树版本历史跟随()
+    {
+        var (svc, index, versions, upload, _) = await CreateFullServiceAsync();
+        Assert.True((await svc.MkdirAsync("/photos")).Success);
+        await SeedVersionHistoryAsync(upload, "/photos/img.jpg");
+
+        var result = await svc.MoveAsync("/photos", "/backup", 0, "dev-1");
+        Assert.True(result.Success);
+
+        // 新路径子树版本历史可查
+        Assert.Equal(2, (await versions.GetVersionsAsync("/backup/img.jpg", 10)).Count);
+        // 旧路径子树不可达
+        Assert.Empty(await versions.GetVersionsAsync("/photos/img.jpg", 10));
+        // 物理目录与文件已移动
+        Assert.False(Directory.Exists(Path.Combine(SyncRoot, "photos")));
+        Assert.True(File.Exists(Path.Combine(SyncRoot, "backup", "img.jpg")));
+    }
+
+    /// <summary>
+    /// T-103/F-145 旧存档回收闭环：重命名迁移后旧路径无版本记录（不再引用 .versions 存档），
+    /// 存档在迁移后仍被新路径记录引用（孤儿回收不误删）；当文件记录被清除（删除→墓碑物理清理）后，
+    /// 旧存档（含重命名前产生）进入孤儿集合可被 T-088 PurgeOrphanVersionArchivesAsync 正常回收。
+    /// </summary>
+    [Fact]
+    public async Task Move_版本历史迁移后_旧存档回收闭环()
+    {
+        var (svc, index, versions, upload, dbFactory) = await CreateFullServiceAsync();
+        await SeedVersionHistoryAsync(upload, "/photos/img.jpg");
+
+        // 收集旧路径存档文件名（迁移后仍被引用，记录清除后即孤儿）
+        List<string> archiveNames;
+        await using (var db = await dbFactory.CreateDbContextAsync())
+        {
+            archiveNames = await db.VersionRecords
+                .Where(v => v.FilePath == "/photos/img.jpg")
+                .Select(v => v.StoragePath)
+                .ToListAsync();
+        }
+        Assert.Equal(2, archiveNames.Count);
+
+        var result = await svc.MoveAsync("/photos/img.jpg", "/backup/img.jpg", 0, "dev-1");
+        Assert.True(result.Success);
+
+        // 迁移后：旧路径无任何版本记录（不再引用存档，T-088 回收不再被旧路径滞留）
+        await using (var db = await dbFactory.CreateDbContextAsync())
+        {
+            Assert.Equal(0, await db.VersionRecords.CountAsync(v => v.FilePath == "/photos/img.jpg"));
+            Assert.Equal(2, await db.VersionRecords.CountAsync(v => v.FilePath == "/backup/img.jpg"));
+        }
+
+        // 存档仍被新路径记录引用——孤儿回收不误删（回拨 mtime 越过 10 分钟在途保护窗）
+        BackdateAllArchives();
+        Assert.Equal(0, await index.PurgeOrphanVersionArchivesAsync());
+        Assert.All(archiveNames, n => Assert.True(File.Exists(VersionArchivePath(n))));
+
+        // 生命周期闭环：删除重命名后的文件 → 墓碑物理清理移除记录 + 存档 → 孤儿回收无残留
+        var del = await svc.DeleteAsync("/backup/img.jpg", 0, "dev-1");
+        Assert.True(del.Success);
+        await index.PurgeExpiredTombstonesAsync(DateTime.UtcNow.AddSeconds(1));
+
+        // 旧存档（含重命名前产生）已随记录清除，不再滞留在磁盘
+        Assert.All(archiveNames, n => Assert.False(File.Exists(VersionArchivePath(n))));
+        Assert.Equal(0, await index.PurgeOrphanVersionArchivesAsync());
+    }
+
+    /// <summary>
+    /// T-103/F-145 + FK 语义：外键约束生效（生产对齐 Foreign Keys=True）时，重命名带版本历史的文件
+    /// 不再因 UPDATE FileEntry 父键被 VersionRecord 子行引用而触发 FOREIGN KEY constraint failed；
+    /// 版本历史随文件同事务迁移，新路径可查、旧路径不可达。
+    /// </summary>
+    [Fact]
+    public async Task Move_外键启用时_重命名带版本历史文件_不触发FK失败且历史迁移()
+    {
+        var (svc, _, versions, upload, _) = await CreateFullServiceAsync(CreateServerDbFactoryWithFk());
+        await SeedVersionHistoryAsync(upload, "/photos/img.jpg");
+
+        var result = await svc.MoveAsync("/photos/img.jpg", "/backup/img.jpg", 0, "dev-1");
+
+        Assert.True(result.Success);
+        Assert.Equal(2, (await versions.GetVersionsAsync("/backup/img.jpg", 10)).Count);
+        Assert.Empty(await versions.GetVersionsAsync("/photos/img.jpg", 10));
+        Assert.True(File.Exists(Path.Combine(SyncRoot, "backup", "img.jpg")));
     }
 
     [Fact]
