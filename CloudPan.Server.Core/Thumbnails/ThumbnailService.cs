@@ -100,11 +100,7 @@ public class ThumbnailService : IThumbnailService
                 {
                     using SKImage image = SKImage.FromBitmap(resized);
                     using var data = image.Encode(SKEncodedImageFormat.Jpeg, 80);
-                    string? dir = Path.GetDirectoryName(thumbPath);
-                    if (dir != null)
-                    {
-                        Directory.CreateDirectory(dir);
-                    }
+                    // 缓存目录已由 Storage 创建（GetThumbnailCachePath 内建 CreateDirectory），无需在此重复创建
 
                     // 原子写缓存：先写 .tmp 再 rename，并发生成同一缩略图时互不破坏（对齐项目原子写约定）
                     string tmpPath = thumbPath + ".tmp";
@@ -177,15 +173,16 @@ public class ThumbnailService : IThumbnailService
     /// <summary>
     /// 递归收集同步根下所有 .cloudpan/.thumbnails 缓存目录（缓存按源文件所在目录就近存储）。
     /// 不深入 .cloudpan 内部下钻，避免遍历 .versions/数据库等元数据。
+    /// 布局单点：遍历路径经 Storage 生成（GetThumbnailCacheDirUnder），与写入（GetThumbnailCachePath）同源。
     /// </summary>
-    private static IEnumerable<string> EnumerateThumbnailCacheDirs(string syncRoot)
+    private IEnumerable<string> EnumerateThumbnailCacheDirs(string syncRoot)
     {
         Stack<string> pending = new();
         pending.Push(syncRoot);
         while (pending.Count > 0)
         {
             string dir = pending.Pop();
-            string thumbs = Path.Combine(dir, ".cloudpan", ".thumbnails");
+            string thumbs = _storage.GetThumbnailCacheDirUnder(dir);
             if (Directory.Exists(thumbs))
             {
                 yield return thumbs;
@@ -242,10 +239,8 @@ public class ThumbnailService : IThumbnailService
         string keyMaterial = $"{filePath}|w={width}|v={version}|h={hash}|m={length}:{lastWriteTicks}";
         string hashHex = Convert.ToHexString(
             SHA256.HashData(Encoding.UTF8.GetBytes(keyMaterial)))[..16];
-        string thumbDir = Path.Combine(
-            Path.GetDirectoryName(absPath)!,
-            ".cloudpan", ".thumbnails");
-        Directory.CreateDirectory(thumbDir);
-        return Path.Combine(thumbDir, $"{hashHex}.jpg");
+        // 元数据布局单点：路径由 Storage 生成（<源文件目录>/.cloudpan/.thumbnails/<hash>.jpg），
+        // 与 T-088 EnumerateThumbnailCacheDirs 就近遍历同源，不再手工拼接（CLAUDE.md 8.5 防线不绕过）
+        return _storage.GetThumbnailCachePath(filePath, $"{hashHex}.jpg");
     }
 }

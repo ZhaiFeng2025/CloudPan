@@ -8,16 +8,13 @@ public class FileStorageService : IFileStorageService
 {
     private readonly string _syncRoot;
     private readonly string _versionsDir;
-    private readonly string _thumbnailsDir;
 
     public FileStorageService(string syncRoot)
     {
         // 规范化路径：消除短文件名、正斜杠、末尾分隔符等差异
         _syncRoot = Path.GetFullPath(syncRoot).TrimEnd(Path.DirectorySeparatorChar);
         _versionsDir = Path.Combine(_syncRoot, ".cloudpan", ".versions");
-        _thumbnailsDir = Path.Combine(_syncRoot, ".cloudpan", ".thumbnails");
         Directory.CreateDirectory(_versionsDir);
-        Directory.CreateDirectory(_thumbnailsDir);
     }
 
     /// <summary>
@@ -300,6 +297,47 @@ public class FileStorageService : IFileStorageService
             File.Delete(archiveFile);
         }
     }
+
+    /// <inheritdoc />
+    public string GetThumbnailCachePath(string relativePath, string cacheName)
+    {
+        // 经 GetAbsolutePath 内建校验派生：源路径越界/非法即抛（T-090 防线），派生目录必在同步根内
+        string srcDir = Path.GetDirectoryName(GetAbsolutePath(relativePath))
+            ?? throw new ArgumentException($"无法解析源文件目录: {relativePath}", nameof(relativePath));
+
+        // cacheName 仅允许纯文件名（如 {hash}.jpg）：拒绝分隔符/.. /空字符，防缓存键目录注入逃逸元数据目录
+        if (string.IsNullOrWhiteSpace(cacheName)
+            || cacheName.Contains(Path.DirectorySeparatorChar)
+            || cacheName.Contains(Path.AltDirectorySeparatorChar)
+            || cacheName == ".."
+            || cacheName.Contains('\0'))
+        {
+            throw new ArgumentException($"非法缩略图缓存文件名: {cacheName}", nameof(cacheName));
+        }
+
+        // 布局单点：<源文件目录>/.cloudpan/.thumbnails/（与 T-088 EnumerateThumbnailCacheDirs 就近遍历同源）
+        string thumbDir = Path.Combine(srcDir, ".cloudpan", ".thumbnails");
+        Directory.CreateDirectory(thumbDir);
+        return Path.Combine(thumbDir, cacheName);
+    }
+
+    /// <inheritdoc />
+    public string GetChunkTempPath(string relativePath)
+    {
+        // 经 GetAbsolutePath 内建校验派生：源路径越界/非法即抛（T-090 防线），派生目录必在同步根内
+        string srcDir = Path.GetDirectoryName(GetAbsolutePath(relativePath))
+            ?? throw new ArgumentException($"无法解析源文件目录: {relativePath}", nameof(relativePath));
+
+        // 布局单点：<源文件目录>/.cloudpan/<guid>.chunk.tmp
+        string chunkDir = Path.Combine(srcDir, ".cloudpan");
+        Directory.CreateDirectory(chunkDir);
+        return Path.Combine(chunkDir, $"{Guid.NewGuid():N}.chunk.tmp");
+    }
+
+    /// <inheritdoc />
+    public string GetThumbnailCacheDirUnder(string directoryPath)
+        // 布局单点：<dir>/.cloudpan/.thumbnails（与写入 GetThumbnailCachePath 同源；调用方保证 dir 在同步根内）
+        => Path.Combine(directoryPath, ".cloudpan", ".thumbnails");
 
     /// <summary>
     /// 检查同步根目录是否存在。

@@ -5062,7 +5062,7 @@
       "title": "元数据目录布局收敛 FileStorageService 单点（删死 _thumbnailsDir + 统一缩略图/分块路径）",
       "dimension": "architecture",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 9,
       "findingId": "F-143",
       "dependsOn": [],
@@ -5093,8 +5093,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "与 T-088/T-090 衔接：存储回收与路径校验已落单点，本任务把元数据布局也收敛进同一单点。",
-      "updatedAt": null
+      "note": "与 T-088/T-090 衔接：存储回收与路径校验已落单点，本任务把元数据布局也收敛进同一单点。执行（task-executor 2026-08-04）：改动文件 = CloudPan.Infrastructure/Storage/IFileStorageService.cs（新增 GetThumbnailCachePath(relativePath, cacheName)/GetChunkTempPath(relativePath)/GetThumbnailCacheDirUnder(dir) 三接口）、FileStorageService.cs（删除死字段 _thumbnailsDir 及构造函数 CreateDirectory；实现三接口——GetThumbnailCachePath 经 GetAbsolutePath 校验派生且 cacheName 仅允许纯文件名防目录注入，GetChunkTempPath 经 GetAbsolutePath 校验派生且 guid 唯一命名，GetThumbnailCacheDirUnder 为回收遍历布局单点）、CloudPan.Server.Core/Thumbnails/ThumbnailService.cs（GetThumbCachePathAsync 改调 _storage.GetThumbnailCachePath 删除手工 Path.Combine 拼接；GenerateThumbnail 删除冗余建目录；EnumerateThumbnailCacheDirs 改实例方法经 _storage.GetThumbnailCacheDirUnder，遍历与写入同源）、CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.cs（临时文件路径改调 _storage.GetChunkTempPath 删除手工 Path.Combine 拼接）。布局收敛：缩略图缓存 <源文件目录>/.cloudpan/.thumbnails、分块临时 <源文件目录>/.cloudpan/ 全部经 Storage 单点生成（含 T-090 内建校验），改布局只改一处；中央死目录 _thumbnailsDir 已删除。验证：AC1 grep（两服务 Path.Combine 无匹配）exit=1 通过；AC2 grep（FileStorageService _thumbnailsDir 无匹配）exit=1 通过；dotnet test --filter Architecture 15/15 通过；dotnet test CloudPan.Tests -c Release 347/347 通过；dotnet build CloudPan.sln -c Release 0 警告 0 错误。",
+      "updatedAt": "2026-08-04"
     },
     {
       "id": "T-102",

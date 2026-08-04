@@ -89,12 +89,9 @@ public partial class ChunkedUploadService : IChunkedUploadService
             }
             else
             {
-                // 创建临时文件
-                string tempDir = Path.Combine(
-                    Path.GetDirectoryName(_storage.GetAbsolutePath(path))!,
-                    ".cloudpan");
-                Directory.CreateDirectory(tempDir);
-                string tempPath = Path.Combine(tempDir, $"{Guid.NewGuid():N}.chunk.tmp");
+                // 创建临时文件：路径经 Storage 单点生成（布局 <源文件目录>/.cloudpan/），
+                // 不再手工拼接（CLAUDE.md 8.5 防线不绕过）
+                string tempPath = _storage.GetChunkTempPath(path);
 
                 record = new ChunkedUpload
                 {
