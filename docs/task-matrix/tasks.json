@@ -4673,7 +4673,7 @@
       "title": "回收站恢复失败白话反馈 + 覆盖/改名选项（两端对齐）",
       "dimension": "ux",
       "priority": "P2",
-      "status": "in-progress",
+      "status": "acceptance",
       "batch": 8,
       "findingId": "F-136",
       "dependsOn": [],
