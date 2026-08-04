@@ -4740,9 +4740,9 @@
         }
       ],
       "attempts": 0,
-      "statusReason": null,
+      "statusReason": "AC1 验收命令与需求 2 冲突（停止执行，待 task-producer 重定义）：需求 2 要求『仅留异步版 GetFolderSizeAsync』（AccountTab.cs:330/370 保留），而 AC1 命令 `grep -rn 'ClassifyTestError\\|GetFolderSize' CloudPan.Client.UI` 按子串匹配会把 GetFolderSizeAsync 命中，且 bin/obj 编译产物 DLL 也含符号，字面执行永远有匹配，正确实现也必然被验收打回。建议 AC1 命令改为限定源码文件+精确匹配：`grep -rn --include='*.cs' -E 'ClassifyTestError|private static long GetFolderSize\\(' CloudPan.Client.UI 无匹配`（GetFolderSizeAsync 不含 'GetFolderSize('，删除后源码与重建 DLL 均无匹配）。需求 1 与 AC2/AC3 无歧义可执行。",
       "note": null,
-      "updatedAt": null
+      "updatedAt": "2026-08-04"
     },
     {
       "id": "T-096",
