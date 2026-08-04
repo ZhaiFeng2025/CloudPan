@@ -1,13 +1,10 @@
-using System.Collections.Concurrent;
 using System.Net.WebSockets;
-using System.Text;
-using System.Text.Json;
 using CloudPan.Contract;
 using Microsoft.Extensions.Logging;
 
 namespace CloudPan.Server.Core;
 
-/// <summary>WebSocketHandler 部分实现：连接管理（Token 轮换断开）、心跳检测与发送/关闭工具。</summary>
+/// <summary>WebSocketHandler 部分实现：连接管理（Token 轮换断开）与心跳检测。发送/关闭/在线状态工具在 WebSocketConnectionRegistry（T-111）。</summary>
 public partial class WebSocketHandler
 {
     // ============================================================
@@ -18,19 +15,19 @@ public partial class WebSocketHandler
     public async Task DisconnectAllAsync(string reason)
     {
         // 快照遍历避免迭代时修改字典
-        foreach (var (deviceId, conn) in _connections.ToArray())
+        foreach (var (deviceId, conn) in _registry.Connections.ToArray())
         {
-            if (_connections.TryRemove(deviceId, out _))
+            if (_registry.Connections.TryRemove(deviceId, out _))
             {
                 try
                 {
-                    await CloseSafeAsync(conn.Socket, WebSocketCloseStatus.PolicyViolation, reason);
+                    await _registry.CloseSafeAsync(conn.Socket, WebSocketCloseStatus.PolicyViolation, reason);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Token 轮换断开连接失败: {DeviceId}", deviceId);
                 }
-                await UpdateDeviceOnlineAsync(deviceId, online: false);
+                await _registry.UpdateDeviceOnlineAsync(deviceId, online: false);
             }
         }
     }
@@ -59,14 +56,14 @@ public partial class WebSocketHandler
         try
         {
             var now = DateTime.UtcNow;
-            foreach (var (deviceId, conn) in _connections)
+            foreach (var (deviceId, conn) in _registry.Connections)
             {
                 try
                 {
                     if (conn.Socket.State != WebSocketState.Open)
                     {
-                        _connections.TryRemove(deviceId, out _);
-                        await UpdateDeviceOnlineAsync(deviceId, false);
+                        _registry.Connections.TryRemove(deviceId, out _);
+                        await _registry.UpdateDeviceOnlineAsync(deviceId, false);
                         continue;
                     }
 
@@ -74,14 +71,14 @@ public partial class WebSocketHandler
                     if (now - conn.LastPong > PongTimeout)
                     {
                         _logger.LogWarning("WebSocket 心跳超时: {DeviceId}", deviceId);
-                        _connections.TryRemove(deviceId, out _);
-                        await CloseSafeAsync(conn.Socket, WebSocketCloseStatus.NormalClosure, "heartbeat timeout");
-                        await UpdateDeviceOnlineAsync(deviceId, false);
+                        _registry.Connections.TryRemove(deviceId, out _);
+                        await _registry.CloseSafeAsync(conn.Socket, WebSocketCloseStatus.NormalClosure, "heartbeat timeout");
+                        await _registry.UpdateDeviceOnlineAsync(deviceId, false);
                         continue;
                     }
 
                     // 发送 Ping
-                    await SendJsonAsync(conn.Socket, new { type = WebSocketEvent.Ping });
+                    await _registry.SendJsonAsync(conn.Socket, new { type = WebSocketEvent.Ping });
                 }
                 catch (Exception ex)
                 {
@@ -96,52 +93,6 @@ public partial class WebSocketHandler
         finally
         {
             Interlocked.Exchange(ref _heartbeatRunning, 0);
-        }
-    }
-
-    // ============================================================
-    // 工具方法
-    // ============================================================
-
-    private async Task UpdateDeviceOnlineAsync(string deviceId, bool online)
-    {
-        try
-        {
-            // 设备自动注册 + LastSeen/Online 维护收敛到 ITokenService（T-025 单一事实来源）
-            await _tokenService.EnsureDeviceAsync(deviceId, online);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "更新设备在线状态失败: {DeviceId}", deviceId);
-        }
-    }
-
-    private async Task SendJsonAsync(WebSocket socket, object payload)
-    {
-        string json = JsonSerializer.Serialize(payload);
-        byte[] bytes = Encoding.UTF8.GetBytes(json);
-        try
-        {
-            await socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "WebSocket 发送消息失败");
-        }
-    }
-
-    private async Task CloseSafeAsync(WebSocket socket, WebSocketCloseStatus status, string description)
-    {
-        try
-        {
-            if (socket.State == WebSocketState.Open || socket.State == WebSocketState.CloseReceived)
-            {
-                await socket.CloseAsync(status, description, CancellationToken.None);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "WebSocket 关闭连接失败: {Status}/{Desc}", status, description);
         }
     }
 }

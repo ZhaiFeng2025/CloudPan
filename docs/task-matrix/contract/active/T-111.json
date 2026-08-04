@@ -3,7 +3,7 @@
  "title": "WebSocketHandler 真实拆分（聚合 ≤400 + HandleConnectionAsync 按阶段拆 + 删豁免登记）",
  "dimension": "architecture",
  "priority": "P0",
- "status": "todo",
+ "status": "acceptance",
  "batch": 10,
  "findingId": "F-151",
  "dependsOn": [],
@@ -40,6 +40,6 @@
  ],
  "attempts": 0,
  "statusReason": null,
- "note": null,
- "updatedAt": null
+ "note": "改动：①新增 internal 协作类 WebSocketSession.cs（AuthenticateAsync/ReceiveLoopAsync/CleanupAsync 三阶段，各自可单测）与 WebSocketConnectionRegistry.cs（连接池/设备重复替换/在线状态/发送关闭广播工具）；②WebSocketHandler 3 partial 瘦身：HandleConnectionAsync 委托 session.RunAsync()，心跳/断开/广播改经 _registry，聚合 464→194；③CodeQualityTests 删 WebSocketHandler 豁免登记；④Server.Core.csproj 加 InternalsVisibleTo CloudPan.Tests；⑤新增 CloudPan.Tests/Server/Core/WebSocketHandlerTests.cs（认证失败×2/重复连接替换/断连清理，回环 WebSocket 对直测 internal 阶段）。验证：dotnet build CloudPan.sln -c Release 通过（0 warn/0 err）；dotnet test --filter CodeQualityTests 5/5 绿（含 WebSocketHandler≤400 到期断言，豁免表已删登记）；dotnet test --filter WebSocket 9/9 绿（新增4+既有集成5）；全量 dotnet test CloudPan.Tests -c Release 370/370 绿。并发语义（重复设备替换/1MB 限制/finally 断连清理）由单测覆盖，公开 API 零变化。",
+ "updatedAt": "2026-08-04"
 }

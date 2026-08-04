@@ -124,9 +124,9 @@ public class CodeQualityTests
         // SettingsForm（684→176）/TrayAppContext（522→140）；T-110 真实拆分后移除：
         // ServerInstaller（861→369）/SettingsPage（549→194）/ServerWindow（525→152），
         // 逻辑外提为 internal 协作类，达 ≤400 从表移除。
+        // T-111 真实拆分后移除：WebSocketHandler（464→~180，认证/设备注册/接收循环/断连清理
+        // 外提为 WebSocketConnectionRegistry/WebSocketSession internal 协作类，聚合 ≤400）。
         // （ApiClient 聚合 562→323：T-097 删除手写 GetThumbnailAsync 后已 ≤400，T-099 按『达 ≤400 从表移除』移出）
-        new("CloudPan.Server.Core.WebSocketHandler", 464, 464, "批次 9：WS 消息分发拆分后 ≤400",
-            "T-070 范围外既有大型类型，记录现状上限防膨胀。"),
     };
 
     /// <summary>豁免登记按类型键索引（供聚合行数门禁查上限）。</summary>

@@ -17,6 +17,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- T-111：WebSocketSession 三阶段（认证/接收循环/断连清理）单测需访问 internal 协作类（与 Client.UI/Server.Host 同款模式） -->
+    <InternalsVisibleTo Include="CloudPan.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- 版本对齐 EF Core 8.0.22 传递依赖（8.0.1/8.0.2），避免 NU1605 降级 -->
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="8.0.1" />
