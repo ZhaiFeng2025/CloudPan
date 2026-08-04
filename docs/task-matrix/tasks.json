@@ -5336,7 +5336,7 @@
       "title": "Windows 浏览卡顿修复（快照缓存/事件驱动刷新，去除每 5 秒全树枚举）",
       "dimension": "ux",
       "priority": "P2",
-      "status": "todo",
+      "status": "in-progress",
       "batch": 9,
       "findingId": "F-150",
       "dependsOn": [],
@@ -5368,7 +5368,7 @@
       "attempts": 0,
       "statusReason": null,
       "note": "对应批次 8 承诺项（浏览卡顿进批次 9）；与 T-083 右键菜单/多选同区域，改动集中在 SyncBrowseService 与 Browser 刷新链路。",
-      "updatedAt": null
+      "updatedAt": "2026-08-04"
     }
   ]
 }

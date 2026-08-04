@@ -326,6 +326,7 @@ public partial class SyncEngine : IDisposable
         _progress.QueueProgressChanged -= OnProgressChanged;
         _syncLock.Dispose();
         _fileWatcher?.Dispose();
+        _browse.Dispose(); // 释放 FileSystemWatcher 浏览缓存（7.4：退订事件 + 释放 watcher/timer）
     }
 
     // ────────────────────────────────────────────────────────────
@@ -337,6 +338,10 @@ public partial class SyncEngine : IDisposable
     public Task<IReadOnlyList<FileBrowseItem>> GetFileBrowserAsync(
         string directoryPath, string? searchText = null, CancellationToken ct = default)
         => _browse.GetFileBrowserAsync(directoryPath, searchText, ct);
+
+    /// <summary>T-108：后台刷新浏览快照缓存并返回当前数据版本（UI 定时器据此判断是否重渲染）。</summary>
+    public Task<long> RefreshBrowserDataAsync(CancellationToken ct = default)
+        => _browse.RefreshSnapshotCacheAsync(ct);
 
     /// <inheritdoc cref="SyncBrowseService.GetFileSyncStatusesAsync"/>
     public Task<IReadOnlyList<FileSyncStatusItem>> GetFileSyncStatusesAsync(CancellationToken ct = default)

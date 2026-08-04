@@ -22,7 +22,11 @@ public partial class MainWindow
         BrowserRefreshTimer_Tick(sender, e);
     }
 
-    /// <summary>定时刷新文件浏览（UI 定时器回调，async void + 顶层 try-catch 符合 CLAUDE.md 7.2）。</summary>
+    /// <summary>
+    /// 定时刷新文件浏览（UI 定时器回调，async void + 顶层 try-catch 符合 CLAUDE.md 7.2）。
+    /// T-108：先后台刷新 /api/tree 快照缓存并取数据版本，仅当前浏览数据变化才重查+重渲染，
+    /// 消除每 5 秒对同步根的全树递归枚举 + 快照全表读取造成的周期卡顿。
+    /// </summary>
     private async void BrowserRefreshTimer_Tick(object? sender, EventArgs e)
     {
         if (_browserRefreshBusy)
@@ -33,7 +37,14 @@ public partial class MainWindow
         _browserRefreshBusy = true;
         try
         {
+            long version = await _engine.RefreshBrowserDataAsync();
+            if (version == _lastBrowserVersion)
+            {
+                return; // 当前浏览数据未变化，跳过重渲染
+            }
+
             await LoadBrowserAsync();
+            _lastBrowserVersion = version;
         }
         catch (Exception ex)
         {
@@ -61,8 +72,10 @@ public partial class MainWindow
     }
 
     /// <summary>从 SyncEngine 查询文件浏览数据并渲染（数据查询在 Client.Core，UI 只渲染）。</summary>
+    /// <remarks>T-108：先经 RefreshBrowserDataAsync 后台刷新 /api/tree 快照缓存（消除 UI 线程全表读取），再查缓存渲染。</remarks>
     private async Task LoadBrowserAsync()
     {
+        await _engine.RefreshBrowserDataAsync();
         IReadOnlyList<FileBrowseItem> items = await _engine.GetFileBrowserAsync(_currentPath, _searchText);
         if (InvokeRequired)
         {

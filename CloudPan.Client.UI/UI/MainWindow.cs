@@ -35,6 +35,7 @@ public partial class MainWindow : Form
     private FileBrowserView _fileBrowser = null!;     // 文件浏览主视图（T-013）
     private System.Windows.Forms.Timer _browserRefreshTimer = null!; // 文件浏览定时刷新（T-013）
     private bool _browserRefreshBusy;                 // 防重入：刷新进行中跳过本次定时触发
+    private long _lastBrowserVersion = -1;            // T-108：上次渲染时浏览数据版本（-1 强制首次刷新）
     private System.Windows.Forms.Timer _searchDebounceTimer = null!; // 搜索防抖定时器（T-013）
     private int _logSidebarWidth = 320;               // 日志侧栏展开宽度（T-013）
 

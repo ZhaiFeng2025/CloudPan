@@ -1,8 +1,8 @@
+using System.Text.RegularExpressions;
 using CloudPan.Contract;
 using CloudPan.Infrastructure.Models;
 using CloudPan.Infrastructure.Persistence.Client;
 using Microsoft.Extensions.Logging;
-using System.Text.RegularExpressions;
 
 namespace CloudPan.Client.Core.Services;
 
@@ -23,8 +23,13 @@ public sealed record FileSyncStatusItem(string RelativePath, bool IsDirectory, i
 /// 同步引擎查询/读取服务（T-070 拆分）：文件浏览、每文件状态、冲突对比下载。
 /// 只读操作，不触碰同步状态机的可变状态（计数器/事件/锁/排除集热更新），
 /// 依赖注入 ApiClient/DbContextFactory，路径逻辑统一走 <see cref="SyncPath"/>。
+///
+/// T-108 性能改造：浏览数据改为「/api/tree 快照（RemoteSnapshots 内存缓存）+ FileSystemWatcher
+/// 增量维护的本地文件索引」，UI 刷新不再对同步根做全树递归枚举 + 快照全表读取；全流程
+/// ConfigureAwait(false) 使枚举/DB 读取全部在后台线程执行，UI 线程仅 await。
+/// 快照缓存与本地索引字段见 SyncBrowseService.Cache.cs。
 /// </summary>
-internal sealed class SyncBrowseService
+internal sealed partial class SyncBrowseService : IDisposable
 {
     private readonly IApiClient _api;
     private readonly IClientStoreFactory _storeFactory;
@@ -44,6 +49,8 @@ internal sealed class SyncBrowseService
         _logger = logger;
         _syncRoot = syncRoot;
         _ignorePatterns = ignorePatterns;
+        _localIndex = new BrowseLocalIndex(syncRoot, logger, ignorePatterns);
+        _localIndex.Changed += OnLocalIndexChanged;
     }
 
     /// <summary>
@@ -53,13 +60,21 @@ internal sealed class SyncBrowseService
     /// 本地有而快照无的项并入（Modified/Uploading 瞬态）。
     /// 墓碑（Deleting）项不展示（删除中的文件从浏览视图消失）。
     /// </summary>
-    public async Task<IReadOnlyList<FileBrowseItem>> GetFileBrowserAsync(
+    public Task<IReadOnlyList<FileBrowseItem>> GetFileBrowserAsync(
         string directoryPath, string? searchText = null, CancellationToken ct = default)
+        // T-108：Task.Run 确保查询（含本地索引首次全树构建）从头在后台线程执行（CreateDbContextAsync 默认同步完成）。
+        => Task.Run(() => GetFileBrowserCoreAsync(directoryPath, searchText, ct), ct);
+
+    private async Task<IReadOnlyList<FileBrowseItem>> GetFileBrowserCoreAsync(
+        string directoryPath, string? searchText, CancellationToken ct)
     {
-        await using var store = await _storeFactory.CreateStoreAsync(ct);
+        await using var store = await _storeFactory.CreateStoreAsync(ct).ConfigureAwait(false);
+
+        // 本地索引首次构建（后台线程；此后由 FileSystemWatcher 增量维护，不再全树递归枚举）
+        _localIndex.EnsureInitialized();
 
         // 1. 待处理队列 → 瞬态状态（Uploading/Downloading/Deleting），优先级高于快照状态
-        var queueOps = await store.GetPendingTransferQueuesAsync(ct);
+        var queueOps = await store.GetPendingTransferQueuesAsync(ct).ConfigureAwait(false);
         var queueStateByPath = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (var q in queueOps)
         {
@@ -72,37 +87,16 @@ internal sealed class SyncBrowseService
             queueStateByPath[q.FilePath] = state;
         }
 
-        // 2. 服务端快照（来自 /api/tree，本地 DB 缓存）
-        var snapshots = await store.GetAllSnapshotsAsync(ct);
+        // 2. 服务端快照（来自 /api/tree，本地 DB 缓存 → 内存缓存）
+        var snapshots = await GetSnapshotListAsync(ct).ConfigureAwait(false);
         var snapshotByPath = new Dictionary<string, RemoteSnapshot>(StringComparer.OrdinalIgnoreCase);
         foreach (var snap in snapshots)
         {
             snapshotByPath[snap.Path] = snap;
         }
 
-        // 3. 本地文件系统（新增本地文件/目录 → Modified/Uploading）
-        HashSet<string> localFiles = new(StringComparer.OrdinalIgnoreCase);
-        HashSet<string> localDirs = new(StringComparer.OrdinalIgnoreCase);
-        if (Directory.Exists(SyncPath.NormalizePath(_syncRoot)))
-        {
-            foreach (string fullPath in Directory.EnumerateFileSystemEntries(SyncPath.NormalizePath(_syncRoot), "*", SearchOption.AllDirectories))
-            {
-                if (SyncPath.ShouldIgnore(_syncRoot, fullPath, _ignorePatterns))
-                {
-                    continue;
-                }
-
-                string rel = SyncPath.ToRelativePath(_syncRoot, fullPath);
-                if (Directory.Exists(fullPath))
-                {
-                    localDirs.Add(rel);
-                }
-                else
-                {
-                    localFiles.Add(rel);
-                }
-            }
-        }
+        // 3. 本地文件/目录集合（FileSystemWatcher 增量维护的缓存副本，无全树枚举）
+        var (localFiles, localDirs) = _localIndex.CopySets();
 
         // 4. 归一化浏览路径："/" 根或 "/a/b" 形式（无尾斜杠）
         string normDir = SyncPath.NormalizePath(directoryPath) ?? "/";
@@ -187,11 +181,22 @@ internal sealed class SyncBrowseService
                 continue;
             }
 
+            // 提前过滤视图范围，避免对视图外文件做尺寸读取（全量本地仅存文件时的 O(N) 磁盘 I/O 瓶颈）
+            if (!IsInBrowseView(rel, dirPrefix, searching, needle))
+            {
+                continue;
+            }
+
             int state = queueStateByPath.TryGetValue(rel, out int qState) ? qState : (int)FileState.Modified;
             long size = 0;
             try
             {
                 size = new FileInfo(SyncPath.ToLocalPath(_syncRoot, rel)).Length;
+            }
+            catch (FileNotFoundException)
+            {
+                // 本地已删除但 FSW 事件尚未处理 → 不作为本地新增项展示（T-108 缓存一致性）
+                continue;
             }
             catch (Exception ex)
             {
@@ -204,6 +209,17 @@ internal sealed class SyncBrowseService
         foreach (string rel in localDirs)
         {
             if (snapshotByPath.ContainsKey(rel))
+            {
+                continue;
+            }
+
+            if (!IsInBrowseView(rel, dirPrefix, searching, needle))
+            {
+                continue;
+            }
+
+            // 本地目录已删除但 FSW 事件尚未处理 → 跳过（本地新增目录不展示）
+            if (!Directory.Exists(SyncPath.ToLocalPath(_syncRoot, rel)))
             {
                 continue;
             }
@@ -227,17 +243,47 @@ internal sealed class SyncBrowseService
         return result;
     }
 
+    /// <summary>判断相对路径是否落在当前浏览视图范围内（与 AddOrMerge 的前缀/名称过滤保持一致）。</summary>
+    private static bool IsInBrowseView(string path, string dirPrefix, bool searching, string needle)
+    {
+        if (!path.StartsWith(dirPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        string rest = path[dirPrefix.Length..];
+        if (rest.Length == 0)
+        {
+            return false;
+        }
+
+        if (!searching)
+        {
+            return !rest.Contains('/');
+        }
+
+        string name = path[(path.LastIndexOf('/') + 1)..];
+        return name.ToLowerInvariant().Contains(needle);
+    }
+
     /// <summary>
     /// 读取同步目录每文件的当前同步状态：
     /// 服务端快照 FileState（Synced/CloudOnly/Deleting/Modified）+ 待处理队列（Uploading/Downloading/Deleting）+ 本地存在性。
     /// 冲突与错误由 UI 依据本地维护的冲突/错误列表叠加，不在此查询（避免与 UI 状态源重复）。
     /// </summary>
-    public async Task<IReadOnlyList<FileSyncStatusItem>> GetFileSyncStatusesAsync(CancellationToken ct = default)
+    public Task<IReadOnlyList<FileSyncStatusItem>> GetFileSyncStatusesAsync(CancellationToken ct = default)
+        // T-108：Task.Run 确保查询（含本地索引首次全树构建）从头在后台线程执行。
+        => Task.Run(() => GetFileSyncStatusesCoreAsync(ct), ct);
+
+    private async Task<IReadOnlyList<FileSyncStatusItem>> GetFileSyncStatusesCoreAsync(CancellationToken ct)
     {
-        await using var store = await _storeFactory.CreateStoreAsync(ct);
+        await using var store = await _storeFactory.CreateStoreAsync(ct).ConfigureAwait(false);
+
+        // 本地索引首次构建（后台线程；此后由 FileSystemWatcher 增量维护）
+        _localIndex.EnsureInitialized();
 
         // 1. 待处理队列 → 瞬态状态（Uploading/Downloading/Deleting），优先级高于快照状态
-        var queueOps = await store.GetPendingTransferQueuesAsync(ct);
+        var queueOps = await store.GetPendingTransferQueuesAsync(ct).ConfigureAwait(false);
         var queueStateByPath = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (var q in queueOps)
         {
@@ -251,31 +297,10 @@ internal sealed class SyncBrowseService
         }
 
         // 2. 服务端快照（Synced/CloudOnly/Deleting/Modified）
-        var snapshots = await store.GetAllSnapshotsAsync(ct);
+        var snapshots = await GetSnapshotListAsync(ct).ConfigureAwait(false);
 
-        // 3. 本地文件/目录集合（相对路径，忽略 .cloudpan 与忽略规则）
-        HashSet<string> localFiles = new(StringComparer.OrdinalIgnoreCase);
-        HashSet<string> localDirs = new(StringComparer.OrdinalIgnoreCase);
-        if (Directory.Exists(SyncPath.NormalizePath(_syncRoot)))
-        {
-            foreach (string fullPath in Directory.EnumerateFileSystemEntries(SyncPath.NormalizePath(_syncRoot), "*", SearchOption.AllDirectories))
-            {
-                if (SyncPath.ShouldIgnore(_syncRoot, fullPath, _ignorePatterns))
-                {
-                    continue;
-                }
-
-                string rel = SyncPath.ToRelativePath(_syncRoot, fullPath);
-                if (Directory.Exists(fullPath))
-                {
-                    localDirs.Add(rel);
-                }
-                else
-                {
-                    localFiles.Add(rel);
-                }
-            }
-        }
+        // 3. 本地文件/目录集合（相对路径，忽略 .cloudpan 与忽略规则，来自增量维护缓存）
+        var (localFiles, localDirs) = _localIndex.CopySets();
 
         var results = new List<FileSyncStatusItem>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -298,6 +323,12 @@ internal sealed class SyncBrowseService
                 continue;
             }
 
+            // 本地已删除但 FSW 事件尚未处理 → 跳过（缓存一致性）
+            if (!File.Exists(SyncPath.ToLocalPath(_syncRoot, rel)))
+            {
+                continue;
+            }
+
             seen.Add(rel);
             int state = queueStateByPath.TryGetValue(rel, out int qState) ? qState : (int)FileState.Modified;
             results.Add(new FileSyncStatusItem(rel, false, state, true));
@@ -306,6 +337,11 @@ internal sealed class SyncBrowseService
         foreach (string rel in localDirs)
         {
             if (seen.Contains(rel))
+            {
+                continue;
+            }
+
+            if (!Directory.Exists(SyncPath.ToLocalPath(_syncRoot, rel)))
             {
                 continue;
             }
@@ -327,8 +363,8 @@ internal sealed class SyncBrowseService
     /// </summary>
     public async Task<List<string>> GetDirectoryTreePathsAsync(CancellationToken ct = default)
     {
-        await using var store = await _storeFactory.CreateStoreAsync(ct);
-        var dirs = await store.GetDirectoryPathsAsync(ct);
+        await using var store = await _storeFactory.CreateStoreAsync(ct).ConfigureAwait(false);
+        var dirs = await store.GetDirectoryPathsAsync(ct).ConfigureAwait(false);
 
         // 规范化：目录路径统一 / 开头 + / 结尾（服务端条目路径以 / 开头、不含尾斜杠；排除集语义目录以 / 结尾）
         return dirs
@@ -353,7 +389,7 @@ internal sealed class SyncBrowseService
         string tempPath = Path.Combine(tempDir,
             $"{Path.GetFileNameWithoutExtension(relativePath)}.remote{DateTime.Now:yyyyMMddHHmmss}{ext}");
 
-        var result = await _api.DownloadAsync(relativePath, tempPath, ct: ct);
+        var result = await _api.DownloadAsync(relativePath, tempPath, ct: ct).ConfigureAwait(false);
         if (result == null || !File.Exists(tempPath))
         {
             return null;
