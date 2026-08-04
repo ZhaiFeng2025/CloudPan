@@ -1,5 +1,6 @@
 using CloudPan.Contract;
 using CloudPan.Infrastructure.Configuration;
+using CloudPan.Infrastructure.Imaging;
 using CloudPan.Infrastructure.Logging;
 using CloudPan.Infrastructure.Persistence;
 using CloudPan.Infrastructure.Storage;
@@ -75,6 +76,8 @@ builder.Services.AddSingleton<ISharingService, SharingService>();
 builder.Services.AddSingleton<ITrashService, TrashService>();
 builder.Services.AddSingleton<IVersionHistoryService, VersionHistoryService>();
 builder.Services.AddSingleton<IThumbnailService, ThumbnailService>();
+// T-102：HEIC/HEIF 缩略图解码后端（Windows 系统 WIC），Core 只依赖 IImageDecoder 抽象
+builder.Services.AddSingleton<IImageDecoder, WicImageDecoder>();
 builder.Services.AddSingleton<IFileOperationService, FileOperationService>();
 builder.Services.AddSingleton<IChunkedUploadService, ChunkedUploadService>();
 builder.Services.AddSingleton<IServerStatusService, ServerStatusService>();

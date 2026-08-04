@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using CloudPan.Contract;
+using CloudPan.Infrastructure.Imaging;
 using CloudPan.Infrastructure.Models;
 using CloudPan.Infrastructure.Storage;
 using SkiaSharp;
@@ -10,9 +11,10 @@ namespace CloudPan.Server.Core;
 /// <inheritdoc />
 public class ThumbnailService : IThumbnailService
 {
+    // T-102：heic/heif（iPhone/现代 Android 照片主格式）经系统 WIC 解码，见 DecodeImage
     private static readonly HashSet<string> SupportedExts = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"
+        ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".heic", ".heif"
     };
 
     /// <summary>缩略图并发生成并发上限——限制同时解码的图片数，避免相册并发请求拉满 CPU。</summary>
@@ -21,13 +23,20 @@ public class ThumbnailService : IThumbnailService
     private readonly IFileStorageService _storage;
     private readonly IFileIndexService? _fileIndex;
 
+    /// <summary>
+    /// 解码器抽象（Infrastructure/Imaging）：SkiaSharp 无法解码的格式（heic/heif）回退到此解码器。
+    /// 注入 null 时 HEIC 缩略图不可生成（测试/无解码后端场景）。
+    /// </summary>
+    private readonly IImageDecoder? _decoder;
+
     /// <summary>生成并发门：未命中缓存的生成（解码/缩放/编码）经此门限流。</summary>
     private readonly SemaphoreSlim _generationGate = new(MaxConcurrentGenerations);
 
-    public ThumbnailService(IFileStorageService storage, IFileIndexService? fileIndex = null)
+    public ThumbnailService(IFileStorageService storage, IFileIndexService? fileIndex = null, IImageDecoder? decoder = null)
     {
         _storage = storage;
         _fileIndex = fileIndex;
+        _decoder = decoder;
     }
 
     /// <inheritdoc />
@@ -87,7 +96,7 @@ public class ThumbnailService : IThumbnailService
     {
         try
         {
-            using SKBitmap input = SKBitmap.Decode(_storage.GetAbsolutePath(path));
+            using SKBitmap? input = DecodeImage(_storage.GetAbsolutePath(path));
             if (input != null)
             {
                 float ratio = (float)width / input.Width;
@@ -122,6 +131,47 @@ public class ThumbnailService : IThumbnailService
         {
             return new ThumbnailResult(false, null,
                 new DomainError(HttpErrorCode.INTERNAL_ERROR, "缩略图生成失败", "缩略图生成失败，请稍后重试"));
+        }
+    }
+
+    /// <summary>
+    /// 解码图片为位图：常规格式走 SkiaSharp 原生解码；SkiaSharp 不支持的格式
+    /// （heic/heif）回退到 Infrastructure 解码器抽象（Windows 系统 WIC，T-102）。
+    /// Core 只依赖 IImageDecoder 抽象，不依赖具体 WIC 类型。
+    /// </summary>
+    private SKBitmap? DecodeImage(string absPath)
+    {
+        // 常规格式快速路径：SkiaSharp 原生解码（行为与存量一致）
+        SKBitmap? bmp = SKBitmap.Decode(absPath);
+        if (bmp != null)
+        {
+            return bmp;
+        }
+
+        // heic/heif：SkiaSharp 不带 HEIF 解码器，回退系统 WIC（Windows 10 1809+ 自带）
+        if (_decoder is null)
+        {
+            return null;
+        }
+
+        DecodedBitmap? decoded = _decoder.TryDecode(absPath);
+        if (decoded is null)
+        {
+            return null;
+        }
+
+        // WIC 输出 BGRA8 像素 → SKBitmap（紧凑 stride，宽高已知）
+        var info = new SKImageInfo(decoded.Width, decoded.Height, SKColorType.Bgra8888, SKAlphaType.Unpremul);
+        nint ptr = System.Runtime.InteropServices.Marshal.AllocHGlobal(decoded.BgraPixels.Length);
+        try
+        {
+            System.Runtime.InteropServices.Marshal.Copy(decoded.BgraPixels, 0, ptr, decoded.BgraPixels.Length);
+            using SKImage image = SKImage.FromPixels(info, ptr, info.RowBytes);
+            return SKBitmap.FromImage(image); // 深拷贝，释放后安全
+        }
+        finally
+        {
+            System.Runtime.InteropServices.Marshal.FreeHGlobal(ptr);
         }
     }
 

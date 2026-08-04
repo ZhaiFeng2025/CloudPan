@@ -5101,7 +5101,7 @@
       "title": "HEIC/HEIF 缩略图解码（Windows 系统 WIC，不引第三方编解码器）",
       "dimension": "function",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 9,
       "findingId": "F-144",
       "dependsOn": [],
@@ -5133,8 +5133,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "取舍：HEIC『系统 WIC 解码』vs『引第三方编解码器』——选 WIC（系统原生 HEIF，不破坏『最简洁技术方案』）；解码器落 Infrastructure 抽象保持 Core 不依赖 WPF/WinRT 类型。",
-      "updatedAt": null
+      "note": "取舍：HEIC『系统 WIC 解码』vs『引第三方编解码器』——选 WIC（系统原生 HEIF，不破坏『最简洁技术方案』）；解码器落 Infrastructure 抽象保持 Core 不依赖 WPF/WinRT 类型。执行（task-executor 2026-08-04）：改动文件 = CloudPan.Infrastructure/Imaging/IImageDecoder.cs（新增抽象：DecodedBitmap(Width,Height,BgraPixels) + IImageDecoder.TryDecode）、CloudPan.Infrastructure/Imaging/WicImageDecoder.cs（新增 WIC COM 实现：CoCreateInstance(CLSID_WICImagingFactory) + IWICImagingFactory.CreateDecoderFromFilename → GetFrame → FormatConverter 统一转 BGRA8 → CopyPixels，COM 接口 vtable 顺序与 wincodec.h 对齐，实现中实测修正三处：CLSID 用 Factory2、IWICImagingFactory.CreateFormatConverter 实为索引 7、IWICBitmapFrameDecode IID=3B16811B、CopyPixels 用 HGlobal 中转避免 SAFEARRAY marshal 崩溃）、CloudPan.Server.Core/Thumbnails/ThumbnailService.cs（SupportedExts 增 .heic/.heif；注入可选 IImageDecoder；DecodeImage 先 SkiaSharp 原生解码、失败回退 WIC 抽象，BGRA8 → SKImage.FromPixels → SKBitmap）、CloudPan.Server.Core/Thumbnails/IThumbnailService.cs（注释更新）、CloudPan.Server.Host/Program.cs（DI 注册 IImageDecoder→WicImageDecoder）、CloudPan.Tests/Server/Services/ThumbnailServiceTests.cs（HEIC 测试×3：heic/heif 经解码器抽象生成缩略图 + 无解码器时走解码路径而非『不支持类型』）、CloudPan.Tests/Infrastructure/WicImageDecoderTests.cs（WIC 后端×3：PNG 解码返回 BGRA8、非法文件 null、空路径 null）。Android 端已对齐无需改动：FileListScreen.getFileIcon 正则已含 heic/heif（BitmapFactory API 26+ 解码 HEIF）。环境限制（如实说明）：本机 HEIF 编码器初始化失败（0x88982F8B COMPONENTINITIALIZEFAILURE，HEVC 编码器未注册；Media Foundation 无 HEVC 编码器，系统仅注册 HEIF 解码器与依赖 HEVC 的 HEIF 编码器），且无外网，无法生成真实 HEVC 编码的 HEIC 样例。故 HEIC 解码成功路径经两层测试覆盖：①ThumbnailService 注入伪造 IImageDecoder（模拟 WIC 返回 BGRA8）验证 .heic/.heif 类型放行 + 解码器抽象 + 缩略图生成；②WicImageDecoder 用 PNG 验证真实 WIC COM 后端（HEIC 走同一 WIC 解码路径，Windows 10 1809+ 系统自带 HEIF 解码器）。真实 HEIC 端到端解码待具备 HEIF 编码/样例的环境补充验证。验证：AC1 grep -n 'heic\\|heif' ThumbnailService 有匹配（exit=0）；AC2 dotnet test --filter Thumbnail 12/12 通过 + WIC 后端 3/3 通过；AC3 dotnet test CloudPan.Tests -c Release 353/353 通过 + dotnet build CloudPan.sln -c Release 0 警告 0 错误；架构测试 15/15 通过（依赖方向未违反：Core→Infrastructure 接口、Infrastructure 内部 WIC）。",
+      "updatedAt": "2026-08-04"
     },
     {
       "id": "T-103",

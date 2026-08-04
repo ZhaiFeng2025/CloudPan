@@ -1,4 +1,5 @@
 using CloudPan.Contract;
+using CloudPan.Infrastructure.Imaging;
 using CloudPan.Infrastructure.Storage;
 using CloudPan.Server.Core;
 using SkiaSharp;
@@ -169,5 +170,76 @@ public class ThumbnailServiceTests : Infrastructure.TestBase
 
         Assert.All(results, r => Assert.True(r.Success));
         Assert.Equal(20, results.Select(r => r.CachePath).Distinct().Count());
+    }
+
+    // ---- T-102：HEIC/HEIF 缩略图（SupportedExts 放行 + 解码器抽象）----
+
+    /// <summary>伪造解码器：模拟系统 WIC 解码 HEIC 成功返回红色 BGRA 像素，隔离 Core 集成路径。</summary>
+    private sealed class FakeImageDecoder : IImageDecoder
+    {
+        public DecodedBitmap? Result { get; set; }
+        public string? LastPath { get; private set; }
+
+        public DecodedBitmap? TryDecode(string absolutePath)
+        {
+            LastPath = absolutePath;
+            return Result;
+        }
+    }
+
+    [Fact]
+    public async Task GetThumbnail_heic_经解码器抽象_生成缩略图()
+    {
+        // T-102 验收：.heic 进入 SupportedExts（不再 NOT_FOUND 为不支持类型），解码经 IImageDecoder 抽象生成缩略图
+        await File.WriteAllBytesAsync(Path.Combine(TempDir, "photo.heic"), new byte[] { 0x00, 0x01, 0x02 });
+
+        // 伪造 WIC 解码结果：100x80 红色 BGRA8
+        byte[] pixels = new byte[100 * 80 * 4];
+        for (int i = 0; i < pixels.Length; i += 4)
+        {
+            pixels[i] = 0; pixels[i + 1] = 0; pixels[i + 2] = 255; pixels[i + 3] = 255;
+        }
+        var fake = new FakeImageDecoder { Result = new DecodedBitmap(100, 80, pixels) };
+        var svc = new ThumbnailService(new FileStorageService(TempDir), null, fake);
+
+        var result = await svc.GetThumbnailAsync("/photo.heic", 200);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.CachePath);
+        Assert.True(File.Exists(result.CachePath));
+        Assert.EndsWith(".jpg", result.CachePath);
+        Assert.EndsWith("photo.heic", fake.LastPath);
+    }
+
+    [Fact]
+    public async Task GetThumbnail_heif_经解码器抽象_生成缩略图()
+    {
+        // .heif 扩展名同样放行（heic/heif 同源容器）
+        await File.WriteAllBytesAsync(Path.Combine(TempDir, "photo.heif"), new byte[] { 0x00 });
+        var fake = new FakeImageDecoder
+        {
+            Result = new DecodedBitmap(50, 40, new byte[50 * 40 * 4])
+        };
+        var svc = new ThumbnailService(new FileStorageService(TempDir), null, fake);
+
+        var result = await svc.GetThumbnailAsync("/photo.heif", 100);
+
+        Assert.True(result.Success);
+        Assert.True(File.Exists(result.CachePath));
+    }
+
+    [Fact]
+    public async Task GetThumbnail_heic_无解码器_进入解码路径而非不支持类型()
+    {
+        // 类型判定已放行 heic：即使解码失败，错误是"无法解码"而不是"不支持的文件类型"（NOT_FOUND 语义不同）
+        await File.WriteAllTextAsync(Path.Combine(TempDir, "photo.heic"), "not an image");
+        var svc = new ThumbnailService(new FileStorageService(TempDir));
+
+        var result = await svc.GetThumbnailAsync("/photo.heic", 200);
+
+        Assert.False(result.Success);
+        Assert.Equal(HttpErrorCode.NOT_FOUND.Code, result.Error!.Code.Code);
+        Assert.Contains("无法生成缩略图", result.Error.Message);
+        Assert.DoesNotContain("不是支持的图片类型", result.Error.Message);
     }
 }
