@@ -201,6 +201,7 @@ public static class ApiClientGenerator
         ClientApiRenderer.AppendGeneratedHeader(sb, spec, "api.endpoints[].clientMethod（C# 客户端方法骨架：HTTP 方法/路径/参数绑定）");
         sb.AppendLine("using System.Linq;");
         sb.AppendLine("using System.Net.Http.Json;");
+        sb.AppendLine("using Microsoft.Extensions.Logging;");
         sb.AppendLine("using CloudPan.Contract;");
         sb.AppendLine();
         sb.AppendLine("namespace CloudPan.Client.Core.Services;");

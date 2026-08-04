@@ -1,5 +1,5 @@
 // AUTO-GENERATED from shared-spec.json
-// 版本: 1.8.0  日期: 2026-08-04
+// 版本: 1.9.0  日期: 2026-08-04
 // 源: shared-spec.json → api.endpoints[].clientMethod（Retrofit interface，与 C# ClientApi.g.cs 同源）
 // 请勿手工编辑 — 重新生成: dotnet run --project CloudPan.CodeGen
 
@@ -70,6 +70,12 @@ interface CloudPanApi {
      */
     @GET(SpecRoutes.FilesSearch)
     suspend fun searchFiles(@Query("q") query: String, @Query("limit") limit: Int = 50): Response<SearchResponse>
+
+    /**
+     * 图片缩略图（GET /api/thumbnails）
+     */
+    @GET(SpecRoutes.Thumbnails)
+    suspend fun getThumbnail(@Query("path") path: String, @Query("width") width: Int): Response<okhttp3.ResponseBody>
 
     /**
      * 设备列表（GET /api/devices）

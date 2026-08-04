@@ -156,7 +156,7 @@ public record EndpointDef(
 
 // ---- 客户端接口方法（v1.7.0，T-086）----
 // api.endpoints[].clientMethod：供 C# IApiClient/ApiClient 与 Kotlin Retrofit 接口生成。
-// kind: query | json-body | delete | multipart | manual（manual 只生成接口签名，类体手工维护）
+// kind: query | json-body | delete | multipart | binary | manual（binary: 二进制响应 returns=byte[]，非 200/异常返回 null，T-097；manual 只生成接口签名，类体手工维护）
 // manual: null | "csharp" | "kotlin" | "both"（该端语言不生成类/接口方法体）
 // csharp/kotlin: 该方法是否参与对应语言生成（默认 true）
 // nullable: C# 返回 Task<returns?>；unwraps: 从响应 DTO 提取列表（如 "Data"）

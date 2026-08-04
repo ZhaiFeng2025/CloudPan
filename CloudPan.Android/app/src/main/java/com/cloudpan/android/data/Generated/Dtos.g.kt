@@ -1,5 +1,5 @@
 // AUTO-GENERATED from shared-spec.json
-// 版本: 1.8.0  日期: 2026-08-04
+// 版本: 1.9.0  日期: 2026-08-04
 // 源: shared-spec.json → enums + entities.apiMapping + api.responses + api.errorResponse
 // 请勿手工编辑 — 重新生成: dotnet run --project CloudPan.CodeGen
 

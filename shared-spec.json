@@ -3,7 +3,7 @@
   "$id": "cloudpan-shared-spec",
   "title": "CloudPan 共享定义",
   "description": "所有枚举、实体、端点、字段名、错误码、配置值的唯一事实来源。所有代码和文档引用本文件，禁止各自重复定义。",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "date": "2026-08-04",
   "_changelog": [
     { "version": "1.0.0", "date": "2026-07-28", "changes": [
@@ -66,6 +66,9 @@
     ]},
     { "version": "1.8.0", "date": "2026-08-04", "changes": [
       "config: 新增 storageReclaimIntervalMinutes（统一存储回收任务间隔，分钟）与 thumbnailCacheRetentionDays（缩略图缓存保留天数），驱动 SpecConfig.StorageReclaimIntervalMinutes / ThumbnailCacheRetentionDays，消费：BackgroundHostedService 统一回收任务（T-088）"
+    ]},
+    { "version": "1.9.0", "date": "2026-08-04", "changes": [
+      "api.endpoints /api/thumbnails 补 clientMethod（kind=binary，path/width 查询参数，returns=byte[] 二进制响应）：C# GetThumbnailAsync 与 Kotlin getThumbnail 改由 CodeGen 生成，删除手工 partial IApiClient.Thumbnails.cs（T-097）"
     ]}
   ],
 
@@ -577,7 +580,15 @@
               { "name": "limit", "in": "query", "wireName": "limit", "type": "int", "optional": true, "default": "50" }
             ] }
         ] },
-      { "method": "GET",    "path": "/api/thumbnails",                      "auth": "token",     "description": "图片缩略图" },
+      { "method": "GET",    "path": "/api/thumbnails",                      "auth": "token",     "description": "图片缩略图",
+        "clientMethod": [
+          { "name": "GetThumbnailAsync", "kotlinName": "getThumbnail", "kind": "binary",
+            "returns": "byte[]", "nullable": true, "kotlinReturns": "Response<okhttp3.ResponseBody>",
+            "params": [
+              { "name": "path", "in": "query", "wireName": "path", "type": "string" },
+              { "name": "width", "in": "query", "wireName": "width", "type": "int" }
+            ] }
+        ] },
       { "method": "GET", "path": "/api/versions", "auth": "token", "description": "版本历史列表",
         "clientMethod": [
           { "name": "GetVersionsAsync", "kotlinName": "getVersions", "kotlin": false,

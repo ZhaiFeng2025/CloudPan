@@ -4894,7 +4894,7 @@
       "title": "缩略图端点契约化（spec 补 clientMethod + 删手工 partial + Kotlin 同步生成）",
       "dimension": "architecture",
       "priority": "P1",
-      "status": "todo",
+      "status": "in-progress",
       "batch": 9,
       "findingId": "F-139",
       "dependsOn": [],
@@ -4932,7 +4932,7 @@
       "attempts": 0,
       "statusReason": null,
       "note": "依赖 T-086 生成管线（已 done）：本任务只需把缩略图端点补进 spec clientMethod，其余由 CodeGen 全自动覆盖。",
-      "updatedAt": null
+      "updatedAt": "2026-08-04"
     },
     {
       "id": "T-098",

@@ -8,7 +8,7 @@ namespace CloudPan.CodeGen.Generators;
 /// </summary>
 internal static class ClientApiRenderer
 {
-    /// <summary>方法体分派：query / json-body / delete 三种可生成绑定；其余抛未实现。</summary>
+    /// <summary>方法体分派：query / json-body / delete / binary 四种可生成绑定；其余抛未实现。</summary>
     internal static void AppendMethodBody(StringBuilder sb, ClientMethodDef m, string route)
     {
         switch (m.Kind ?? "query")
@@ -21,6 +21,9 @@ internal static class ClientApiRenderer
                 break;
             case "delete":
                 AppendDeleteBody(sb, m, route);
+                break;
+            case "binary":
+                AppendBinaryBody(sb, m, route);
                 break;
             default:
                 sb.AppendLine($"        throw new System.NotImplementedException($\"方法 {m.Name} 未生成：kind={m.Kind}\");");
@@ -64,6 +67,34 @@ internal static class ClientApiRenderer
         }
         sb.AppendLine("        response.EnsureSuccessStatusCode();");
         AppendDeserialize(sb, m);
+    }
+
+    /// <summary>
+    /// 二进制响应（kind=binary，returns=byte[]）：URL 构造同 query；非 200 / 网络异常返回 null 供 UI 回退，
+    /// 不抛异常（缩略图场景 ThumbnailLoader 依赖 null 语义回退字体图标，T-097）。
+    /// </summary>
+    private static void AppendBinaryBody(StringBuilder sb, ClientMethodDef m, string route)
+    {
+        var query = m.Params.Where(p => p.In == "query" && (p.Csharp ?? true)).ToList();
+        string urlInit = query.Count > 0
+            ? $"$\"{{SpecRoutes.{route}}}?{string.Join("&", query.Select(p => p.WireName + "={" + QueryExpr(p) + "}"))}\""
+            : $"SpecRoutes.{route}";
+        sb.AppendLine($"        string url = {urlInit};");
+        sb.AppendLine("        try");
+        sb.AppendLine("        {");
+        sb.AppendLine("            var response = await _http.GetAsync(url, ct);");
+        sb.AppendLine("            if (!response.IsSuccessStatusCode)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                _logger?.LogWarning(\"二进制端点失败: {Url} → {Status}\", url, response.StatusCode);");
+        sb.AppendLine("                return null;");
+        sb.AppendLine("            }");
+        sb.AppendLine("            return await response.Content.ReadAsByteArrayAsync(ct);");
+        sb.AppendLine("        }");
+        sb.AppendLine("        catch (Exception ex)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            _logger?.LogWarning(ex, \"二进制端点异常: {Url}\", url);");
+        sb.AppendLine("            return null;");
+        sb.AppendLine("        }");
     }
 
     /// <summary>POST + JSON body（请求 DTO 由 body 参数顺序构造）。</summary>

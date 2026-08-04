@@ -69,30 +69,6 @@ public partial class ApiClient : IApiClient, IDisposable
         Interlocked.Exchange(ref _downloadLimitBps, bytesPerSecond);
     }
 
-    /// <summary>
-    /// 获取图片缩略图（GET /api/thumbnails，spec 未定义 clientMethod，手工实现；签名由 IApiClient.Thumbnails 强约束）。
-    /// 失败（非 200/网络异常）返回 null，由 UI 回退字体图标，不抛异常。
-    /// </summary>
-    public async Task<byte[]?> GetThumbnailAsync(string path, int width, CancellationToken ct = default)
-    {
-        string url = $"{SpecRoutes.Thumbnails}?path={Uri.EscapeDataString(path)}&width={width}";
-        try
-        {
-            var response = await _http.GetAsync(url, ct);
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger?.LogWarning("获取缩略图失败: {Path} → {Status}", path, response.StatusCode);
-                return null;
-            }
-            return await response.Content.ReadAsByteArrayAsync(ct);
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogWarning(ex, "获取缩略图异常: {Path}", path);
-            return null;
-        }
-    }
-
     /// <summary>健康检查。</summary>
     public async Task<bool> HealthCheckAsync(CancellationToken ct = default)
     {
