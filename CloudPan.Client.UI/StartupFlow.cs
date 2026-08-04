@@ -1,4 +1,5 @@
 using CloudPan.Client.Core.Composition;
+using CloudPan.Client.Core.Services;
 
 namespace CloudPan.Client.UI;
 
@@ -8,12 +9,31 @@ namespace CloudPan.Client.UI;
 /// </summary>
 internal static class StartupFlow
 {
-    /// <summary>UI 线程未处理异常：记录崩溃日志并退出。</summary>
+    /// <summary>UI 线程未处理异常：记录崩溃日志并退出。首屏只透出白话指引，不默认展示英文原始异常（F-148/T-106）。</summary>
     public static void OnThreadException(object sender, System.Threading.ThreadExceptionEventArgs e)
     {
         AppendCrashLog("UI线程异常", e.Exception);
-        MessageBox.Show($"CloudPan 遇到未处理的错误，即将退出。\n\n{e.Exception.Message}",
-            "CloudPan — 错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        try
+        {
+            var viewLog = new TaskDialogButton("查看详细日志", true);
+            var quit = new TaskDialogButton("退出", true);
+            var page = new TaskDialogPage
+            {
+                Caption = "CloudPan — 遇到问题",
+                Heading = "CloudPan 遇到问题需要重启",
+                Text = "本次问题的详细原因已记录到日志文件中。",
+                Icon = TaskDialogIcon.Error,
+                Buttons = { viewLog, quit },
+            };
+            if (TaskDialog.ShowDialog(page) == viewLog)
+            {
+                OpenCrashLog();
+            }
+        }
+        catch
+        {
+            // 崩溃收尾阶段 UI 也可能已损坏：崩溃日志已在 AppendCrashLog 写入，直接退出
+        }
         Environment.Exit(1);
     }
 
@@ -70,7 +90,8 @@ internal static class StartupFlow
             }
             catch (Exception ex)
             {
-                var retry = MessageBox.Show($"配置保存失败:\n{ex.Message}\n\n请检查磁盘空间和配置文件路径的写入权限。",
+                ErrorAttribution attribution = ErrorAttribution.FromException(ex);
+                var retry = MessageBox.Show($"配置保存失败：{attribution.Message}。{attribution.NextStep}\n\n请检查磁盘空间和配置文件路径的写入权限。",
                     "CloudPan — 配置保存失败", MessageBoxButtons.RetryCancel, MessageBoxIcon.Error);
                 if (retry != DialogResult.Retry)
                 {
@@ -110,6 +131,22 @@ internal static class StartupFlow
             Top = 45,
         });
         return form;
+    }
+
+    /// <summary>崩溃对话框「查看详细日志」：用系统默认程序打开崩溃日志文件（T-106 保留诊断信息查看能力）。</summary>
+    private static void OpenCrashLog()
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(GetCrashLogPath())
+            {
+                UseShellExecute = true,
+            });
+        }
+        catch
+        {
+            // 打开日志失败不阻塞退出——崩溃日志已在 AppendCrashLog 写入
+        }
     }
 
     /// <summary>崩溃日志路径（%LocalAppData%\CloudPan\crash.log），用于全局异常处理器记录。</summary>

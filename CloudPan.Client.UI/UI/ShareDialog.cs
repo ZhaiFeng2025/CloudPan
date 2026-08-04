@@ -219,7 +219,8 @@ internal static class ShareDialog
             }
             catch (Exception ex)
             {
-                statusLabel.Text = $"生成失败: {ex.Message}";
+                ErrorAttribution attribution = ErrorAttribution.FromException(ex);
+                statusLabel.Text = $"生成失败：{attribution.Message}。{attribution.NextStep}";
             }
             finally
             {
@@ -237,7 +238,8 @@ internal static class ShareDialog
             }
             catch (Exception ex)
             {
-                statusLabel.Text = $"复制失败: {ex.Message}";
+                ErrorAttribution attribution = ErrorAttribution.FromException(ex);
+                statusLabel.Text = $"复制失败：{attribution.Message}。{attribution.NextStep}";
             }
         }
         copyBtn.Click += OnCopyClick;
@@ -268,7 +270,8 @@ internal static class ShareDialog
             }
             catch (Exception ex)
             {
-                statusLabel.Text = $"撤销失败: {ex.Message}";
+                ErrorAttribution attribution = ErrorAttribution.FromException(ex);
+                statusLabel.Text = $"撤销失败：{attribution.Message}。{attribution.NextStep}";
             }
         }
         revokeBtn.Click += OnRevokeClick;

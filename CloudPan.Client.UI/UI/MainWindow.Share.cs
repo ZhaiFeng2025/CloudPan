@@ -19,7 +19,8 @@ public partial class MainWindow
         }
         catch (Exception ex)
         {
-            AddLog($"打开分享对话框失败: {ex.Message}");
+            ErrorAttribution attribution = ErrorAttribution.FromException(ex);
+            AddLog($"打开分享对话框失败：{attribution.Message}。{attribution.NextStep}");
         }
     }
 

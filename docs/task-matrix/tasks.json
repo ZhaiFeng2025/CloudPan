@@ -5258,7 +5258,7 @@
       "title": "Windows 6 处异常原文透出改 ErrorAttribution 白话（含崩溃对话框）",
       "dimension": "ux",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 9,
       "findingId": "F-148",
       "dependsOn": [],
@@ -5289,8 +5289,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "ErrorAttribution（T-031）已建，本任务补齐分享/版本/打开/崩溃四处漏网点，与 T-095 清理并行分类器衔接。",
-      "updatedAt": null
+      "note": "ErrorAttribution（T-031）已建，本任务补齐分享/版本/打开/崩溃四处漏网点，与 T-095 清理并行分类器衔接。\n执行（2026-08-04, task-executor）：9 处 catch 改走 ErrorAttribution.FromException 白话归因（原因+下一步）——ShareDialog 生成/复制/撤销×3、VersionHistoryDialog 回滚、MainWindow.Status 打开同步文件夹、MainWindow.Share 打开分享对话框、MainWindow.Versions 打开版本历史×2、StartupFlow 配置保存失败（AC1 强制该文件无 {ex.Message}）。崩溃对话框（StartupFlow.OnThreadException）改 TaskDialog 白话首屏「CloudPan 遇到问题需要重启」+「查看详细日志」按钮（打开 %LocalAppData%\\CloudPan\\crash.log，保留诊断查看能力），不默认透出英文原始异常；TaskDialog 展示含 try-catch 兜底（崩溃收尾 UI 可能已损坏，日志已写直接退出）。\n注：location 行号（MainWindow.Share.cs:239/257/288、Versions.cs:169）为审查快照——分享/版本逻辑 T-099 已下沉 ShareDialog/VersionHistoryDialog，实际改于该二文件；AC 命令中 StartupFlow.cs 路径（UI/StartupFlow.cs）与实际位置（CloudPan.Client.UI/StartupFlow.cs）不符，grep 已按实际路径验证。\n验证：AC1/AC2 grep 按实际路径全通过（无 {ex.Message}/e.Exception.Message 残留，StartupFlow 含『遇到问题/查看详细日志』）；新增 ErrorAttributionTests 4 用例（分享生成连接失败、复制剪贴板 COM 异常、回滚 401、打开文件夹 Win32 异常均归因白话不含英文原文）；dotnet test CloudPan.Tests -c Release 366 通过 0 失败；dotnet build CloudPan.sln -c Release 0 错 0 警。",
+      "updatedAt": "2026-08-04"
     },
     {
       "id": "T-107",

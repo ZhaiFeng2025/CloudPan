@@ -1,4 +1,6 @@
+using System.ComponentModel;
 using System.Net;
+using System.Runtime.InteropServices;
 using CloudPan.Client.Core.Services;
 using Xunit;
 
@@ -99,5 +101,53 @@ public class ErrorAttributionTests
             new HttpRequestException("Not Found", null, HttpStatusCode.NotFound));
 
         Assert.False(attribution.RequiresReconfiguration);
+    }
+
+    // ================================================================
+    // T-106：分享生成/复制/撤销、版本回滚、打开同步文件夹、崩溃对话框
+    // 各错误点场景的典型异常 → 归因为白话文案（不露原始英文异常串）
+    // ================================================================
+
+    [Fact]
+    public void 分享生成失败_连接异常_归因为白话连接文案不含英文()
+    {
+        ErrorAttribution attribution = ErrorAttribution.FromException(
+            new HttpRequestException("Connection refused"));
+
+        Assert.Contains("无法连接到云盘服务", attribution.Message);
+        Assert.Contains("台式机", attribution.NextStep);
+        Assert.DoesNotContain("Connection refused", attribution.Message);
+    }
+
+    [Fact]
+    public void 分享复制失败_剪贴板COM异常_兜底白话不露原始串()
+    {
+        ErrorAttribution attribution = ErrorAttribution.FromException(
+            new ExternalException("The requested clip operation did not complete."));
+
+        Assert.Contains("未知错误", attribution.Message);
+        Assert.Contains("重试", attribution.NextStep);
+        Assert.DoesNotContain("clip operation", attribution.Message);
+    }
+
+    [Fact]
+    public void 版本回滚失败_401_归因为凭证失效白话不含英文()
+    {
+        ErrorAttribution attribution = ErrorAttribution.FromException(
+            new HttpRequestException("Unauthorized", null, HttpStatusCode.Unauthorized));
+
+        Assert.Contains("凭证", attribution.Message);
+        Assert.Contains("重新配置", attribution.NextStep);
+        Assert.DoesNotContain("Unauthorized", attribution.Message);
+    }
+
+    [Fact]
+    public void 打开同步文件夹失败_Win32异常_兜底白话不露原始串()
+    {
+        ErrorAttribution attribution = ErrorAttribution.FromException(
+            new Win32Exception(5, "Access is denied."));
+
+        Assert.Contains("未知错误", attribution.Message);
+        Assert.DoesNotContain("Access is denied", attribution.Message);
     }
 }

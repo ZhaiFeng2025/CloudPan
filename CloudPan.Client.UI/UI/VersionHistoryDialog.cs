@@ -152,7 +152,8 @@ internal static class VersionHistoryDialog
             }
             catch (Exception ex)
             {
-                MessageBox.Show(dialog, $"回滚失败: {ex.Message}", "版本历史",
+                ErrorAttribution attribution = ErrorAttribution.FromException(ex);
+                MessageBox.Show(dialog, $"回滚失败：{attribution.Message}。{attribution.NextStep}", "版本历史",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }

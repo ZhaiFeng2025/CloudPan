@@ -230,7 +230,8 @@ public partial class MainWindow
         }
         catch (Exception ex)
         {
-            string msg = $"无法打开同步文件夹:\n{Program.SyncRoot}\n\n原因: {ex.Message}";
+            ErrorAttribution attribution = ErrorAttribution.FromException(ex);
+            string msg = $"无法打开同步文件夹:\n{Program.SyncRoot}\n\n{attribution.Message}。{attribution.NextStep}";
             MessageBox.Show(msg, "CloudPan", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }

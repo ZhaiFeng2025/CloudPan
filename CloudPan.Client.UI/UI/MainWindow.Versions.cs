@@ -19,7 +19,8 @@ public partial class MainWindow
         }
         catch (Exception ex)
         {
-            AddLog($"打开版本历史失败: {ex.Message}");
+            ErrorAttribution attribution = ErrorAttribution.FromException(ex);
+            AddLog($"打开版本历史失败：{attribution.Message}。{attribution.NextStep}");
         }
     }
 
@@ -39,7 +40,8 @@ public partial class MainWindow
         }
         catch (Exception ex)
         {
-            AddLog($"打开版本历史失败: {ex.Message}");
+            ErrorAttribution attribution = ErrorAttribution.FromException(ex);
+            AddLog($"打开版本历史失败：{attribution.Message}。{attribution.NextStep}");
         }
     }
 }
