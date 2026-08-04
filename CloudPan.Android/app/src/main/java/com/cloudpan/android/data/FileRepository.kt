@@ -9,6 +9,8 @@ import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.ResponseBody
 import java.io.File
 import java.io.FileOutputStream
+import java.io.RandomAccessFile
+import java.security.MessageDigest
 import java.time.Instant
 
 /**
@@ -30,6 +32,17 @@ class FileConflictException(message: String) : Exception(message)
  * 文件操作仓库——封装 API 调用和错误处理。
  */
 class FileRepository(private val settings: SettingsStore) {
+    companion object {
+        /**
+         * 分块上传阈值（字节）——对齐 shared-spec.json → config.chunkedUploadThreshold（10MB）。
+         * 服务端直传 MultipartBodyLengthLimit=50MB，≥ 此值文件必须走分块路径，否则 413 静默失败（T-105）。
+         */
+        const val CHUNKED_UPLOAD_THRESHOLD: Long = 10L * 1024 * 1024
+
+        /** 分块大小（字节）——对齐 shared-spec.json → config.chunkSize（4MB），服务端按块索引 seek 定位。 */
+        const val CHUNK_SIZE: Long = 4L * 1024 * 1024
+    }
+
     private var _api: CloudPanApi? = null
 
     private fun api(): CloudPanApi {
@@ -249,8 +262,19 @@ class FileRepository(private val settings: SettingsStore) {
      * baseVersion 为乐观并发基准版本（T-089：调用方经 resolveBaseVersion 先查目标文件当前版本，
      * 或复用列表 fileEntry.version），不再恒传 0；服务端当前版本更高时返回 409（FileConflictException），
      * 由 UI 给出覆盖/跳过选项，不静默覆盖其他设备改动。
+     * T-105：文件 ≥ 分块阈值（10MB，对齐 spec config.chunkedUploadThreshold）自动走分块上传路径
+     * （POST /api/files/upload/chunk），规避直传 50MB 413 静默失败；分块进度经 onProgress 回调反馈。
      */
-    suspend fun uploadFile(localFile: File, remotePath: String, baseVersion: Int): Result<UploadResponse> {
+    suspend fun uploadFile(
+        localFile: File,
+        remotePath: String,
+        baseVersion: Int,
+        onProgress: (uploadedBytes: Long, totalBytes: Long) -> Unit = { _, _ -> }
+    ): Result<UploadResponse> {
+        // T-105：大文件走分块上传（断点续传 + 块级进度），小文件直传复用现有逻辑
+        if (localFile.length() >= CHUNKED_UPLOAD_THRESHOLD) {
+            return uploadChunked(localFile, remotePath, baseVersion, onProgress)
+        }
         return withContext(Dispatchers.IO) {
             try {
                 val mimeType = "application/octet-stream".toMediaTypeOrNull()!!
@@ -275,6 +299,101 @@ class FileRepository(private val settings: SettingsStore) {
                 val body = response.body()
                     ?: return@withContext Result.failure(Exception("空响应"))
                 Result.success(body)
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
+    /**
+     * 分块上传大文件（T-105）——编排对齐 C# ApiClient.UploadChunkedAsync：
+     * 1) 计算整文件 SHA-256 与总块数（块大小 4MB，对齐 spec config.chunkSize）；
+     * 2) 先查服务端进度做断点续传，已接收块跳过——崩溃/中断后重跑不整文件重传；
+     * 3) isComplete=true（服务端 Finalize 完成窗口：文件已落盘且内容一致）直接返回成功，避免整文件重传；
+     * 4) 逐块 POST /api/files/upload/chunk，最后一块服务端合并校验后返回 status="complete"（Finalize）。
+     * 服务端 409 = 版本冲突（Finalize 检测到其他设备已改目标文件），抛 FileConflictException 由 UI 决策。
+     */
+    private suspend fun uploadChunked(
+        localFile: File,
+        remotePath: String,
+        baseVersion: Int,
+        onProgress: (uploadedBytes: Long, totalBytes: Long) -> Unit
+    ): Result<UploadResponse> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val fileSize = localFile.length()
+                val fileHash = localFile.sha256Hex()
+                val totalChunks = ((fileSize + CHUNK_SIZE - 1) / CHUNK_SIZE).toInt()
+
+                // 断点续传：查询服务端已收块（fileHash 供服务端识别已完成会话）；查询失败则从头开始
+                var serverVersion = 0
+                var receivedChunks = mutableSetOf<Int>()
+                try {
+                    val statusResp = api().getChunkStatus(remotePath, fileHash)
+                    val data = statusResp.body()?.data
+                    if (statusResp.isSuccessful && data != null) {
+                        serverVersion = data.version
+                        receivedChunks = data.receivedChunks.toMutableSet()
+                        // 服务端识别出文件已落盘且内容一致 → 跳过全部块直接成功
+                        if (data.isComplete) {
+                            return@withContext Result.success(
+                                UploadResponse(UploadData(remotePath, data.version, fileHash, fileSize, false))
+                            )
+                        }
+                    }
+                } catch (_: Exception) {
+                    // 查询失败则从头开始（对齐 C# GetChunkStatusAsync 失败返回 null）
+                }
+
+                val mimeType = "application/octet-stream".toMediaTypeOrNull()!!
+                RandomAccessFile(localFile, "r").use { raf ->
+                    for (i in 0 until totalChunks) {
+                        if (i in receivedChunks) {
+                            continue
+                        }
+                        raf.seek(i * CHUNK_SIZE)
+                        val chunkSize = minOf(CHUNK_SIZE, fileSize - i * CHUNK_SIZE).toInt()
+                        val chunkBytes = ByteArray(chunkSize)
+                        raf.readFully(chunkBytes)
+
+                        val chunkPart = MultipartBody.Part.createFormData(
+                            "chunk", "chunk_$i", chunkBytes.toRequestBody(mimeType)
+                        )
+                        val response = api().uploadChunk(
+                            chunkPart,
+                            remotePath.toRequestBody(MultipartBody.FORM),
+                            i.toString().toRequestBody(MultipartBody.FORM),
+                            totalChunks.toString().toRequestBody(MultipartBody.FORM),
+                            fileHash.toRequestBody(MultipartBody.FORM),
+                            baseVersion.toString().toRequestBody(MultipartBody.FORM),
+                            Instant.ofEpochMilli(localFile.lastModified()).toString().toRequestBody(MultipartBody.FORM)
+                        )
+                        if (response.code() == 409) {
+                            throw FileConflictException("文件已被其他设备修改")
+                        }
+                        if (!response.isSuccessful) {
+                            throw Exception("上传失败: ${response.code()} ${response.message()}")
+                        }
+                        val chunkData = response.body()?.data
+                        // 块级进度（含已续传跳过的块，对齐 C# progress 语义）
+                        onProgress(minOf((i + 1) * CHUNK_SIZE, fileSize), fileSize)
+                        // 服务端合并校验完成（Finalize）后返回 status="complete"
+                        if (chunkData?.status == "complete") {
+                            return@withContext Result.success(
+                                UploadResponse(UploadData(
+                                    chunkData.path,
+                                    chunkData.version,
+                                    chunkData.hash ?: fileHash,
+                                    chunkData.size,
+                                    false
+                                ))
+                            )
+                        }
+                    }
+                }
+
+                // 兜底：所有块已上传/续传跳过但服务端未返回 complete（对齐 C# 兜底填服务端当前版本，避免快照版本置 0）
+                Result.success(UploadResponse(UploadData(remotePath, serverVersion, fileHash, fileSize, false)))
             } catch (e: Exception) {
                 Result.failure(e)
             }
@@ -313,6 +432,10 @@ class FileRepository(private val settings: SettingsStore) {
         return okhttp3.RequestBody.create(mediaType, this)
     }
 
+    private fun ByteArray.toRequestBody(mediaType: okhttp3.MediaType?): okhttp3.RequestBody {
+        return okhttp3.RequestBody.create(mediaType, this)
+    }
+
     private suspend fun <T> safeCall(block: suspend () -> T): Result<T> {
         return try {
             Result.success(block())
@@ -320,5 +443,24 @@ class FileRepository(private val settings: SettingsStore) {
             Log.e("CloudPan", "API 错误", e)
             Result.failure(e)
         }
+    }
+}
+
+/**
+ * 计算文件 SHA-256（十六进制小写）——分块上传整文件哈希（对齐 C# FileHasher，服务端 Finalize 校验）。
+ * 注：与 PhotoBackupWorker 的 File.sha256Hex 为同实现（跨包 private 不可复用，为避免越界改动保留两处）。
+ */
+private fun File.sha256Hex(): String {
+    val md = MessageDigest.getInstance("SHA-256")
+    inputStream().use { input ->
+        val buffer = ByteArray(8192)
+        while (true) {
+            val n = input.read(buffer)
+            if (n < 0) break
+            md.update(buffer, 0, n)
+        }
+    }
+    return md.digest().joinToString("") { byte ->
+        Integer.toHexString(byte.toInt() and 0xff).padStart(2, '0')
     }
 }

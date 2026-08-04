@@ -3,7 +3,7 @@
   "$id": "cloudpan-shared-spec",
   "title": "CloudPan 共享定义",
   "description": "所有枚举、实体、端点、字段名、错误码、配置值的唯一事实来源。所有代码和文档引用本文件，禁止各自重复定义。",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "date": "2026-08-04",
   "_changelog": [
     { "version": "1.0.0", "date": "2026-07-28", "changes": [
@@ -69,6 +69,9 @@
     ]},
     { "version": "1.9.0", "date": "2026-08-04", "changes": [
       "api.endpoints /api/thumbnails 补 clientMethod（kind=binary，path/width 查询参数，returns=byte[] 二进制响应）：C# GetThumbnailAsync 与 Kotlin getThumbnail 改由 CodeGen 生成，删除手工 partial IApiClient.Thumbnails.cs（T-097）"
+    ]},
+    { "version": "1.10.0", "date": "2026-08-04", "changes": [
+      "api.endpoints 分块上传两端补 clientMethod Kotlin 生成：POST /api/files/upload/chunk（kind=multipart，补 chunk/chunkIndex/totalChunks/fileHash 参数，kotlinName=uploadChunk，新参数 csharp=false 保持 C# 接口签名不变）与 GET /api/files/upload/chunk/status（kotlinName=getChunkStatus）；C# 侧仍标 manual 保留手工实现（T-105）"
     ]}
   ],
 
@@ -554,18 +557,22 @@
         ] },
       { "method": "POST", "path": "/api/files/upload/chunk", "auth": "token", "description": "分块上传",
         "clientMethod": [
-          { "name": "UploadChunkedAsync", "kind": "manual", "manual": "csharp", "kotlin": false, "progress": true,
+          { "name": "UploadChunkedAsync", "kotlinName": "uploadChunk", "kind": "multipart", "manual": "csharp", "kotlin": true, "progress": true,
             "response": "UploadResponse", "nullable": true,
             "params": [
               { "name": "localPath", "in": "local", "type": "string" },
-              { "name": "remotePath", "in": "part", "wireName": "path", "type": "string" },
-              { "name": "baseVersion", "in": "part", "wireName": "baseVersion", "type": "int" },
-              { "name": "lastModified", "in": "part", "wireName": "lastModified", "type": "string" }
+              { "name": "chunk", "in": "file", "wireName": "chunk", "type": "string", "kotlinType": "MultipartBody.Part", "csharp": false },
+              { "name": "remotePath", "kotlinName": "path", "in": "part", "wireName": "path", "type": "string", "kotlinType": "RequestBody" },
+              { "name": "chunkIndex", "in": "part", "wireName": "chunkIndex", "type": "int", "kotlinType": "RequestBody", "csharp": false },
+              { "name": "totalChunks", "in": "part", "wireName": "totalChunks", "type": "int", "kotlinType": "RequestBody", "csharp": false },
+              { "name": "fileHash", "in": "part", "wireName": "fileHash", "type": "string", "kotlinType": "RequestBody", "csharp": false },
+              { "name": "baseVersion", "in": "part", "wireName": "baseVersion", "type": "int", "kotlinType": "RequestBody" },
+              { "name": "lastModified", "in": "part", "wireName": "lastModified", "type": "string", "kotlinType": "RequestBody" }
             ] }
         ] },
       { "method": "GET", "path": "/api/files/upload/chunk/status", "auth": "token", "description": "查询分块上传进度",
         "clientMethod": [
-          { "name": "GetChunkStatusAsync", "kind": "manual", "manual": "csharp", "kotlin": false,
+          { "name": "GetChunkStatusAsync", "kotlinName": "getChunkStatus", "kind": "manual", "manual": "csharp", "kotlin": true,
             "response": "ChunkStatusResponse", "nullable": true,
             "params": [
               { "name": "path", "in": "query", "wireName": "path", "type": "string" },

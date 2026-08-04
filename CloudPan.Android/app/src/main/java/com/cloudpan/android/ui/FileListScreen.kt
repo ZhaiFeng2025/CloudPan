@@ -865,11 +865,22 @@ fun FileListScreen(
                     onClick = { if (!isUploading) onPickFileForUpload() }
                 ) {
                     if (isUploading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+                        // T-105：大文件分块上传显示确定进度百分比；小文件直传保持不确定进度
+                        val uploadProgress = (uploadState as? UploadUiState.Uploading)?.progress
+                        if (uploadProgress != null) {
+                            CircularProgressIndicator(
+                                progress = uploadProgress,
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        } else {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
                     } else {
                         Icon(Icons.Default.Add, "上传文件")
                     }

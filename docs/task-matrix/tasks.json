@@ -5219,7 +5219,7 @@
       "title": "Android 大文件分块上传（>50MB 走 /api/files/upload/chunk，对齐 C#）",
       "dimension": "function",
       "priority": "P2",
-      "status": "todo",
+      "status": "in-progress",
       "batch": 9,
       "findingId": "F-147",
       "dependsOn": [],
@@ -5250,8 +5250,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "延续批次 8 承诺（Android 分块上传进批次 9）；环境无 Android SDK 时以语法审查 + 手动项覆盖，与 T-089/T-091 同先例。",
-      "updatedAt": null
+      "note": "背景：延续批次 8 承诺（Android 分块上传进批次 9）；环境无 Android SDK 时以语法审查 + 手动项覆盖，与 T-089/T-091 同先例。\n执行：shared-spec.json 1.9.0→1.10.0——分块端点补 clientMethod Kotlin 生成（POST upload/chunk kind=multipart 补 chunk/chunkIndex/totalChunks/fileHash 参数 kotlinName=uploadChunk，新参数 csharp=false 保 C# 接口签名不变；GET status kotlinName=getChunkStatus）；重跑 CodeGen（--verify 全绿）。FileRepository.kt 增 uploadChunked（SHA-256+状态查询续传+逐块上传+409 冲突+块级进度），文件≥10MB 走分块；PhotoBackupWorker 大照片走分块；MainActivity/FileListScreen FAB 显示确定进度。\n验证：dotnet build CloudPan.sln 0 错 0 警；CodeGen --verify 全绿（版本治理 11 条单调递增）；AC1 grep 'upload/chunk|finalize' data 目录有匹配；gradle 环境无 Android SDK（local.properties 指向目录不存在），AC3 以语法审查覆盖（T-089/T-091 先例）。",
+      "updatedAt": "2026-08-04"
     },
     {
       "id": "T-106",

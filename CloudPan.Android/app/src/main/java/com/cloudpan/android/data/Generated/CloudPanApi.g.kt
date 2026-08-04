@@ -1,5 +1,5 @@
 // AUTO-GENERATED from shared-spec.json
-// 版本: 1.9.0  日期: 2026-08-04
+// 版本: 1.10.0  日期: 2026-08-04
 // 源: shared-spec.json → api.endpoints[].clientMethod（Retrofit interface，与 C# ClientApi.g.cs 同源）
 // 请勿手工编辑 — 重新生成: dotnet run --project CloudPan.CodeGen
 
@@ -64,6 +64,19 @@ interface CloudPanApi {
      */
     @POST(SpecRoutes.FilesMkdir)
     suspend fun createFolder(@Body request: MkdirRequestDto): Response<MkdirResponse>
+
+    /**
+     * 分块上传（POST /api/files/upload/chunk）
+     */
+    @Multipart
+    @POST(SpecRoutes.FilesUploadChunk)
+    suspend fun uploadChunk(@Part chunk: MultipartBody.Part, @Part("path") path: RequestBody, @Part("chunkIndex") chunkIndex: RequestBody, @Part("totalChunks") totalChunks: RequestBody, @Part("fileHash") fileHash: RequestBody, @Part("baseVersion") baseVersion: RequestBody, @Part("lastModified") lastModified: RequestBody): Response<UploadResponse>
+
+    /**
+     * 查询分块上传进度（GET /api/files/upload/chunk/status）
+     */
+    @GET(SpecRoutes.FilesUploadChunkStatus)
+    suspend fun getChunkStatus(@Query("path") path: String, @Query("fileHash") fileHash: String? = null): Response<ChunkStatusResponse>
 
     /**
      * 文件名搜索（GET /api/files/search）

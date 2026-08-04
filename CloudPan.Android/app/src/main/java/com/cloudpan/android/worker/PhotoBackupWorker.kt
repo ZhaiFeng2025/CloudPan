@@ -22,6 +22,7 @@ import com.cloudpan.android.data.BackupLogEntity
 import com.cloudpan.android.data.BackupStatus
 import com.cloudpan.android.data.CloudPanApi
 import com.cloudpan.android.data.FileConflictException
+import com.cloudpan.android.data.FileRepository
 import com.cloudpan.android.data.SettingsStore
 import com.cloudpan.android.data.toUserMessage
 import kotlinx.coroutines.Dispatchers
@@ -100,6 +101,8 @@ class PhotoBackupWorker(
             setForeground(ForegroundInfo(notificationId, notification))
 
             val api = ApiClientFactory.create(settings.serverUrl, token, settings.deviceId)
+            // T-105：大文件分块上传复用 FileRepository（与手动上传同路径）
+            val repository = FileRepository(settings)
             val backupLogDao = AppDatabase.getInstance(applicationContext).backupLogDao()
 
             // 1. 获取上次备份游标（只推进到连续成功段末尾）
@@ -173,6 +176,7 @@ class PhotoBackupWorker(
                     try {
                         when (backupPhoto(
                             api = api,
+                            repository = repository,
                             dao = backupLogDao,
                             file = file,
                             contentUri = contentUri,
@@ -264,6 +268,7 @@ class PhotoBackupWorker(
      */
     private suspend fun backupPhoto(
         api: CloudPanApi,
+        repository: FileRepository,
         dao: BackupLogDao,
         file: File,
         contentUri: String,
@@ -322,7 +327,7 @@ class PhotoBackupWorker(
                 fileHash = fileHash,
                 fileSize = fileSize
             ))
-            uploadPhoto(api, file, remotePath, mimeType, folderVersionCache)
+            uploadPhoto(api, repository, file, remotePath, mimeType, folderVersionCache)
             // → Done（成功即清零重试计数，避免照片内容变更后再次上传被旧计数误判 Blocked）
             dao.upsert(record.copy(
                 status = BackupStatus.Done.value,
@@ -364,6 +369,7 @@ class PhotoBackupWorker(
 
     private suspend fun uploadPhoto(
         api: CloudPanApi,
+        repository: FileRepository,
         file: File,
         remotePath: String,
         mimeType: String,
@@ -371,6 +377,14 @@ class PhotoBackupWorker(
     ) {
         // T-089：上传携带目标远程路径当前版本（先查询），不再恒传 0，触发服务端 409 并发保护
         val baseVersion = resolveRemoteVersion(api, remotePath, folderVersionCache)
+
+        // T-105：大文件（≥ 分块阈值 10MB，对齐 spec config.chunkedUploadThreshold）走分块上传路径，
+        // 规避直传 50MB 413 静默失败；409 冲突经 FileConflictException 进入失败重试/Blocked（通知用户手动处理）
+        if (file.length() >= FileRepository.CHUNKED_UPLOAD_THRESHOLD) {
+            repository.uploadFile(file, remotePath, baseVersion).getOrThrow()
+            return
+        }
+
         val mediaType = mimeType.toMediaTypeOrNull() ?: "image/jpeg".toMediaTypeOrNull()!!
         val requestBody = file.asRequestBody(mediaType)
         val filePart = MultipartBody.Part.createFormData("file", file.name, requestBody)

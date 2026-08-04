@@ -32,7 +32,8 @@ private data class UploadConflict(val localFile: File, val remotePath: String)
  * 由 MainActivity 上传流程驱动，FileListScreen 据此显示 FAB 进度指示与结果 Snackbar。
  */
 sealed interface UploadUiState {
-    data class Uploading(val fileName: String) : UploadUiState
+    /** T-105：progress 为分块上传进度百分比（0f-1f），null=不确定进度（小文件直传无块级进度回调）。 */
+    data class Uploading(val fileName: String, val progress: Float? = null) : UploadUiState
     data class Success(val fileName: String) : UploadUiState
     data class Failed(val fileName: String, val message: String) : UploadUiState
 }
@@ -102,7 +103,13 @@ class MainActivity : ComponentActivity() {
                                 }
                                 // T-089：先查目标文件当前版本作为 baseVersion，触发服务端 409 并发保护
                                 val baseVersion = repository.resolveBaseVersion(remotePath)
-                                val result = repository.uploadFile(tmpFile, remotePath, baseVersion)
+                                // T-105：大文件分块上传进度反馈（块级回调）；scope.launch 切回主线程更新 Compose 状态
+                                val result = repository.uploadFile(tmpFile, remotePath, baseVersion) { uploaded, total ->
+                                    if (total > 0) {
+                                        val p = uploaded.toFloat() / total.toFloat()
+                                        scope.launch { uploadState = UploadUiState.Uploading(fileName, p) }
+                                    }
+                                }
                                 when {
                                     // T-089：文件已被其他设备修改，弹窗让用户决定覆盖或跳过，不静默
                                     result.exceptionOrNull() is FileConflictException ->
