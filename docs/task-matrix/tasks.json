@@ -4711,7 +4711,7 @@
       "title": "SettingsForm 归因双份清理（删 ClassifyTestError/Flatten/GetFolderSize 死代码）",
       "dimension": "simplicity",
       "priority": "P2",
-      "status": "todo",
+      "status": "acceptance",
       "batch": 8,
       "findingId": "F-137",
       "dependsOn": [],
@@ -4741,7 +4741,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": null,
+      "note": "执行：ErrorAttribution 新增 ErrorAttributionScenario（Sync 默认/TestConnection），FromException/Classify 增加场景参数，测试连接场景复用连接类文案（NotFound→服务端地址不正确、无状态码→无法连接到服务端、超时→连接超时、兜底→连接失败）；AccountTab 删除 ClassifyTestError/Flatten/[Obsolete]GetFolderSize 及冗余 using System.Net，catch 改调 ErrorAttribution.FromException(ex, ErrorAttributionScenario.TestConnection)。\n验证：AC1 grep 无匹配、AC2 grep 命中 AccountTab.cs:274、dotnet test 343/343 通过、dotnet build -c Release 0警告0错误。",
       "updatedAt": "2026-08-04"
     },
     {

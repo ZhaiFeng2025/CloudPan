@@ -2,6 +2,16 @@ using System.Net;
 
 namespace CloudPan.Client.Core.Services;
 
+/// <summary>归因场景：决定白话文案侧重（同步 / 设置页测试连接）。</summary>
+public enum ErrorAttributionScenario
+{
+    /// <summary>同步过程归因（默认）。</summary>
+    Sync,
+
+    /// <summary>设置页『测试连接』归因：地址/网络类文案更贴合连接测试语境。</summary>
+    TestConnection,
+}
+
 /// <summary>
 /// 同步错误的白话归因——把底层异常（HttpRequestException/AggregateException 等）映射为
 /// 家庭用户可读的『原因 + 下一步』，避免错误弹窗透出英文异常栈（F-31）。
@@ -31,14 +41,16 @@ public sealed class ErrorAttribution
     /// 从异常生成白话归因：递归解包 AggregateException 的全部内层异常（CLAUDE.md 7.3，
     /// 不只处理第一个），逐条归类后取最具体的一条（优先级最高者）。
     /// </summary>
-    public static ErrorAttribution FromException(Exception exception)
+    public static ErrorAttribution FromException(Exception exception, ErrorAttributionScenario scenario = ErrorAttributionScenario.Sync)
     {
-        ErrorAttribution best = new("同步失败（未知错误）", "请重试；若持续失败，可在日志中查看详细原因");
+        ErrorAttribution best = scenario == ErrorAttributionScenario.TestConnection
+            ? new ErrorAttribution("连接失败", "请检查地址与网络后重试")
+            : new ErrorAttribution("同步失败（未知错误）", "请重试；若持续失败，可在日志中查看详细原因");
         int bestPriority = -1;
 
         foreach (Exception leaf in Flatten(exception))
         {
-            (int priority, ErrorAttribution attribution) = Classify(leaf);
+            (int priority, ErrorAttribution attribution) = Classify(leaf, scenario);
             if (priority > bestPriority)
             {
                 bestPriority = priority;
@@ -72,8 +84,9 @@ public sealed class ErrorAttribution
     /// 按异常类型归类。返回（优先级, 归因）；优先级越高表示归因越具体，
     /// 多内层异常并存时取最具体的一条。
     /// </summary>
-    private static (int Priority, ErrorAttribution Attribution) Classify(Exception exception)
+    private static (int Priority, ErrorAttribution Attribution) Classify(Exception exception, ErrorAttributionScenario scenario)
     {
+        bool isTestConnection = scenario == ErrorAttributionScenario.TestConnection;
         switch (exception)
         {
             case HttpRequestException http when http.StatusCode == HttpStatusCode.Unauthorized:
@@ -83,15 +96,23 @@ public sealed class ErrorAttribution
             case IOException io when IsDiskFull(io):
                 return (80, new ErrorAttribution("磁盘空间不足，无法完成同步", "请清理磁盘空间后重试"));
             case HttpRequestException http when http.StatusCode == HttpStatusCode.NotFound:
-                return (75, new ErrorAttribution("找不到该文件或文件夹", "文件可能已在其他设备上被删除，请刷新后再试"));
+                return isTestConnection
+                    ? (75, new ErrorAttribution("服务端地址不正确", "请检查地址是否完整，例如 http://192.168.1.100:8443"))
+                    : (75, new ErrorAttribution("找不到该文件或文件夹", "文件可能已在其他设备上被删除，请刷新后再试"));
             case HttpRequestException http when http.StatusCode is null:
-                return (70, new ErrorAttribution("无法连接到云盘服务", "请检查台式机是否已开机、云盘服务是否正在运行"));
+                return isTestConnection
+                    ? (70, new ErrorAttribution("无法连接到服务端", "请确认台式机已开机、云盘服务正在运行"))
+                    : (70, new ErrorAttribution("无法连接到云盘服务", "请检查台式机是否已开机、云盘服务是否正在运行"));
             case HttpRequestException http:
                 return (60, new ErrorAttribution($"云盘服务返回错误（HTTP {(int)http.StatusCode.GetValueOrDefault()}）", "请稍后重试"));
             case TaskCanceledException:
-                return (50, new ErrorAttribution("同步请求超时", "请稍后重试，或检查网络连接"));
+                return isTestConnection
+                    ? (50, new ErrorAttribution("连接超时", "请检查网络，或确认地址与端口是否正确"))
+                    : (50, new ErrorAttribution("同步请求超时", "请稍后重试，或检查网络连接"));
             default:
-                return (0, new ErrorAttribution("同步失败（未知错误）", "请重试；若持续失败，可在日志中查看详细原因"));
+                return (0, isTestConnection
+                    ? new ErrorAttribution("连接失败", "请检查地址与网络后重试")
+                    : new ErrorAttribution("同步失败（未知错误）", "请重试；若持续失败，可在日志中查看详细原因"));
         }
     }
 

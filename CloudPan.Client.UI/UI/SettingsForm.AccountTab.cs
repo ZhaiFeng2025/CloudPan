@@ -1,4 +1,3 @@
-using System.Net;
 using CloudPan.Client.Core.Services;
 using CloudPan.Infrastructure.Design;
 
@@ -272,53 +271,16 @@ public partial class SettingsForm
         }
         catch (Exception ex)
         {
-            (string reason, string nextStep) = ClassifyTestError(ex);
+            ErrorAttribution attribution = ErrorAttribution.FromException(ex, ErrorAttributionScenario.TestConnection);
             _connResultIcon.Text = "✗";
             _connResultIcon.ForeColor = CloudPanColors.ErrorRed;
-            _connResultText.Text = nextStep.Length == 0 ? reason : $"{reason}（{nextStep}）";
+            _connResultText.Text = string.IsNullOrEmpty(attribution.NextStep) ? attribution.Message : $"{attribution.Message}（{attribution.NextStep}）";
             _connResultText.ForeColor = CloudPanColors.ErrorRed;
         }
         finally
         {
             _testConnBtn.Enabled = true;
             _testConnBtn.Text = "测试连接";
-        }
-    }
-
-    /// <summary>测试连接失败白话归因（ErrorAttribution 风格）：不透出裸状态码与底层异常原文。</summary>
-    private static (string Reason, string NextStep) ClassifyTestError(Exception exception)
-    {
-        foreach (Exception leaf in Flatten(exception))
-        {
-            switch (leaf)
-            {
-                case HttpRequestException http when http.StatusCode == HttpStatusCode.NotFound:
-                    return ("服务端地址不正确", "请检查地址是否完整，例如 http://192.168.1.100:8443");
-                case HttpRequestException http when http.StatusCode is null:
-                    return ("无法连接到服务端", "请确认台式机已开机、云盘服务正在运行");
-                case TaskCanceledException:
-                    return ("连接超时", "请检查网络，或确认地址与端口是否正确");
-            }
-        }
-        return ("连接失败", "请检查地址与网络后重试");
-    }
-
-    /// <summary>递归解包 AggregateException 全部内层异常（CLAUDE.md 7.3，与 ErrorAttribution.Flatten 同语义）。</summary>
-    private static IEnumerable<Exception> Flatten(Exception exception)
-    {
-        if (exception is AggregateException aggregate)
-        {
-            foreach (Exception inner in aggregate.Flatten().InnerExceptions)
-            {
-                foreach (Exception leaf in Flatten(inner))
-                {
-                    yield return leaf;
-                }
-            }
-        }
-        else
-        {
-            yield return exception;
         }
     }
 
@@ -378,23 +340,4 @@ public partial class SettingsForm
         _storageSizeLabel.Text = $"占用: {usedText}";
     }
 
-    /// <summary>旧的同步 GetFolderSize（已弃用，保留兼容）。</summary>
-    [Obsolete("请使用异步版本 GetFolderSizeAsync")]
-    private static long GetFolderSize(string path)
-    {
-        try
-        {
-            long size = 0;
-            foreach (string f in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
-            {
-                try { size += new FileInfo(f).Length; } catch { }
-                if (size > 1_000_000_000_000)
-                {
-                    break;
-                }
-            }
-            return size;
-        }
-        catch { return 0; }
-    }
 }
