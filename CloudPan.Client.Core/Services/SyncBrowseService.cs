@@ -35,7 +35,6 @@ internal sealed partial class SyncBrowseService : IDisposable
     private readonly IClientStoreFactory _storeFactory;
     private readonly ILogger<SyncEngine> _logger;
     private readonly string _syncRoot;
-    private readonly List<Regex> _ignorePatterns;
 
     public SyncBrowseService(
         IApiClient api,
@@ -48,7 +47,6 @@ internal sealed partial class SyncBrowseService : IDisposable
         _storeFactory = storeFactory;
         _logger = logger;
         _syncRoot = syncRoot;
-        _ignorePatterns = ignorePatterns;
         _localIndex = new BrowseLocalIndex(syncRoot, logger, ignorePatterns);
         _localIndex.Changed += OnLocalIndexChanged;
     }
