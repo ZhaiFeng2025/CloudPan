@@ -1,7 +1,7 @@
 # CloudPan 任务矩阵 — 状态板
 
 > 契约: docs/task-matrix/tasks.json（schemaVersion=2）｜ 更新: 2026-08-04
-> 统计: 96 任务 = 91 done / 5 待人工确认 / 0 todo
+> 统计: 108 任务 = 105 done / 3 待人工确认 / 0 todo
 
 | ID | 标题 | 维度 | 优先级 | 状态 | 批次 |
 |---|---|---|---|---|---|
@@ -91,13 +91,13 @@
 | T-084 | 删除 409 冲突处理（转冲突提示而非静默丢弃） | 功能 | P3 | 已完成 | 7 |
 | T-085 | 客户端路径安全统一防线（SyncPath 越界校验下沉单点） | 架构 | P1 | 已完成 | 8 |
 | T-086 | 客户端 HTTP 接口签名契约化（C# IApiClient 与 Kot | 架构 | P1 | 已完成 | 8 |
-| T-087 | 缩略图死功能收敛：Windows 网格视图接入 /api/thumbna | 功能 | P1 | 待确认 | 8 |
+| T-087 | 缩略图死功能收敛：Windows 网格视图接入 /api/thumbna | 功能 | P1 | 已完成 | 8 |
 | T-088 | 版本存档与缩略图缓存存储回收（BackgroundHostedServi | 功能 | P2 | 已完成 | 8 |
-| T-089 | Android 删除/上传携带 baseVersion 触发服务端 40 | 功能 | P2 | 待确认 | 8 |
+| T-089 | Android 删除/上传携带 baseVersion 触发服务端 40 | 功能 | P2 | 已完成 | 8 |
 | T-090 | Storage 路径校验内建（GetAbsolutePath 强制校验  | 架构 | P2 | 已完成 | 8 |
-| T-091 | Android 错误白话归因 + 手动上传崩溃防护与进度反馈 | UX | P2 | 待确认 | 8 |
-| T-092 | Windows 批量删除增加确认对话框（对齐 Android） | UX | P2 | 待确认 | 8 |
+| T-091 | Android 错误白话归因 + 手动上传崩溃防护与进度反馈 | UX | P2 | 已完成 | 8 |
+| T-092 | Windows 批量删除增加确认对话框（对齐 Android） | UX | P2 | 已完成 | 8 |
 | T-093 | Client.Core 持久化抽象（Repository/Store 消 | 架构 | P2 | 已完成 | 8 |
-| T-094 | 回收站恢复失败白话反馈 + 覆盖/改名选项（两端对齐） | UX | P2 | 待确认 | 8 |
+| T-094 | 回收站恢复失败白话反馈 + 覆盖/改名选项（两端对齐） | UX | P2 | 已完成 | 8 |
 | T-095 | SettingsForm 归因双份清理（删 ClassifyTestEr | 技术简洁 | P2 | 已完成 | 8 |
 | T-096 | Serilog 装配单源化 + CentralPackageVersio | 技术简洁 | P2 | 已完成 | 8 |
