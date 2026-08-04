@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 
 namespace CloudPan.Client.Core.Services;
 
-/// <summary>SyncEngine 部分实现：全量扫描本地文件（FileSystemWatcher 兜底通道）与路径/选择工具。</summary>
+/// <summary>SyncEngine 部分实现：全量扫描本地文件（FileSystemWatcher 兜底通道）与路径工具（T-099 起排除集/忽略规则判定移至 SyncPathSelector）。</summary>
 public partial class SyncEngine
 {
     // ============================================================
@@ -53,12 +53,12 @@ public partial class SyncEngine
         {
             foreach (string fullPath in Directory.EnumerateFileSystemEntries(NormalizePath(_syncRoot), "*", SearchOption.AllDirectories))
             {
-                if (ShouldIgnoreScan(fullPath))
+                if (_paths.ShouldIgnoreScan(fullPath))
                 {
                     continue;
                 }
 
-                string rel = ToRelativePath(fullPath);
+                string rel = SyncPath.ToRelativePath(_syncRoot, fullPath);
                 if (Directory.Exists(fullPath))
                 {
                     localDirs.Add(rel);
@@ -105,7 +105,7 @@ public partial class SyncEngine
                 {
                     // T-054：重新勾选已排除目录——IsPathSelected 转 true 的 CloudOnly 快照恢复同步，
                     // 否则保持排除态（跳过并记录供第 3 步跳过本地残留副本）
-                    if (IsPathSelected(snapshot.Path))
+                    if (_paths.IsPathSelected(snapshot.Path))
                     {
                         if (!localFiles.Contains(snapshot.Path))
                         {
@@ -138,7 +138,7 @@ public partial class SyncEngine
                     // T-066：目录重命名未决窗口——本地缺失可能只是重命名（本地已改名、Move 未处理），
                     // 该路径处于未决重命名旧前缀 → 不入队 Delete（服务端已/将移动），
                     // 消除旧路径 404 删除噪音与 Delete 先于 Move 到达的回收站误删竞态。
-                    if (pendingRenameOldPaths.Count > 0 && IsUnderAnyPrefix(snapshot.Path, pendingRenameOldPaths))
+                    if (pendingRenameOldPaths.Count > 0 && SyncPathSelector.IsUnderAnyPrefix(snapshot.Path, pendingRenameOldPaths))
                     {
                         _logger.LogDebug("路径处于未决重命名旧前缀，跳过删除判定: {Path}", snapshot.Path);
                         continue;
@@ -211,7 +211,7 @@ public partial class SyncEngine
 
             // T-066：目录重命名未决窗口——本地新路径文件可能是未决重命名的目标（快照将随 Move 收敛），
             // 不得作为新文件判为 create 上传，否则 rename 被误判为 delete+create，整棵子树重复上传。
-            if (pendingRenameNewPaths.Count > 0 && IsUnderAnyPrefix(path, pendingRenameNewPaths))
+            if (pendingRenameNewPaths.Count > 0 && SyncPathSelector.IsUnderAnyPrefix(path, pendingRenameNewPaths))
             {
                 _logger.LogDebug("路径处于未决重命名新前缀，跳过新文件上传: {Path}", path);
                 continue;
@@ -225,7 +225,7 @@ public partial class SyncEngine
             }
 
             // T-054：排除集覆盖上传方向——排除子树内新建的本地文件（无快照）不入队上传
-            if (!IsPathSelected(path))
+            if (!_paths.IsPathSelected(path))
             {
                 _logger.LogDebug("路径在排除子树内，跳过新文件上传: {Path}", path);
                 continue;
@@ -244,14 +244,14 @@ public partial class SyncEngine
             }
 
             // T-066：目录重命名未决窗口——新前缀本地目录同理跳过 mkdir（rename 目标目录随 Move 建立）
-            if (pendingRenameNewPaths.Count > 0 && IsUnderAnyPrefix(path, pendingRenameNewPaths))
+            if (pendingRenameNewPaths.Count > 0 && SyncPathSelector.IsUnderAnyPrefix(path, pendingRenameNewPaths))
             {
                 _logger.LogDebug("路径处于未决重命名新前缀，跳过目录同步: {Path}", path);
                 continue;
             }
 
             // T-054：排除子树内新建的本地目录（无快照）不入队 mkdir
-            if (!IsPathSelected(path))
+            if (!_paths.IsPathSelected(path))
             {
                 _logger.LogDebug("路径在排除子树内，跳过目录同步: {Path}", path);
                 continue;
@@ -272,21 +272,6 @@ public partial class SyncEngine
         }
     }
 
-    private string ToRelativePath(string fullPath)
-    {
-        // 去除 \\?\ 前缀（如有），确保与 _syncRoot 格式一致
-        string cleanFull = fullPath.StartsWith(@"\\?\") ? fullPath[4..] : fullPath;
-        string cleanRoot = _syncRoot.StartsWith(@"\\?\") ? _syncRoot[4..] : _syncRoot;
-        string relative = Path.GetRelativePath(cleanRoot, cleanFull);
-        return "/" + relative.Replace('\\', '/');
-    }
-
-    private bool ShouldIgnoreScan(string fullPath)
-    {
-        string relativePath = ToRelativePath(fullPath);
-        return SyncIgnoreParser.ShouldIgnore(relativePath, _ignorePatterns);
-    }
-
     private string ToLocalPath(string relativePath)
         => SyncPath.ToLocalPath(_syncRoot, relativePath);
 
@@ -295,57 +280,4 @@ public partial class SyncEngine
     /// </summary>
     private static string NormalizePath(string path)
         => SyncPath.NormalizePath(path);
-
-    /// <summary>检查路径是否在已选择的同步范围内（排除集语义，T-047）。</summary>
-    /// <remarks>
-    /// SelectedPaths 语义（v2 排除集）：
-    /// - 空集合 → 显式全不同步（取消全选后不回退为 { "/" } 全选）。
-    /// - 含 "/"（全选默认值，含 v1.0.0 旧版选择集恒含根节点）→ 全选，不排除任何路径。
-    /// - 其余 → 排除子树列表：命中任一排除子树（含深层路径）→ 不同步。
-    /// </remarks>
-    private bool IsPathSelected(string path)
-    {
-        // 局部快照：读取一次引用，单次调用内语义一致（热更新替换引用不影响本次判断，T-063）
-        List<string> selectedPaths = _selectedPaths;
-
-        // 空集合 = 显式全不同步（不再回退为 { "/" } 全选）
-        if (selectedPaths.Count == 0)
-        {
-            return false;
-        }
-
-        // 含 "/"（全选默认值 / v1.0.0 旧版选择集恒含根节点）→ 全选
-        if (selectedPaths.Contains("/"))
-        {
-            return true;
-        }
-
-        // 排除集：命中任一排除子树 → 不同步
-        string normalized = path.TrimEnd('/') + "/";
-        bool excluded = selectedPaths.Any(sp =>
-        {
-            string p = sp.TrimEnd('/') + "/";
-            return normalized.StartsWith(p, StringComparison.OrdinalIgnoreCase)
-                   || path.Equals(sp.TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
-        });
-        return !excluded;
-    }
-
-    /// <summary>
-    /// T-066：判断路径是否位于任一前缀（未决重命名的旧前缀/新前缀）覆盖的子树内。
-    /// 前缀归一化为目录边界（"/photos" → "/photos/"），避免误伤相似路径（"/photosx"）。
-    /// </summary>
-    private static bool IsUnderAnyPrefix(string path, IReadOnlyList<string> prefixes)
-    {
-        string normalized = path.TrimEnd('/') + "/";
-        foreach (string prefix in prefixes)
-        {
-            string p = prefix.TrimEnd('/') + "/";
-            if (normalized.StartsWith(p, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-        return false;
-    }
 }

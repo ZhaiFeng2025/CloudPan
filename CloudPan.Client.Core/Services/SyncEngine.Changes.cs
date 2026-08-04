@@ -55,7 +55,7 @@ public partial class SyncEngine
         string localPath = ToLocalPath(path);
         if (File.Exists(localPath))
         {
-            SafeDelete(localPath);
+            SyncPath.SafeDelete(localPath, _logger);
         }
 
         var snapshot = await store.GetSnapshotAsync(path);
@@ -93,15 +93,15 @@ public partial class SyncEngine
     public async Task EnqueueRenameAsync(string oldPath, string newPath)
     {
         // 忽略规则匹配的路径（内置 *.tmp 等）：原子写入的 tmp→目标 重命名不应同步
-        if (SyncIgnoreParser.ShouldIgnore(oldPath, _ignorePatterns)
-            || SyncIgnoreParser.ShouldIgnore(newPath, _ignorePatterns))
+        if (_paths.ShouldIgnore(oldPath)
+            || _paths.ShouldIgnore(newPath))
         {
             _logger.LogDebug("忽略匹配忽略规则的重命名: {Old} → {New}", oldPath, newPath);
             return;
         }
 
         // T-054：排除集覆盖上传方向——重命名属上传方向变更，排除子树内不对外发布（服务端条目保留原路径）
-        if (!IsPathSelected(oldPath) || !IsPathSelected(newPath))
+        if (!_paths.IsPathSelected(oldPath) || !_paths.IsPathSelected(newPath))
         {
             _logger.LogDebug("路径在排除子树内，跳过重命名入队: {Old} → {New}", oldPath, newPath);
             return;
@@ -127,7 +127,7 @@ public partial class SyncEngine
     public async Task EnqueueLocalChangeAsync(string relativePath, SyncOperation operation)
     {
         // 忽略规则匹配的路径（内置 *.tmp 等 + 用户 .syncignore）：原子写入的临时文件不应同步上传
-        if (SyncIgnoreParser.ShouldIgnore(relativePath, _ignorePatterns))
+        if (_paths.ShouldIgnore(relativePath))
         {
             _logger.LogDebug("忽略匹配忽略规则的变更: {Path}", relativePath);
             return;
@@ -136,7 +136,7 @@ public partial class SyncEngine
         // T-054：排除集覆盖上传方向——排除子树内的本地变更（上传/删除）不入队，
         // 隐私文件不外传，本地副本保留（CloudOnly 残留副本由 FullScan 跳过不重传）。
         // 删除同样拦截：排除目录内删除本地残留副本不得删服务端副本，重新勾选后可再下载恢复。
-        if (!IsPathSelected(relativePath))
+        if (!_paths.IsPathSelected(relativePath))
         {
             _logger.LogDebug("路径在排除子树内，跳过入队: {Op} {Path}", operation, relativePath);
             return;

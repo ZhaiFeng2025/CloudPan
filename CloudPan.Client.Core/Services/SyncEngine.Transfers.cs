@@ -307,7 +307,7 @@ public partial class SyncEngine
         string localPath = ToLocalPath(item.FilePath);
         if (File.Exists(localPath))
         {
-            SafeDelete(localPath);
+            SyncPath.SafeDelete(localPath, _logger);
             _logger.LogInformation($"本地删除: {item.FilePath}");
         }
 

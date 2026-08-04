@@ -173,22 +173,5 @@ public partial class SyncEngine
         return SpecConfig.RetryBackoffMs[index];
     }
 
-    private void SafeDelete(string path)
-    {
-        try { File.Delete(NormalizePath(path)); } catch (Exception ex) { _logger.LogWarning(ex, "删除文件失败: {Path}", path); }
-    }
-
-    /// <summary>递归删除本地目录（T-049：目录墓碑清理），尽力而为不抛异常。</summary>
-    private void SafeDeleteDirectory(string path)
-    {
-        try
-        {
-            string normalized = NormalizePath(path);
-            if (Directory.Exists(normalized))
-            {
-                Directory.Delete(normalized, recursive: true);
-            }
-        }
-        catch (Exception ex) { _logger.LogWarning(ex, "删除目录失败: {Path}", path); }
-    }
+    // 本地文件删除工具（SafeDelete/SafeDeleteDirectory）T-099 起由 SyncPath.SafeDelete 与 SyncRemoteApplier 承担
 }

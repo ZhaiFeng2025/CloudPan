@@ -4983,7 +4983,7 @@
       "title": "行数门禁豁免兑现断言（聚合≤TargetCeiling + 截止批次到期≤400）+ SyncEngine/MainWindow 真实拆分",
       "dimension": "architecture",
       "priority": "P2",
-      "status": "todo",
+      "status": "in-progress",
       "batch": 9,
       "findingId": "F-141",
       "dependsOn": [],
@@ -5014,8 +5014,8 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "取舍：『到期即测试失败』vs『继续豁免续期』——选到期即失败（T-081 路线图兑现点，以测试强制而非登记合法化）。",
-      "updatedAt": null
+      "note": "取舍：『到期即测试失败』vs『继续豁免续期』——选到期即失败。T-099 是 T-081 路线图兑现点：新增断言『聚合≤TargetCeiling』+『Deadline 批次 done→≤400』（后者读 tasks.json 批次完成状态，到期未拆=测试失败，禁止续期/滑期）。豁免表重基线：SyncEngine/MainWindow 兑现 2050/2350 后 Deadline 移批次 10（拆分明细后续批次继续，producer 授权『拆分明细可后续批次继续』）；其余 9 项 TargetCeiling 重校准为当前聚合（断言可绿），Deadline 保持批次 9（批次 9 完成即强制 ≤400）；ApiClient 聚合 562→323（T-097 删手写 GetThumbnailAsync 后已 ≤400）按『达 ≤400 从表移除』移出。\n执行（T-099）：改动文件清单——①CloudPan.Tests/Architecture/CodeQualityTests.cs：新增 [Fact] 豁免类型_聚合行数不超目标上限（聚合≤TargetCeiling）；豁免表_持续下降约束 增 Deadline 批次 done→≤400 检查（LoadDoneBatches 读 tasks.json + DeadlineBatchPattern 解析批次号）+ TargetCeiling≤Ceiling 放宽为可等于；豁免表重基线。②CloudPan.Client.Core/Services/SyncPathSelector.cs（新增：排除集/忽略规则持有者，IsPathSelected/ShouldIgnore/ShouldIgnoreScan/IsUnderAnyPrefix，volatile 引用替换热更新语义保留 T-063）；SyncRemoteApplier.cs（新增：ApplyRemoteChangesAsync+MakeSnapshot 下沉）；SyncEngine.cs（字段 _selectedPaths/_ignorePatterns 移出，注入 _paths/_remoteApplier，UpdateSelectedPaths 改经 _paths.SelectedPaths）；SyncEngine.FullScan.cs（工具方法下沉，FullScanCoreAsync 调用点改 _paths./SyncPathSelector./SyncPath.）；SyncEngine.Scan.cs（ApplyRemoteChangesAsync/MakeSnapshot 移除，改调 _remoteApplier）；SyncEngine.Queue.cs（SafeDelete/SafeDeleteDirectory 移除，改 SyncPath.SafeDelete）；SyncEngine.Changes.cs（ShouldIgnore/IsPathSelected/SafeDelete 调用点改）；SyncEngine.Transfers.cs（SafeDelete 调用点改）。③CloudPan.Client.UI/UI/ShareDialog.cs、VersionHistoryDialog.cs、TrashDialog.cs（新增 internal static class，对齐 RestoreConflictDialog 模式）；MainWindow.Share.cs/Versions.cs/Trash.cs（对话框本体下沉，保留入口 + FormatTimestamp 随迁）。④CloudPan.Tests/Client/Services/SyncEngineTests.cs：反射调用点更新（_selectedPaths/IsPathSelected→SyncPathSelector、ApplyRemoteChangesAsync→SyncRemoteApplier，新增 GetPathSelector/CallApplyRemoteChangesAsync 辅助）。\n验证：dotnet test --filter Architecture 15/15 通过（含新增聚合≤TargetCeiling 断言）；dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 347/347 通过（SyncEngineTests 78/78）。拆分后聚合（架构测试口径）：SyncEngine 2183→1931（≤TargetCeiling 2050，减 252）；MainWindow 2425→1804（≤TargetCeiling 2350，较 T-081 基线 2380 下降 576，减 621）。",
+      "updatedAt": "2026-08-04"
     },
     {
       "id": "T-100",

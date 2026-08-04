@@ -106,17 +106,13 @@ public partial class SyncEngine : IDisposable
     /// <summary>最近一次完整同步完成的时间戳。</summary>
     public DateTime? LastSyncTime => _progress.LastSyncTime;
 
-    // T-063：排除集运行时可变（引用替换实现热更新，非启动快照）。
-    // 引用类型字段赋值原子，volatile 保证设置线程与同步线程间的可见性；内容不就地修改，只整体替换引用。
-    private volatile List<string> _selectedPaths;
-
-    private readonly List<System.Text.RegularExpressions.Regex> _ignorePatterns;
-
     // T-070：查询侧/管理侧拆分为独立服务（只读操作不触碰状态机可变状态，见 SyncBrowseService/SyncManageService）
     private readonly SyncBrowseService _browse;
     private readonly SyncManageService _manage;
 
-    // 构造函数中初始化 _ignorePatterns（见上方构造函数修改）
+    // T-099：排除集/忽略规则（T-063 引用替换热更新语义）与远程变更应用拆为独立职责类，收敛本类聚合行数
+    private readonly SyncPathSelector _paths;
+    private readonly SyncRemoteApplier _remoteApplier;
 
     public SyncEngine(IApiClient api, SyncConfig config, IClientStoreFactory storeFactory, ILogger<SyncEngine> logger, WebSocketClient? wsClient = null, FileWatcherService? fileWatcher = null)
     {
@@ -125,10 +121,10 @@ public partial class SyncEngine : IDisposable
         _storeFactory = storeFactory;
         _logger = logger;
         _fileWatcher = fileWatcher;
-        _ignorePatterns = SyncIgnoreParser.LoadFromSyncRoot(_syncRoot);
-        _selectedPaths = config.SelectedPaths ?? new List<string> { "/" };
+        _paths = new SyncPathSelector(_syncRoot, config.SelectedPaths, SyncIgnoreParser.LoadFromSyncRoot(_syncRoot));
+        _remoteApplier = new SyncRemoteApplier(_logger, _paths, _syncRoot);
         _wsClient = wsClient;
-        _browse = new SyncBrowseService(_api, _storeFactory, _logger, _syncRoot, _ignorePatterns);
+        _browse = new SyncBrowseService(_api, _storeFactory, _logger, _syncRoot, _paths.IgnorePatterns);
         _manage = new SyncManageService(_api, _storeFactory, _logger, _syncRoot);
         _progress = new SyncProgressTracker();
         // 转发进度事件：外部订阅者仍订阅 SyncEngine.QueueProgressChanged，行为不变（具名方法，Dispose 退订）
@@ -151,8 +147,8 @@ public partial class SyncEngine : IDisposable
     public void UpdateSelectedPaths(List<string> selectedPaths)
     {
         // 引用替换：立即生效（后续 IsPathSelected / 扫描 / 入队拦截均读新值）
-        _selectedPaths = selectedPaths ?? new List<string> { "/" };
-        _logger.LogInformation("排除集热更新：{Count} 条选择路径即时生效", _selectedPaths.Count);
+        _paths.SelectedPaths = selectedPaths;
+        _logger.LogInformation("排除集热更新：{Count} 条选择路径即时生效", _paths.SelectedPaths.Count);
 
         // 异步收尾：清除已排除路径的排队传输项（取消勾选目录不再继续外传）+ 触发全量扫描让新选择落地
         _ = Task.Run(async () =>
@@ -161,7 +157,7 @@ public partial class SyncEngine : IDisposable
             {
                 await using var store = await _storeFactory.CreateStoreAsync();
                 var excluded = (await store.GetAllQueuesAsync())
-                    .Where(q => !IsPathSelected(q.FilePath))
+                    .Where(q => !_paths.IsPathSelected(q.FilePath))
                     .ToList();
                 if (excluded.Count > 0)
                 {

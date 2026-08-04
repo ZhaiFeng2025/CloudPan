@@ -504,14 +504,8 @@ public class SyncEngineTests : IDisposable
             },
             null, false, 5);
 
-        var method = typeof(SyncEngine).GetMethod("ApplyRemoteChangesAsync",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        Assert.NotNull(method);
-
         await using var store = await _storeFactory.CreateStoreAsync();
-        Task? task = (Task?)method!.Invoke(_engine, [store, response, CancellationToken.None]);
-        Assert.NotNull(task);
-        await task;
+        await CallApplyRemoteChangesAsync(store, response);
 
         Assert.False(File.Exists(filePath)); // 本地副本已删除
     }
@@ -528,14 +522,8 @@ public class SyncEngineTests : IDisposable
             },
             null, false, 2);
 
-        var method = typeof(SyncEngine).GetMethod("ApplyRemoteChangesAsync",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        Assert.NotNull(method);
-
         await using var store = await _storeFactory.CreateStoreAsync();
-        Task? task = (Task?)method!.Invoke(_engine, [store, response, CancellationToken.None]);
-        Assert.NotNull(task);
-        await task;
+        await CallApplyRemoteChangesAsync(store, response);
         await store.CommitAsync();
 
         var snapshot = await store.GetSnapshotAsync("/new-remote.bin");
@@ -1557,13 +1545,8 @@ public class SyncEngineTests : IDisposable
             },
             null, false, 3);
 
-        var method = typeof(SyncEngine).GetMethod("ApplyRemoteChangesAsync",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        Assert.NotNull(method);
         await using var store = await _storeFactory.CreateStoreAsync();
-        Task? task = (Task?)method!.Invoke(_engine, [store, response, CancellationToken.None]);
-        Assert.NotNull(task);
-        await task;
+        await CallApplyRemoteChangesAsync(store, response);
         await store.CommitAsync();
 
         // 快照已建（目录无落盘概念，视为已同步）
@@ -1744,13 +1727,8 @@ public class SyncEngineTests : IDisposable
             },
             null, false, 5);
 
-        var method = typeof(SyncEngine).GetMethod("ApplyRemoteChangesAsync",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        Assert.NotNull(method);
         await using var store = await _storeFactory.CreateStoreAsync();
-        Task? task = (Task?)method!.Invoke(_engine, [store, response, CancellationToken.None]);
-        Assert.NotNull(task);
-        await task;
+        await CallApplyRemoteChangesAsync(store, response);
         await store.CommitAsync();
 
         // 子项快照版本相等、内容哈希相同 → 不入队下载（无整棵子树重下载）
@@ -1796,22 +1774,45 @@ public class SyncEngineTests : IDisposable
     // 选择性同步排除集语义（T-047）
     // ============================================================
 
-    /// <summary>反射设置 _selectedPaths（排除集）。</summary>
-    private void SetSelectedPaths(SyncEngine engine, List<string> paths)
+    /// <summary>反射获取 SyncEngine._paths（T-099 拆分：排除集/忽略规则判定移至 SyncPathSelector）。</summary>
+    private object GetPathSelector(SyncEngine engine)
     {
-        var field = typeof(SyncEngine).GetField("_selectedPaths",
+        var field = typeof(SyncEngine).GetField("_paths",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         Assert.NotNull(field);
-        field!.SetValue(engine, paths);
+        return field!.GetValue(engine)!;
     }
 
-    /// <summary>反射调用 IsPathSelected。</summary>
+    /// <summary>反射调用 SyncRemoteApplier.ApplyRemoteChangesAsync（T-099 拆分后该方法下沉至 SyncRemoteApplier）。</summary>
+    private async Task CallApplyRemoteChangesAsync(object store, FileTreeResponse response)
+    {
+        var field = typeof(SyncEngine).GetField("_remoteApplier",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(field);
+        object applier = field!.GetValue(_engine)!;
+        var method = applier.GetType().GetMethod("ApplyRemoteChangesAsync");
+        Assert.NotNull(method);
+        Task? task = (Task?)method!.Invoke(applier, [store, response, CancellationToken.None]);
+        Assert.NotNull(task);
+        await task;
+    }
+
+    /// <summary>反射设置 SyncPathSelector.SelectedPaths（排除集；T-099 拆分后 _selectedPaths 下沉）。</summary>
+    private void SetSelectedPaths(SyncEngine engine, List<string> paths)
+    {
+        object selector = GetPathSelector(engine);
+        var pathsProperty = selector.GetType().GetProperty("SelectedPaths");
+        Assert.NotNull(pathsProperty);
+        pathsProperty!.SetValue(selector, paths);
+    }
+
+    /// <summary>反射调用 SyncPathSelector.IsPathSelected（T-099 拆分后方法下沉）。</summary>
     private bool CallIsPathSelected(SyncEngine engine, string path)
     {
-        var method = typeof(SyncEngine).GetMethod("IsPathSelected",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        object selector = GetPathSelector(engine);
+        var method = selector.GetType().GetMethod("IsPathSelected", [typeof(string)]);
         Assert.NotNull(method);
-        return (bool)method!.Invoke(engine, [path])!;
+        return (bool)method!.Invoke(selector, [path])!;
     }
 
     [Fact]
@@ -2068,13 +2069,8 @@ public class SyncEngineTests : IDisposable
             },
             null, false, 3);
 
-        var method = typeof(SyncEngine).GetMethod("ApplyRemoteChangesAsync",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        Assert.NotNull(method);
         await using var store = await _storeFactory.CreateStoreAsync();
-        Task? task = (Task?)method!.Invoke(_engine, [store, response, CancellationToken.None]);
-        Assert.NotNull(task);
-        await task;
+        await CallApplyRemoteChangesAsync(store, response);
         await store.CommitAsync();
 
         var snapshot = await store.GetSnapshotAsync("/photos/restore.txt");
@@ -2109,13 +2105,8 @@ public class SyncEngineTests : IDisposable
             },
             null, false, 3);
 
-        var method = typeof(SyncEngine).GetMethod("ApplyRemoteChangesAsync",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        Assert.NotNull(method);
         await using var store = await _storeFactory.CreateStoreAsync();
-        Task? task = (Task?)method!.Invoke(_engine, [store, response, CancellationToken.None]);
-        Assert.NotNull(task);
-        await task;
+        await CallApplyRemoteChangesAsync(store, response);
         await store.CommitAsync();
 
         // 已入队下载（版本相等也需下载，CloudOnly 从未落盘）
