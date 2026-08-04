@@ -1,8 +1,8 @@
 {
- "schemaVersion": 3,
- "currentBatch": 9,
+ "schemaVersion": 4,
+ "currentBatch": 10,
  "generatedAt": "2026-08-04",
- "totalTasks": 108,
- "activeTasks": 0,
- "totalFindings": 150
+ "totalTasks": 120,
+ "activeTasks": 12,
+ "totalFindings": 158
 }

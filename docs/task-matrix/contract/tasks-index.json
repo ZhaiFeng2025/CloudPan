@@ -7,7 +7,8 @@
    "priority": "P0",
    "status": "done",
    "batch": 1,
-   "location": "CloudPan.Server.Host/Controllers/FilesController.cs:105-132"
+   "location": "CloudPan.Server.Host/Controllers/FilesController.cs:105-132",
+   "goalRef": null
   },
   {
    "id": "T-002",
@@ -16,7 +17,8 @@
    "priority": "P0",
    "status": "done",
    "batch": 1,
-   "location": "CloudPan.Server.Host/Controllers/{Share,Trash,Versions,Thumbnails,Files}.cs"
+   "location": "CloudPan.Server.Host/Controllers/{Share,Trash,Versions,Thumbnails,Files}.cs",
+   "goalRef": null
   },
   {
    "id": "T-003",
@@ -25,7 +27,8 @@
    "priority": "P0",
    "status": "done",
    "batch": 1,
-   "location": "CloudPan.Client.Core/Services/ApiClient.cs:455-529"
+   "location": "CloudPan.Client.Core/Services/ApiClient.cs:455-529",
+   "goalRef": null
   },
   {
    "id": "T-004",
@@ -34,7 +37,8 @@
    "priority": "P0",
    "status": "done",
    "batch": 1,
-   "location": "shared-spec.json config 段 + ContractManifest.g.cs SpecConfig"
+   "location": "shared-spec.json config 段 + ContractManifest.g.cs SpecConfig",
+   "goalRef": null
   },
   {
    "id": "T-005",
@@ -43,7 +47,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 1,
-   "location": "CloudPan.Server.Core/FileIndex/FileIndexService.cs:121-171 + SyncEngine.Scan.cs"
+   "location": "CloudPan.Server.Core/FileIndex/FileIndexService.cs:121-171 + SyncEngine.Scan.cs",
+   "goalRef": null
   },
   {
    "id": "T-006",
@@ -52,7 +57,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 1,
-   "location": "CloudPan.Client.Core/Services/SyncEngine.Changes.cs:142-148"
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Changes.cs:142-148",
+   "goalRef": null
   },
   {
    "id": "T-007",
@@ -61,7 +67,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 1,
-   "location": "CloudPan.Server.Host/Controllers/ShareController.cs:177-220"
+   "location": "CloudPan.Server.Host/Controllers/ShareController.cs:177-220",
+   "goalRef": null
   },
   {
    "id": "T-008",
@@ -70,7 +77,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 1,
-   "location": "DatabaseInitializer.cs + CloudPanDbContext.cs + ClientDbContext.cs"
+   "location": "DatabaseInitializer.cs + CloudPanDbContext.cs + ClientDbContext.cs",
+   "goalRef": null
   },
   {
    "id": "T-009",
@@ -79,7 +87,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 1,
-   "location": "CloudPan.Client.UI/UI/MainWindow.cs:129-155"
+   "location": "CloudPan.Client.UI/UI/MainWindow.cs:129-155",
+   "goalRef": null
   },
   {
    "id": "T-010",
@@ -88,7 +97,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 1,
-   "location": "CloudPan.Client.UI/UI/DesignTokens.cs:34,201"
+   "location": "CloudPan.Client.UI/UI/DesignTokens.cs:34,201",
+   "goalRef": null
   },
   {
    "id": "T-011",
@@ -97,7 +107,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 1,
-   "location": "CloudPan.Server.UI/DesignTokens.cs + CloudPan.Client.UI/UI/DesignTokens.cs"
+   "location": "CloudPan.Server.UI/DesignTokens.cs + CloudPan.Client.UI/UI/DesignTokens.cs",
+   "goalRef": null
   },
   {
    "id": "T-012",
@@ -106,7 +117,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 1,
-   "location": "CloudPan.Server.Host/Controllers/ThumbnailsController.cs:56-115"
+   "location": "CloudPan.Server.Host/Controllers/ThumbnailsController.cs:56-115",
+   "goalRef": null
   },
   {
    "id": "T-013",
@@ -115,7 +127,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 2,
-   "location": "CloudPan.Client.UI/UI/MainWindow.cs:107-397"
+   "location": "CloudPan.Client.UI/UI/MainWindow.cs:107-397",
+   "goalRef": null
   },
   {
    "id": "T-014",
@@ -124,7 +137,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 2,
-   "location": "CloudPan.Client.UI（文件浏览删除流程）+ 回收站 API 对接"
+   "location": "CloudPan.Client.UI（文件浏览删除流程）+ 回收站 API 对接",
+   "goalRef": null
   },
   {
    "id": "T-015",
@@ -133,7 +147,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 2,
-   "location": "CloudPan.Server.Host/CloudPan.Server.Host.csproj:23; Program.cs:127"
+   "location": "CloudPan.Server.Host/CloudPan.Server.Host.csproj:23; Program.cs:127",
+   "goalRef": null
   },
   {
    "id": "T-016",
@@ -142,7 +157,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 2,
-   "location": "全仓命名空间"
+   "location": "全仓命名空间",
+   "goalRef": null
   },
   {
    "id": "T-017",
@@ -151,7 +167,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 2,
-   "location": "ApiClient.cs:176-182; SyncEngine.Queue.cs:226-233 vs FileStorageService.cs:72-77"
+   "location": "ApiClient.cs:176-182; SyncEngine.Queue.cs:226-233 vs FileStorageService.cs:72-77",
+   "goalRef": null
   },
   {
    "id": "T-018",
@@ -160,7 +177,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 2,
-   "location": "TrayAppContext.cs:296（新增入口）；文件浏览详情面板"
+   "location": "TrayAppContext.cs:296（新增入口）；文件浏览详情面板",
+   "goalRef": null
   },
   {
    "id": "T-019",
@@ -169,7 +187,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 2,
-   "location": "CloudPan.Server.Core/FileIndex/FileIndexService.cs:196-200"
+   "location": "CloudPan.Server.Core/FileIndex/FileIndexService.cs:196-200",
+   "goalRef": null
   },
   {
    "id": "T-020",
@@ -178,7 +197,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 2,
-   "location": "CloudPan.Server.Host/Controllers/FilesController.ChunkedUpload.cs:175-184"
+   "location": "CloudPan.Server.Host/Controllers/FilesController.ChunkedUpload.cs:175-184",
+   "goalRef": null
   },
   {
    "id": "T-021",
@@ -187,7 +207,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 2,
-   "location": "CloudPan.Server.Host/Controllers/FilesController.ChunkedUpload.cs:365-374"
+   "location": "CloudPan.Server.Host/Controllers/FilesController.ChunkedUpload.cs:365-374",
+   "goalRef": null
   },
   {
    "id": "T-022",
@@ -196,7 +217,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 2,
-   "location": "CloudPan.Server.UI/SettingsPage.cs:13-190; Program.cs:72"
+   "location": "CloudPan.Server.UI/SettingsPage.cs:13-190; Program.cs:72",
+   "goalRef": null
   },
   {
    "id": "T-023",
@@ -205,7 +227,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 2,
-   "location": "CloudPan.Client.Core/Services/SyncEngine.Scan.cs:347-355"
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Scan.cs:347-355",
+   "goalRef": null
   },
   {
    "id": "T-024",
@@ -214,7 +237,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 2,
-   "location": "CloudPan.Server.Host/Controllers/TrashController.cs:68,175-180; FilesController.cs:271-304"
+   "location": "CloudPan.Server.Host/Controllers/TrashController.cs:68,175-180; FilesController.cs:271-304",
+   "goalRef": null
   },
   {
    "id": "T-025",
@@ -223,7 +247,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 3,
-   "location": "CloudPan.Server.Host/Middleware/TokenAuthMiddleware.cs:73-84,104-167; CloudPan.Server.Core/WebSocket/WebSocketHandler.cs:106-122,397-427"
+   "location": "CloudPan.Server.Host/Middleware/TokenAuthMiddleware.cs:73-84,104-167; CloudPan.Server.Core/WebSocket/WebSocketHandler.cs:106-122,397-427",
+   "goalRef": null
   },
   {
    "id": "T-026",
@@ -232,7 +257,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 3,
-   "location": "CloudPan.Server.Host/Hosting/BackgroundHostedService.cs:72-115"
+   "location": "CloudPan.Server.Host/Hosting/BackgroundHostedService.cs:72-115",
+   "goalRef": null
   },
   {
    "id": "T-027",
@@ -241,7 +267,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 3,
-   "location": "CloudPan.Client.Core/Services/ApiClient.cs:63-369"
+   "location": "CloudPan.Client.Core/Services/ApiClient.cs:63-369",
+   "goalRef": null
   },
   {
    "id": "T-028",
@@ -250,7 +277,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 3,
-   "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs:11-15,54-58,74-80; CloudPan.Client.UI/UI/MainWindow.cs:1-2522; CloudPan.Client.UI/UI/SetupForm.cs:1-1023"
+   "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs:11-15,54-58,74-80; CloudPan.Client.UI/UI/MainWindow.cs:1-2522; CloudPan.Client.UI/UI/SetupForm.cs:1-1023",
+   "goalRef": null
   },
   {
    "id": "T-029",
@@ -259,7 +287,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 3,
-   "location": "CloudPan.Client.UI/Program.cs:1-534; CloudPan.Client.UI/CloudPan.Client.UI.csproj:26-27"
+   "location": "CloudPan.Client.UI/Program.cs:1-534; CloudPan.Client.UI/CloudPan.Client.UI.csproj:26-27",
+   "goalRef": null
   },
   {
    "id": "T-030",
@@ -268,7 +297,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 3,
-   "location": "CloudPan.Server.UI/ServerIcons.cs:1-311; CloudPan.Client.UI/UI/CloudPanIcon.cs:1-311"
+   "location": "CloudPan.Server.UI/ServerIcons.cs:1-311; CloudPan.Client.UI/UI/CloudPanIcon.cs:1-311",
+   "goalRef": null
   },
   {
    "id": "T-031",
@@ -277,7 +307,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 3,
-   "location": "CloudPan.Client.Core/Services/SyncEngine.Queue.cs:85,108; CloudPan.Client.UI/UI/MainWindow.cs:676-803"
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Queue.cs:85,108; CloudPan.Client.UI/UI/MainWindow.cs:676-803",
+   "goalRef": null
   },
   {
    "id": "T-032",
@@ -286,7 +317,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 3,
-   "location": "CloudPan.Infrastructure/Design/DesignTokens.cs（浅色组单集）"
+   "location": "CloudPan.Infrastructure/Design/DesignTokens.cs（浅色组单集）",
+   "goalRef": null
   },
   {
    "id": "T-033",
@@ -295,7 +327,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 3,
-   "location": "CloudPan.Client.UI/UI/FileBrowserView.cs 工具栏; CloudPan.Client.UI/UI/MainWindow.cs:1876-1895（OpenFile）"
+   "location": "CloudPan.Client.UI/UI/FileBrowserView.cs 工具栏; CloudPan.Client.UI/UI/MainWindow.cs:1876-1895（OpenFile）",
+   "goalRef": null
   },
   {
    "id": "T-034",
@@ -304,7 +337,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 3,
-   "location": "CloudPan.Server.UI/SettingsPage.cs:388-411"
+   "location": "CloudPan.Server.UI/SettingsPage.cs:388-411",
+   "goalRef": null
   },
   {
    "id": "T-035",
@@ -313,7 +347,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 3,
-   "location": "CloudPan.Server.Host/Hosting/UdpDiscoveryHostedService.cs:29-31"
+   "location": "CloudPan.Server.Host/Hosting/UdpDiscoveryHostedService.cs:29-31",
+   "goalRef": null
   },
   {
    "id": "T-036",
@@ -322,7 +357,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 3,
-   "location": "CloudPan.Client.UI/UI/MainWindow.cs:2033-2190; CloudPan.Client.UI/UI/TrayAppContext.cs:113-128"
+   "location": "CloudPan.Client.UI/UI/MainWindow.cs:2033-2190; CloudPan.Client.UI/UI/TrayAppContext.cs:113-128",
+   "goalRef": null
   },
   {
    "id": "T-037",
@@ -331,7 +367,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 4,
-   "location": "CloudPan.Client.Core/Services/SyncEngine.Scan.cs:217-223,319-331; SyncEngine.Changes.cs:137-144; SyncEngine.Queue.cs:99-121"
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Scan.cs:217-223,319-331; SyncEngine.Changes.cs:137-144; SyncEngine.Queue.cs:99-121",
+   "goalRef": null
   },
   {
    "id": "T-038",
@@ -340,7 +377,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 4,
-   "location": "CloudPan.Server.Core/Trash/TrashService.cs:233-257; CloudPan.Server.Core/Files/FileOperationService.cs:75-89"
+   "location": "CloudPan.Server.Core/Trash/TrashService.cs:233-257; CloudPan.Server.Core/Files/FileOperationService.cs:75-89",
+   "goalRef": null
   },
   {
    "id": "T-039",
@@ -349,7 +387,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 4,
-   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/Dtos.kt:1,70; CloudPan.Android/app/src/main/java/com/cloudpan/android/data/CloudPanApi.kt:1"
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/Dtos.kt:1,70; CloudPan.Android/app/src/main/java/com/cloudpan/android/data/CloudPanApi.kt:1",
+   "goalRef": null
   },
   {
    "id": "T-040",
@@ -358,7 +397,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 4,
-   "location": "CloudPan.Server.Host/Controllers/{Files,Files.FileOps,Files.ChunkedUpload,Health,Admin}.cs"
+   "location": "CloudPan.Server.Host/Controllers/{Files,Files.FileOps,Files.ChunkedUpload,Health,Admin}.cs",
+   "goalRef": null
   },
   {
    "id": "T-041",
@@ -367,7 +407,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 4,
-   "location": "CloudPan.Client.Core/Composition/ClientBootstrap.cs:393-419"
+   "location": "CloudPan.Client.Core/Composition/ClientBootstrap.cs:393-419",
+   "goalRef": null
   },
   {
    "id": "T-042",
@@ -376,7 +417,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 4,
-   "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs; CloudPan.Server.UI/ServerInstaller.cs(935); CloudPan.Client.UI/UI/FileBrowserView.cs(830); CloudPan.Client.UI/UI/SettingsForm.cs(628); CloudPan.Server.UI/ServerWindow.cs(513); CloudPan.Client.UI/UI/TrayAppContext.cs(494); CloudPan.Server.UI/SettingsPage.cs(483); CloudPan.Client.Core/Composition/ClientBootstrap.cs(420)"
+   "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs; CloudPan.Server.UI/ServerInstaller.cs(935); CloudPan.Client.UI/UI/FileBrowserView.cs(830); CloudPan.Client.UI/UI/SettingsForm.cs(628); CloudPan.Server.UI/ServerWindow.cs(513); CloudPan.Client.UI/UI/TrayAppContext.cs(494); CloudPan.Server.UI/SettingsPage.cs(483); CloudPan.Client.Core/Composition/ClientBootstrap.cs(420)",
+   "goalRef": null
   },
   {
    "id": "T-043",
@@ -385,7 +427,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 4,
-   "location": "CloudPan.Client.Core/Models/ClientConfig.cs:1-78; CloudPan.Client.Core/Services/SettingsStore.cs:1-75; CloudPan.Client.Core/Models/SyncConfig.cs:1-30; CloudPan.Client.Core/Composition/ClientBootstrap.cs:81,317; CloudPan.Client.UI/UI/TrayAppContext.cs:456,473"
+   "location": "CloudPan.Client.Core/Models/ClientConfig.cs:1-78; CloudPan.Client.Core/Services/SettingsStore.cs:1-75; CloudPan.Client.Core/Models/SyncConfig.cs:1-30; CloudPan.Client.Core/Composition/ClientBootstrap.cs:81,317; CloudPan.Client.UI/UI/TrayAppContext.cs:456,473",
+   "goalRef": null
   },
   {
    "id": "T-044",
@@ -394,7 +437,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 4,
-   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/worker/PhotoBackupWorker.kt:118-148"
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/worker/PhotoBackupWorker.kt:118-148",
+   "goalRef": null
   },
   {
    "id": "T-045",
@@ -403,7 +447,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 4,
-   "location": "CloudPan.Client.Core/Services/SyncEngine.Queue.cs:18-22,55-60"
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Queue.cs:18-22,55-60",
+   "goalRef": null
   },
   {
    "id": "T-046",
@@ -412,7 +457,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 4,
-   "location": "CloudPan.Client.Core/Services/SyncEngine.Changes.cs:160-164; SyncEngine.Scan.cs:287-289"
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Changes.cs:160-164; SyncEngine.Scan.cs:287-289",
+   "goalRef": null
   },
   {
    "id": "T-047",
@@ -421,7 +467,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 4,
-   "location": "CloudPan.Client.UI/UI/SelectiveSyncPanel.cs:20-24,201-212; CloudPan.Client.Core/Services/SyncEngine.Scan.cs:447-459"
+   "location": "CloudPan.Client.UI/UI/SelectiveSyncPanel.cs:20-24,201-212; CloudPan.Client.Core/Services/SyncEngine.Scan.cs:447-459",
+   "goalRef": null
   },
   {
    "id": "T-048",
@@ -430,7 +477,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 4,
-   "location": "CloudPan.Server.Host/Middleware/RateLimitMiddleware.cs:14-30,39-51"
+   "location": "CloudPan.Server.Host/Middleware/RateLimitMiddleware.cs:14-30,39-51",
+   "goalRef": null
   },
   {
    "id": "T-049",
@@ -439,7 +487,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 5,
-   "location": "CloudPan.Server.Core/FileIndex/FileIndexService.cs:129-136; CloudPan.Client.Core/Services/SyncEngine.FullScan.cs:100-118; CloudPan.Tests/Server/Services/FileIndexServiceTests.cs:88-109"
+   "location": "CloudPan.Server.Core/FileIndex/FileIndexService.cs:129-136; CloudPan.Client.Core/Services/SyncEngine.FullScan.cs:100-118; CloudPan.Tests/Server/Services/FileIndexServiceTests.cs:88-109",
+   "goalRef": null
   },
   {
    "id": "T-050",
@@ -448,7 +497,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 5,
-   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt:128-133; ui/FileListScreen.kt:210-258"
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt:128-133; ui/FileListScreen.kt:210-258",
+   "goalRef": null
   },
   {
    "id": "T-051",
@@ -457,7 +507,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 5,
-   "location": "CloudPan.Server.Core/Upload/UploadService.cs:52-76 vs CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.Finalize.cs:86-133"
+   "location": "CloudPan.Server.Core/Upload/UploadService.cs:52-76 vs CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.Finalize.cs:86-133",
+   "goalRef": null
   },
   {
    "id": "T-052",
@@ -466,7 +517,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 5,
-   "location": "CloudPan.Server.UI/ServerInstaller.Process.cs:13-121; CloudPan.Server.UI/ServiceRestartHelper.cs:69-127"
+   "location": "CloudPan.Server.UI/ServerInstaller.Process.cs:13-121; CloudPan.Server.UI/ServiceRestartHelper.cs:69-127",
+   "goalRef": null
   },
   {
    "id": "T-053",
@@ -475,7 +527,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 5,
-   "location": "CloudPan.Client.UI/UI/SettingsForm.AccountTab.cs:229-271"
+   "location": "CloudPan.Client.UI/UI/SettingsForm.AccountTab.cs:229-271",
+   "goalRef": null
   },
   {
    "id": "T-054",
@@ -484,7 +537,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 5,
-   "location": "CloudPan.Client.Core/Services/SyncEngine.Scan.cs:172,188; SyncEngine.FullScan.cs:92-98,166,178; FileWatcherService.cs:106,111"
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Scan.cs:172,188; SyncEngine.FullScan.cs:92-98,166,178; FileWatcherService.cs:106,111",
+   "goalRef": null
   },
   {
    "id": "T-055",
@@ -493,7 +547,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 5,
-   "location": "CloudPan.Server.UI/ServerWindow.cs:23,37; ServerWindow.Data.cs:19"
+   "location": "CloudPan.Server.UI/ServerWindow.cs:23,37; ServerWindow.Data.cs:19",
+   "goalRef": null
   },
   {
    "id": "T-056",
@@ -502,7 +557,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 5,
-   "location": "CloudPan.Server.Host/Controllers/FilesController.cs:92-105"
+   "location": "CloudPan.Server.Host/Controllers/FilesController.cs:92-105",
+   "goalRef": null
   },
   {
    "id": "T-057",
@@ -511,7 +567,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 5,
-   "location": "CloudPan.Server.Core/WebSocket/WebSocketHandler.Lifecycle.cs:43-96"
+   "location": "CloudPan.Server.Core/WebSocket/WebSocketHandler.Lifecycle.cs:43-96",
+   "goalRef": null
   },
   {
    "id": "T-058",
@@ -520,7 +577,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 5,
-   "location": "CloudPan.Server.Host/Controllers/*.cs（16 处）; CloudPan.Server.Host/Program.cs:111; CloudPan.Client.Core/Services/WebSocketClient.cs:51"
+   "location": "CloudPan.Server.Host/Controllers/*.cs（16 处）; CloudPan.Server.Host/Program.cs:111; CloudPan.Client.Core/Services/WebSocketClient.cs:51",
+   "goalRef": null
   },
   {
    "id": "T-059",
@@ -529,7 +587,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 5,
-   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt:38-48; ui/FileListScreen.kt:159-191"
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt:38-48; ui/FileListScreen.kt:159-191",
+   "goalRef": null
   },
   {
    "id": "T-060",
@@ -538,7 +597,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 5,
-   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/worker/PhotoBackupWorker.kt:167-175,180-182"
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/worker/PhotoBackupWorker.kt:167-175,180-182",
+   "goalRef": null
   },
   {
    "id": "T-061",
@@ -547,7 +607,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 6,
-   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/Dtos.kt:1; CloudPan.Android/app/src/main/java/com/cloudpan/android/data/CloudPanApi.kt:1-35"
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/Dtos.kt:1; CloudPan.Android/app/src/main/java/com/cloudpan/android/data/CloudPanApi.kt:1-35",
+   "goalRef": null
   },
   {
    "id": "T-062",
@@ -556,7 +617,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 6,
-   "location": "CloudPan.Client.Core/Models/ClientDbContext.cs:53-88; CloudPan.Client.Core/Models/RemoteSnapshot.cs; SyncQueueItem.cs; SyncCursorState.cs"
+   "location": "CloudPan.Client.Core/Models/ClientDbContext.cs:53-88; CloudPan.Client.Core/Models/RemoteSnapshot.cs; SyncQueueItem.cs; SyncCursorState.cs",
+   "goalRef": null
   },
   {
    "id": "T-063",
@@ -565,7 +627,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 6,
-   "location": "CloudPan.Client.UI/UI/TrayAppContext.Actions.cs:81-84; CloudPan.Client.Core/Services/SyncEngine.cs:135; CloudPan.Client.Core/Services/ApiClient.cs:41-42"
+   "location": "CloudPan.Client.UI/UI/TrayAppContext.Actions.cs:81-84; CloudPan.Client.Core/Services/SyncEngine.cs:135; CloudPan.Client.Core/Services/ApiClient.cs:41-42",
+   "goalRef": null
   },
   {
    "id": "T-064",
@@ -574,7 +637,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 6,
-   "location": "CloudPan.Client.Core/Services/ApiClient.ChunkedUpload.cs:38-46,88-89; CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.cs:159-165; ChunkedUploadService.Finalize.cs:108-128"
+   "location": "CloudPan.Client.Core/Services/ApiClient.ChunkedUpload.cs:38-46,88-89; CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.cs:159-165; ChunkedUploadService.Finalize.cs:108-128",
+   "goalRef": null
   },
   {
    "id": "T-065",
@@ -583,7 +647,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 6,
-   "location": "CloudPan.Server.Core/Versions/VersionHistoryService.cs:106-147"
+   "location": "CloudPan.Server.Core/Versions/VersionHistoryService.cs:106-147",
+   "goalRef": null
   },
   {
    "id": "T-066",
@@ -592,7 +657,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 6,
-   "location": "CloudPan.Client.Core/Services/SyncEngine.Transfers.cs:324-354; SyncEngine.FullScan.cs:125-154"
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Transfers.cs:324-354; SyncEngine.FullScan.cs:125-154",
+   "goalRef": null
   },
   {
    "id": "T-067",
@@ -601,7 +667,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 6,
-   "location": "CloudPan.Server.Host/Controllers/FilesController.cs:149-155; CloudPan.Client.Core/Services/ApiClient.cs:197-214; ApiClient.Trash.cs; ApiClient.ShareVersion.cs"
+   "location": "CloudPan.Server.Host/Controllers/FilesController.cs:149-155; CloudPan.Client.Core/Services/ApiClient.cs:197-214; ApiClient.Trash.cs; ApiClient.ShareVersion.cs",
+   "goalRef": null
   },
   {
    "id": "T-068",
@@ -610,7 +677,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 6,
-   "location": "CloudPan.Client.Core/Models/ClientDbContext.cs:1-88; CloudPan.Client.Core/Migrations/*.cs"
+   "location": "CloudPan.Client.Core/Models/ClientDbContext.cs:1-88; CloudPan.Client.Core/Migrations/*.cs",
+   "goalRef": null
   },
   {
    "id": "T-069",
@@ -619,7 +687,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 6,
-   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt:380; CloudPan.Server.Core/Files/FileOperationService.cs:170-200; CloudPan.Server.Core/FileIndex/FileIndexService.cs:234-272"
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt:380; CloudPan.Server.Core/Files/FileOperationService.cs:170-200; CloudPan.Server.Core/FileIndex/FileIndexService.cs:234-272",
+   "goalRef": null
   },
   {
    "id": "T-070",
@@ -628,7 +697,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 6,
-   "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs:11-12,64-75; CloudPan.Client.Core/Services/SyncEngine*.cs（13 partial）; CloudPan.Client.UI/UI/MainWindow*.cs（12 partial）"
+   "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs:11-12,64-75; CloudPan.Client.Core/Services/SyncEngine*.cs（13 partial）; CloudPan.Client.UI/UI/MainWindow*.cs（12 partial）",
+   "goalRef": null
   },
   {
    "id": "T-071",
@@ -637,7 +707,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 6,
-   "location": "CloudPan.Server.Core/Files/FileOperationService.cs:241-277; CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.Finalize.cs:44-84"
+   "location": "CloudPan.Server.Core/Files/FileOperationService.cs:241-277; CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.Finalize.cs:44-84",
+   "goalRef": null
   },
   {
    "id": "T-072",
@@ -646,7 +717,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 6,
-   "location": "CloudPan.Server.Core/Configuration/TokenService.cs:30,74; CloudPan.Server.Core/WebSocket/WebSocketHandler.cs:27-33"
+   "location": "CloudPan.Server.Core/Configuration/TokenService.cs:30,74; CloudPan.Server.Core/WebSocket/WebSocketHandler.cs:27-33",
+   "goalRef": null
   },
   {
    "id": "T-073",
@@ -655,7 +727,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 7,
-   "location": "CloudPan.Client.Core/Services/ApiClient.ThrottledStream.cs:44-76,78-92"
+   "location": "CloudPan.Client.Core/Services/ApiClient.ThrottledStream.cs:44-76,78-92",
+   "goalRef": null
   },
   {
    "id": "T-074",
@@ -664,7 +737,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 7,
-   "location": "CloudPan.Client.UI/UI/SelectiveSyncPanel.cs:115,196-232; CloudPan.Client.UI/UI/SettingsForm.SyncTab.cs:10-21"
+   "location": "CloudPan.Client.UI/UI/SelectiveSyncPanel.cs:115,196-232; CloudPan.Client.UI/UI/SettingsForm.SyncTab.cs:10-21",
+   "goalRef": null
   },
   {
    "id": "T-075",
@@ -673,7 +747,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 7,
-   "location": "CloudPan.Client.UI/UI/TrayAppContext.Actions.cs:71-91; CloudPan.Client.UI/UI/SettingsForm.cs:79"
+   "location": "CloudPan.Client.UI/UI/TrayAppContext.Actions.cs:71-91; CloudPan.Client.UI/UI/SettingsForm.cs:79",
+   "goalRef": null
   },
   {
    "id": "T-076",
@@ -682,7 +757,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 7,
-   "location": "CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.cs:183-199; CloudPan.Client.Core/Services/ApiClient.ChunkedUpload.cs:33-46,88-92"
+   "location": "CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.cs:183-199; CloudPan.Client.Core/Services/ApiClient.ChunkedUpload.cs:33-46,88-92",
+   "goalRef": null
   },
   {
    "id": "T-077",
@@ -691,7 +767,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 7,
-   "location": "CloudPan.Server.Core/Files/FileOperationService.cs:115-170; CloudPan.Server.Core/FileIndex/FileIndexService.cs:194-229"
+   "location": "CloudPan.Server.Core/Files/FileOperationService.cs:115-170; CloudPan.Server.Core/FileIndex/FileIndexService.cs:194-229",
+   "goalRef": null
   },
   {
    "id": "T-078",
@@ -700,7 +777,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 7,
-   "location": "CloudPan.Server.Core/Trash/TrashService.cs:126-154; CloudPan.Client.Core/Services/SyncManageService.cs:46-59"
+   "location": "CloudPan.Server.Core/Trash/TrashService.cs:126-154; CloudPan.Client.Core/Services/SyncManageService.cs:46-59",
+   "goalRef": null
   },
   {
    "id": "T-079",
@@ -709,7 +787,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 7,
-   "location": "CloudPan.Client.UI/UI/ThemeWatcher.cs:1-144; CloudPan.Server.UI/ThemeWatcher.cs:1-145"
+   "location": "CloudPan.Client.UI/UI/ThemeWatcher.cs:1-144; CloudPan.Server.UI/ThemeWatcher.cs:1-145",
+   "goalRef": null
   },
   {
    "id": "T-080",
@@ -718,7 +797,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 7,
-   "location": "CloudPan.Infrastructure/Design/DesignTokens.Effects.cs:31-64; DesignTokens.cs; DesignTokens.Fonts.cs"
+   "location": "CloudPan.Infrastructure/Design/DesignTokens.Effects.cs:31-64; DesignTokens.cs; DesignTokens.Fonts.cs",
+   "goalRef": null
   },
   {
    "id": "T-081",
@@ -727,7 +807,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 7,
-   "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs:75-96(DocumentedTypeCeilings); CloudPan.Client.Core/Services/SyncEngine*.cs; CloudPan.Client.UI/UI/MainWindow*.cs"
+   "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs:75-96(DocumentedTypeCeilings); CloudPan.Client.Core/Services/SyncEngine*.cs; CloudPan.Client.UI/UI/MainWindow*.cs",
+   "goalRef": null
   },
   {
    "id": "T-082",
@@ -736,7 +817,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 7,
-   "location": "shared-spec.json:_changelog（version=1.6.0）"
+   "location": "shared-spec.json:_changelog（version=1.6.0）",
+   "goalRef": null
   },
   {
    "id": "T-083",
@@ -745,7 +827,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 7,
-   "location": "CloudPan.Client.UI/UI/FileBrowserView.cs:304-320; CloudPan.Client.UI/UI/FileBrowserView.Events.cs:90-96"
+   "location": "CloudPan.Client.UI/UI/FileBrowserView.cs:304-320; CloudPan.Client.UI/UI/FileBrowserView.Events.cs:90-96",
+   "goalRef": null
   },
   {
    "id": "T-084",
@@ -754,7 +837,8 @@
    "priority": "P3",
    "status": "done",
    "batch": 7,
-   "location": "CloudPan.Client.Core/Services/SyncEngine.Transfers.cs:292-321"
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Transfers.cs:292-321",
+   "goalRef": null
   },
   {
    "id": "T-085",
@@ -763,7 +847,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 8,
-   "location": "CloudPan.Client.Core/Services/SyncPath.cs:43-47; SyncEngine.Changes.cs:176; SyncEngine.FullScan.cs:302; FileWatcherService.cs:198-216"
+   "location": "CloudPan.Client.Core/Services/SyncPath.cs:43-47; SyncEngine.Changes.cs:176; SyncEngine.FullScan.cs:302; FileWatcherService.cs:198-216",
+   "goalRef": null
   },
   {
    "id": "T-086",
@@ -772,7 +857,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 8,
-   "location": "CloudPan.Client.Core/Services/IApiClient.cs + ApiClient*.cs；CloudPan.Android/app/src/main/java/com/cloudpan/android/data/CloudPanApi.kt:1-12；CloudPan.CodeGen/Generators/ApiClientGenerator.cs"
+   "location": "CloudPan.Client.Core/Services/IApiClient.cs + ApiClient*.cs；CloudPan.Android/app/src/main/java/com/cloudpan/android/data/CloudPanApi.kt:1-12；CloudPan.CodeGen/Generators/ApiClientGenerator.cs",
+   "goalRef": null
   },
   {
    "id": "T-087",
@@ -781,7 +867,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 8,
-   "location": "CloudPan.Client.UI/UI/FileBrowseRender.cs:46-54（网格视图自绘字形）；CloudPan.Server.Core/Thumbnails/ThumbnailService.cs:34-169"
+   "location": "CloudPan.Client.UI/UI/FileBrowseRender.cs:46-54（网格视图自绘字形）；CloudPan.Server.Core/Thumbnails/ThumbnailService.cs:34-169",
+   "goalRef": null
   },
   {
    "id": "T-088",
@@ -790,7 +877,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 8,
-   "location": "CloudPan.Server.Core/Versions/VersionCommitHelper.cs:82-91; FileIndex/FileIndexService.cs:166-188; Thumbnails/ThumbnailService.cs:136-169; CloudPan.Server.Host/Hosting/BackgroundHostedService.cs:15-44"
+   "location": "CloudPan.Server.Core/Versions/VersionCommitHelper.cs:82-91; FileIndex/FileIndexService.cs:166-188; Thumbnails/ThumbnailService.cs:136-169; CloudPan.Server.Host/Hosting/BackgroundHostedService.cs:15-44",
+   "goalRef": null
   },
   {
    "id": "T-089",
@@ -799,7 +887,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 8,
-   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt:151,222; worker/PhotoBackupWorker.kt:369"
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt:151,222; worker/PhotoBackupWorker.kt:369",
+   "goalRef": null
   },
   {
    "id": "T-090",
@@ -808,7 +897,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 8,
-   "location": "CloudPan.Infrastructure/Storage/FileStorageService.cs:28-33,80-134; CloudPan.Server.Core/Upload/UploadService.cs:69; CloudPan.Server.Host/Controllers/FilesController.cs:84,90"
+   "location": "CloudPan.Infrastructure/Storage/FileStorageService.cs:28-33,80-134; CloudPan.Server.Core/Upload/UploadService.cs:69; CloudPan.Server.Host/Controllers/FilesController.cs:84,90",
+   "goalRef": null
   },
   {
    "id": "T-091",
@@ -817,7 +907,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 8,
-   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/SettingsScreen.kt:232-233; FileListScreen.kt（多处）; MainActivity.kt:55-66"
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/SettingsScreen.kt:232-233; FileListScreen.kt（多处）; MainActivity.kt:55-66",
+   "goalRef": null
   },
   {
    "id": "T-092",
@@ -826,7 +917,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 8,
-   "location": "CloudPan.Client.UI/UI/MainWindow.Trash.cs:26-63"
+   "location": "CloudPan.Client.UI/UI/MainWindow.Trash.cs:26-63",
+   "goalRef": null
   },
   {
    "id": "T-093",
@@ -835,7 +927,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 8,
-   "location": "CloudPan.Client.Core/Services/SyncEngine.Changes.cs:3,53,71; SyncEngine.Conflicts.cs:3,27; SyncBrowseService.cs:60-263"
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Changes.cs:3,53,71; SyncEngine.Conflicts.cs:3,27; SyncBrowseService.cs:60-263",
+   "goalRef": null
   },
   {
    "id": "T-094",
@@ -844,7 +937,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 8,
-   "location": "CloudPan.Client.UI/UI/MainWindow.Trash.cs:263-275; CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt:1099"
+   "location": "CloudPan.Client.UI/UI/MainWindow.Trash.cs:263-275; CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt:1099",
+   "goalRef": null
   },
   {
    "id": "T-095",
@@ -853,7 +947,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 8,
-   "location": "CloudPan.Client.UI/UI/SettingsForm.AccountTab.cs:289-323,382-399"
+   "location": "CloudPan.Client.UI/UI/SettingsForm.AccountTab.cs:289-323,382-399",
+   "goalRef": null
   },
   {
    "id": "T-096",
@@ -862,7 +957,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 8,
-   "location": "CloudPan.Client.Core/Composition/ClientBootstrap.cs:293-311; CloudPan.Server.Host/Program.cs:37-48; CloudPan.Client.Core/CloudPan.Client.Core.csproj:28-31 vs CloudPan.Server.UI/CloudPan.Server.UI.csproj:36"
+   "location": "CloudPan.Client.Core/Composition/ClientBootstrap.cs:293-311; CloudPan.Server.Host/Program.cs:37-48; CloudPan.Client.Core/CloudPan.Client.Core.csproj:28-31 vs CloudPan.Server.UI/CloudPan.Server.UI.csproj:36",
+   "goalRef": null
   },
   {
    "id": "T-097",
@@ -871,7 +967,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 9,
-   "location": "shared-spec.json:580（/api/thumbnails）；CloudPan.Contract/IApiClient.Thumbnails.cs:14-16；CloudPan.Client.Core/Services/ApiClient.cs:76；CloudPan.Android/.../data/Generated/CloudPanApi.g.kt"
+   "location": "shared-spec.json:580（/api/thumbnails）；CloudPan.Contract/IApiClient.Thumbnails.cs:14-16；CloudPan.Client.Core/Services/ApiClient.cs:76；CloudPan.Android/.../data/Generated/CloudPanApi.g.kt",
+   "goalRef": null
   },
   {
    "id": "T-098",
@@ -880,7 +977,8 @@
    "priority": "P1",
    "status": "done",
    "batch": 9,
-   "location": "CloudPan.Client.UI/UI/ConflictResolutionDialog.cs:86-139；CloudPan.Client.Core/Services/SyncEngine.Conflicts.cs:107-123"
+   "location": "CloudPan.Client.UI/UI/ConflictResolutionDialog.cs:86-139；CloudPan.Client.Core/Services/SyncEngine.Conflicts.cs:107-123",
+   "goalRef": null
   },
   {
    "id": "T-099",
@@ -889,7 +987,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 9,
-   "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs:139-156,162-207；CloudPan.Client.Core/Services/SyncEngine*.cs；CloudPan.Client.UI/UI/MainWindow*.cs"
+   "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs:139-156,162-207；CloudPan.Client.Core/Services/SyncEngine*.cs；CloudPan.Client.UI/UI/MainWindow*.cs",
+   "goalRef": null
   },
   {
    "id": "T-100",
@@ -898,7 +997,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 9,
-   "location": "CloudPan.Contract/FileHasher.cs:1；CloudPan.Contract/SyncIgnoreParser.cs:1；CloudPan.Infrastructure/Storage/IFileStorageService.cs:10；FileStorageService.cs:96"
+   "location": "CloudPan.Contract/FileHasher.cs:1；CloudPan.Contract/SyncIgnoreParser.cs:1；CloudPan.Infrastructure/Storage/IFileStorageService.cs:10；FileStorageService.cs:96",
+   "goalRef": null
   },
   {
    "id": "T-101",
@@ -907,7 +1007,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 9,
-   "location": "CloudPan.Server.Core/Thumbnails/ThumbnailService.cs:245-249；CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.cs:93-97；CloudPan.Infrastructure/Storage/FileStorageService.cs:13,20-22"
+   "location": "CloudPan.Server.Core/Thumbnails/ThumbnailService.cs:245-249；CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.cs:93-97；CloudPan.Infrastructure/Storage/FileStorageService.cs:13,20-22",
+   "goalRef": null
   },
   {
    "id": "T-102",
@@ -916,7 +1017,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 9,
-   "location": "CloudPan.Server.Core/Thumbnails/ThumbnailService.cs:13-16（SupportedExts）"
+   "location": "CloudPan.Server.Core/Thumbnails/ThumbnailService.cs:13-16（SupportedExts）",
+   "goalRef": null
   },
   {
    "id": "T-103",
@@ -925,7 +1027,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 9,
-   "location": "CloudPan.Server.Core/Files/FileOperationService.cs:115-180；CloudPan.Server.Core/Versions/VersionHistoryService.cs:38-48"
+   "location": "CloudPan.Server.Core/Files/FileOperationService.cs:115-180；CloudPan.Server.Core/Versions/VersionHistoryService.cs:38-48",
+   "goalRef": null
   },
   {
    "id": "T-104",
@@ -934,7 +1037,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 9,
-   "location": "CloudPan.Client.UI/UI/ThumbnailLoader.cs:175-184"
+   "location": "CloudPan.Client.UI/UI/ThumbnailLoader.cs:175-184",
+   "goalRef": null
   },
   {
    "id": "T-105",
@@ -943,7 +1047,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 9,
-   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt:253-282；worker/PhotoBackupWorker.kt:365-390；CloudPan.Server.Host/Program.cs:86-89"
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt:253-282；worker/PhotoBackupWorker.kt:365-390；CloudPan.Server.Host/Program.cs:86-89",
+   "goalRef": null
   },
   {
    "id": "T-106",
@@ -952,7 +1057,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 9,
-   "location": "CloudPan.Client.UI/UI/MainWindow.Share.cs:239/257/288；MainWindow.Versions.cs:169；MainWindow.Status.cs:233；StartupFlow.cs:15-16"
+   "location": "CloudPan.Client.UI/UI/MainWindow.Share.cs:239/257/288；MainWindow.Versions.cs:169；MainWindow.Status.cs:233；StartupFlow.cs:15-16",
+   "goalRef": null
   },
   {
    "id": "T-107",
@@ -961,7 +1067,8 @@
    "priority": "P2",
    "status": "done",
    "batch": 9,
-   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt:962-1006；data/Generated/Dtos.g.kt:120"
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt:962-1006；data/Generated/Dtos.g.kt:120",
+   "goalRef": null
   },
   {
    "id": "T-108",
@@ -970,7 +1077,128 @@
    "priority": "P2",
    "status": "done",
    "batch": 9,
-   "location": "CloudPan.Client.Core/Services/SyncBrowseService.cs:88（AllDirectories 全树枚举）；CloudPan.Client.UI/UI/MainWindow.Browser.cs:113（browserRefreshTimer 5000ms）"
+   "location": "CloudPan.Client.Core/Services/SyncBrowseService.cs:88（AllDirectories 全树枚举）；CloudPan.Client.UI/UI/MainWindow.Browser.cs:113（browserRefreshTimer 5000ms）",
+   "goalRef": null
+  },
+  {
+   "id": "T-109",
+   "title": "Client.UI 巨型窗体真实拆分（SetupForm/FileBrowserView/SettingsForm/TrayAppContext 聚合 ≤400 + 删豁免登记）",
+   "dimension": "architecture",
+   "priority": "P0",
+   "status": "todo",
+   "batch": 10,
+   "location": "CloudPan.Client.UI/UI/{SetupForm,FileBrowserView,SettingsForm,TrayAppContext}*.cs（聚合 1091/847/684/522）",
+   "goalRef": null
+  },
+  {
+   "id": "T-110",
+   "title": "Server.UI 巨型控件真实拆分（ServerInstaller/SettingsPage/ServerWindow 聚合 ≤400 + 删豁免登记）",
+   "dimension": "architecture",
+   "priority": "P0",
+   "status": "todo",
+   "batch": 10,
+   "location": "CloudPan.Server.UI/{ServerInstaller,SettingsPage,ServerWindow}*.cs（聚合 861/549/525）",
+   "goalRef": null
+  },
+  {
+   "id": "T-111",
+   "title": "WebSocketHandler 真实拆分（聚合 ≤400 + HandleConnectionAsync 按阶段拆 + 删豁免登记）",
+   "dimension": "architecture",
+   "priority": "P0",
+   "status": "todo",
+   "batch": 10,
+   "location": "CloudPan.Server.Core/WebSocket/WebSocketHandler*.cs（聚合 464；HandleConnectionAsync 239 行单方法）",
+   "goalRef": null
+  },
+  {
+   "id": "T-112",
+   "title": "分享列表端点 + 双端管理入口（GET /api/shares + 撤销 + Android 接线）",
+   "dimension": "function",
+   "priority": "P1",
+   "status": "todo",
+   "batch": 10,
+   "location": "shared-spec.json api.endpoints；ShareController.cs:26-60；ShareDialog.cs:11；Android FileRepository.kt:254",
+   "goalRef": null
+  },
+  {
+   "id": "T-113",
+   "title": "Android 照片墙缩略图接入（getThumbnail + 相册网格 + 全屏预览翻页）",
+   "dimension": "function",
+   "priority": "P1",
+   "status": "todo",
+   "batch": 10,
+   "location": "FileListScreen.kt:61-71,1049-1162；CloudPanApi.g.kt:88-91（getThumbnail 已生成未接线）",
+   "goalRef": null
+  },
+  {
+   "id": "T-114",
+   "title": "Android moveFile 封装 + 上传目标目录选择 + 同名确认",
+   "dimension": "function",
+   "priority": "P1",
+   "status": "todo",
+   "batch": 10,
+   "location": "FileRepository.kt（无 moveFile 封装）；CloudPanApi.g.kt:60；MainActivity.kt:86（/Uploads 硬编码）",
+   "goalRef": null
+  },
+  {
+   "id": "T-115",
+   "title": "Windows 用户主动操作失败统一白话弹窗（对齐 ErrorAttribution，不再只 AddLog）",
+   "dimension": "ux",
+   "priority": "P2",
+   "status": "todo",
+   "batch": 10,
+   "location": "MainWindow.Browser.cs:162/211/231；MainWindow.Trash.cs:66/112；TrashDialog.cs:124",
+   "goalRef": null
+  },
+  {
+   "id": "T-116",
+   "title": "Windows 拖拽目录静默失败修复（递归批量导入或白话提示，禁止零提示零上传）",
+   "dimension": "ux",
+   "priority": "P2",
+   "status": "todo",
+   "batch": 10,
+   "location": "FileBrowserView.Events.cs:169-182；MainWindow.Browser.cs:189；FileBrowserView.cs:146-152",
+   "goalRef": null
+  },
+  {
+   "id": "T-117",
+   "title": "Android 时间显示 UTC→本地换算（java.time 解析 ISO 带 Z 时间戳）",
+   "dimension": "ux",
+   "priority": "P2",
+   "status": "todo",
+   "batch": 10,
+   "location": "FileListScreen.kt:73-81；SettingsScreen.kt:550-558；服务端 FileIndexService.cs:346",
+   "goalRef": null
+  },
+  {
+   "id": "T-118",
+   "title": "分块会话超时清理下沉 IChunkedUploadService（Host 不再直碰 DbContext+File）",
+   "dimension": "architecture",
+   "priority": "P2",
+   "status": "todo",
+   "batch": 10,
+   "location": "BackgroundHostedService.cs:118-144；IChunkedUploadService",
+   "goalRef": null
+  },
+  {
+   "id": "T-119",
+   "title": "版本历史「设备」列改设备友好名（对齐管理页/Android，缺失显示未知设备）",
+   "dimension": "ux",
+   "priority": "P2",
+   "status": "todo",
+   "batch": 10,
+   "location": "VersionHistoryDialog.cs:81；TokenService.cs:142；AdminController.cs:157",
+   "goalRef": null
+  },
+  {
+   "id": "T-120",
+   "title": "应用版本字面量单源化（统一程序集版本，删 5 处硬编码）",
+   "dimension": "simplicity",
+   "priority": "P2",
+   "status": "todo",
+   "batch": 10,
+   "location": "HealthController.cs:53/69/70；ServerWindow.cs:61；TrayAppContext.Menu.cs:78",
+   "goalRef": null
   }
  ]
 }

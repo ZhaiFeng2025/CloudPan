@@ -30,6 +30,8 @@ model: sonnet
 
 验收 `/mission` 传入的任务 ID（读 `contract/active/T-{id}.json`，校验 `status=acceptance`）。
 
+> 任务卡 `goalRef` 为**元数据**（目标追踪/收敛用，目标达成由度量驱动），验收时忽略该字段——你的 done/打回判定不触达 `goals.json`。
+
 ## Step 2 风险分级
 
 按任务卡判定风险等级：

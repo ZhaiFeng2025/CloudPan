@@ -31,6 +31,7 @@ model: sonnet
 
 - 严格按任务卡 `requirements` 逐条实现，改动范围不超过 `scope`
 - 遵守 `CLAUDE.md` 全部规则：新代码按目标四层架构落位（领域逻辑进 Core、基础设施进 Infrastructure）；AI 协作约束 §7（跨模块依赖/异步生命周期/异常恢复/并发安全）；**只碰必须改的**，禁止顺手优化/重构无关代码
+- 任务卡 `goalRef` 为**元数据**（目标追踪/收敛用，目标达成由度量驱动），执行时忽略该字段
 - **禁止修改契约中除本任务卡 `status`/`note`/`updatedAt`/`attempts` 外的任何字段，禁止触碰其他 active 卡与历史批次文件**
 
 ## Step 3 自证
