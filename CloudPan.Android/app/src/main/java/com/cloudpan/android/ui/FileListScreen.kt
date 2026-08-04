@@ -237,7 +237,8 @@ private fun isDirectChild(folderPath: String, filePath: String): Boolean {
 fun FileListScreen(
     repository: FileRepository,
     onBackToSettings: () -> Unit,
-    onPickFileForUpload: (() -> Unit)? = null,
+    // T-114：上传目标目录选择——目录选择器确认后回调目标目录，由宿主启动系统文件选择器
+    onPickUploadTarget: ((String) -> Unit)? = null,
     refreshTrigger: Int = 0,
     // T-091：手动上传流程状态（上传中/成功/失败），上传中 FAB 显示进度指示，结束后 Snackbar 反馈
     uploadState: UploadUiState? = null,
@@ -278,6 +279,12 @@ fun FileListScreen(
     // T-113：照片墙——列表/网格视图切换 + 全屏预览索引（photos 顺序下标，null=未预览）
     var viewMode by remember { mutableStateOf("list") }
     var previewIndex by remember { mutableStateOf<Int?>(null) }
+    // T-114：长按菜单目标 / 移动目标 / 重命名目标 / 上传目录选择器
+    var contextMenuTarget by remember { mutableStateOf<FileEntryDto?>(null) }
+    var moveTarget by remember { mutableStateOf<FileEntryDto?>(null) }
+    var renameTarget by remember { mutableStateOf<FileEntryDto?>(null) }
+    var renameName by remember { mutableStateOf("") }
+    var showUploadDirPicker by remember { mutableStateOf(false) }
 
     // 离线缓存下载状态
     var offlineDownloadFile by remember { mutableStateOf<FileEntryDto?>(null) }
@@ -615,6 +622,98 @@ fun FileListScreen(
                 }) { Text("创建") }
             },
             dismissButton = { TextButton(onClick = { showNewFolderDialog = false }) { Text("取消") } }
+        )
+    }
+
+    // T-114：重命名对话框（POST /api/files/move，oldPath→parent/新名称；服务端 409=目标已存在）
+    if (renameTarget != null) {
+        AlertDialog(
+            onDismissRequest = { renameTarget = null },
+            icon = { Icon(Icons.Default.Edit, null) },
+            title = { Text("重命名") },
+            text = {
+                OutlinedTextField(
+                    value = renameName,
+                    onValueChange = { renameName = it },
+                    label = { Text("新名称") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val f = renameTarget!!; renameTarget = null
+                    val name = renameName.trim()
+                    if (name.isEmpty() || name == fileName(f.path)) {
+                        // 名称为空或未变更，无需操作
+                    } else {
+                        scope.launch {
+                            // 目标为原路径所在目录 + 新名称（目录无尾斜杠，对齐 T-069 服务端约定）
+                            val parent = f.path.substringBeforeLast("/", "/").ifEmpty { "/" }
+                            val newPath = if (parent == "/") "/$name" else "$parent/$name"
+                            val r = repository.moveFile(f.path, newPath, f.version)
+                            loadFiles()
+                            val msg = when {
+                                r.isSuccess -> "已重命名为「$name」"
+                                r.exceptionOrNull() is FileConflictException ->
+                                    "重命名失败：目标位置已有同名文件"
+                                else -> "重命名失败：${r.exceptionOrNull().toUserMessage()}"
+                            }
+                            snackbarHostState.showSnackbar(msg)
+                        }
+                    }
+                }) { Text("确定") }
+            },
+            dismissButton = { TextButton(onClick = { renameTarget = null }) { Text("取消") } }
+        )
+    }
+
+    // T-114：移动目标目录选择（长按菜单「移动」进入，移动到所选目录）
+    if (moveTarget != null) {
+        val f = moveTarget!!
+        DirectoryPickerDialog(
+            repository = repository,
+            title = "移动「${fileName(f.path)}」到",
+            confirmLabel = "移动到此处",
+            startDir = f.path.substringBeforeLast("/", "/").ifEmpty { "/" },
+            onConfirm = { targetDir ->
+                moveTarget = null
+                val newPath = FileRepository.joinRemotePath(targetDir, fileName(f.path))
+                // 目标即文件所在目录（无需移动），或目录移动到自身/子目录（服务端将 500 回滚，前端先行拦截）
+                val invalidTarget = newPath == f.path ||
+                    (f.type == 1 && newPath.startsWith(f.path.trimEnd('/') + "/"))
+                if (invalidTarget) {
+                    snackbarHostState.showSnackbar("不能移动到当前目录或其子目录")
+                } else {
+                    scope.launch {
+                        val r = repository.moveFile(f.path, newPath, f.version)
+                        loadFiles()
+                        val msg = when {
+                            r.isSuccess -> "已移动到「$targetDir」"
+                            r.exceptionOrNull() is FileConflictException ->
+                                "移动失败：目标位置已有同名文件"
+                            else -> "移动失败：${r.exceptionOrNull().toUserMessage()}"
+                        }
+                        snackbarHostState.showSnackbar(msg)
+                    }
+                }
+            },
+            onDismiss = { moveTarget = null }
+        )
+    }
+
+    // T-114：上传目标目录选择（FAB 上传前先选目录，替代硬编码 /Uploads/）
+    if (showUploadDirPicker) {
+        DirectoryPickerDialog(
+            repository = repository,
+            title = "选择上传目录",
+            confirmLabel = "选择此目录",
+            startDir = currentPath,
+            onConfirm = { dir ->
+                showUploadDirPicker = false
+                onPickUploadTarget?.invoke(dir)
+            },
+            onDismiss = { showUploadDirPicker = false }
         )
     }
 
@@ -1037,11 +1136,12 @@ fun FileListScreen(
             }
         },
         floatingActionButton = {
-            if (onPickFileForUpload != null && !isSelectionMode) {
+            if (onPickUploadTarget != null && !isSelectionMode) {
                 // T-091：上传中 FAB 显示进度指示，且禁止重复点击触发二次上传
                 val isUploading = uploadState is UploadUiState.Uploading
                 FloatingActionButton(
-                    onClick = { if (!isUploading) onPickFileForUpload() }
+                    // T-114：先弹「选择上传目录」对话框，确认后再由宿主启动系统文件选择器
+                    onClick = { if (!isUploading) showUploadDirPicker = true }
                 ) {
                     if (isUploading) {
                         // T-105：大文件分块上传显示确定进度百分比；小文件直传保持不确定进度
@@ -1210,6 +1310,7 @@ fun FileListScreen(
                             // 强制在离线缓存下载完成后重新查询星标状态
                             val _refresh = offlineCacheRefreshFlag
 
+                            Box(modifier = Modifier.fillMaxWidth()) {
                             // FIX 1: 📁🖼️📄⭐☆ → Material Icons
                             ListItem(
                                 leadingContent = {
@@ -1297,10 +1398,8 @@ fun FileListScreen(
                                         }
                                     },
                                     onLongClick = {
-                                        if (!isSelectionMode) {
-                                            isSelectionMode = true
-                                            selectedPaths = setOf(file.path)
-                                        }
+                                        // T-114：长按弹出上下文菜单（移动/重命名/多选），原批量选择改由「多选」进入
+                                        if (!isSelectionMode) contextMenuTarget = file
                                     }
                                 ),
                                 trailingContent = {
@@ -1339,6 +1438,39 @@ fun FileListScreen(
                                     }
                                 }
                             )
+                            // T-114：长按上下文菜单（移动/重命名/多选——多选保留原批量选择能力）
+                            DropdownMenu(
+                                expanded = contextMenuTarget?.path == file.path,
+                                onDismissRequest = { contextMenuTarget = null }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("移动") },
+                                    leadingIcon = { Icon(Icons.Default.DriveFileMove, null) },
+                                    onClick = {
+                                        contextMenuTarget = null
+                                        moveTarget = file
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("重命名") },
+                                    leadingIcon = { Icon(Icons.Default.Edit, null) },
+                                    onClick = {
+                                        contextMenuTarget = null
+                                        renameTarget = file
+                                        renameName = fileName(file.path)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("多选") },
+                                    leadingIcon = { Icon(Icons.Default.CheckBox, null) },
+                                    onClick = {
+                                        contextMenuTarget = null
+                                        isSelectionMode = true
+                                        selectedPaths = setOf(file.path)
+                                    }
+                                )
+                            }
+                            }
                         }
                         // T-059：hasMore 时滚动到底自动加载下一页（nextCursor 增量）
                         if (hasMore) {
@@ -1737,4 +1869,97 @@ private fun PhotoPreview(
             )
         }
     }
+}
+
+// ---- T-114：目录选择对话框（移动目标目录 / 上传目标目录共用） ----
+
+/**
+ * T-114：目录选择对话框——移动目标目录、上传目标目录共用。
+ * 只展示子目录（type==1），点击进入，左上角返回上级，确认按钮以当前目录为选中目标。
+ * 数据来自 getFileTreeInFolder（子树），UI 取 currentDir 的直系子目录。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DirectoryPickerDialog(
+    repository: FileRepository,
+    title: String,
+    confirmLabel: String,
+    startDir: String,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var currentDir by remember { mutableStateOf(startDir) }
+    var dirs by remember { mutableStateOf<List<String>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+
+    suspend fun loadDirs() {
+        loading = true
+        val r = repository.getFileTreeInFolder(currentDir)
+        dirs = r.getOrNull()?.data
+            ?.filter { it.path != currentDir }
+            ?.filter { it.type == 1 && isDirectChild(currentDir, it.path) }
+            ?.map { it.path }
+            ?.sorted() ?: emptyList()
+        loading = false
+    }
+
+    LaunchedEffect(currentDir) { loadDirs() }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.Folder, null) },
+        title = { Text(title) },
+        text = {
+            Column(Modifier.fillMaxWidth()) {
+                // 当前目录 + 返回上级按钮（根目录时隐藏返回）
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (currentDir != "/") {
+                        IconButton(onClick = {
+                            currentDir = currentDir.substringBeforeLast("/", "/").ifEmpty { "/" }
+                        }) { Icon(Icons.Default.ArrowUpward, "返回上级目录") }
+                    }
+                    Text(
+                        currentDir.ifEmpty { "/" },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                Box(Modifier.heightIn(max = 280.dp)) {
+                    when {
+                        loading -> Text("加载中……", modifier = Modifier.padding(16.dp))
+                        dirs.isEmpty() -> Text(
+                            "没有子文件夹",
+                            modifier = Modifier.padding(16.dp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        else -> LazyColumn {
+                            items(dirs) { dir ->
+                                ListItem(
+                                    headlineContent = {
+                                        Text(fileName(dir), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    },
+                                    leadingContent = {
+                                        Icon(
+                                            Icons.Default.Folder, null,
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { currentDir = dir }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(currentDir.ifEmpty { "/" }) }) { Text(confirmLabel) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    )
 }

@@ -7,10 +7,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import com.cloudpan.android.data.ErrorAttribution
 import com.cloudpan.android.data.FileConflictException
 import com.cloudpan.android.data.FileRepository
@@ -27,6 +29,12 @@ import java.io.FileOutputStream
 /** T-089：上传冲突待决信息——保留本地缓存文件，用户选择「覆盖」时强制重传（baseVersion=0）。 */
 private data class UploadConflict(val localFile: File, val remotePath: String)
 
+/** T-114：同名文件待决信息——上传目标已存在时弹「替换/另存」确认，不静默覆盖。 */
+private data class SameNameUpload(val localFile: File, val remotePath: String, val baseVersion: Int)
+
+/** 提取远端路径的文件名（T-114：同名确认弹窗/上传状态展示用，对齐 FileListScreen.fileName 语义）。 */
+private fun remoteFileName(path: String): String = path.trimEnd('/').substringAfterLast('/')
+
 /**
  * T-091：手动上传 UI 状态（上传中 / 成功 / 失败白话归因）。
  * 由 MainActivity 上传流程驱动，FileListScreen 据此显示 FAB 进度指示与结果 Snackbar。
@@ -40,6 +48,8 @@ sealed interface UploadUiState {
 
 /** T-091：手动上传 IO 结果——冲突保留临时文件待弹窗，成功/失败清理临时文件。 */
 private sealed interface UploadOutcome {
+    /** T-114：目标路径已有同名文件——保留临时文件待「替换/另存」弹窗决策。 */
+    data class SameName(val localFile: File, val remotePath: String, val baseVersion: Int) : UploadOutcome
     data class Conflict(val localFile: File, val remotePath: String) : UploadOutcome
     data class Failed(val exception: Throwable?) : UploadOutcome
     object Success : UploadOutcome
@@ -65,6 +75,10 @@ class MainActivity : ComponentActivity() {
             var refreshTrigger by remember { mutableIntStateOf(0) }
             // T-089：上传 409 冲突待决（文件已被其他设备修改）
             var pendingUploadConflict by remember { mutableStateOf<UploadConflict?>(null) }
+            // T-114：上传目标目录（FileListScreen 目录选择器确认后设置，替代硬编码 /Uploads/）
+            var uploadTargetDir by remember { mutableStateOf<String?>(null) }
+            // T-114：同名文件待决（上传目标已存在，弹「替换/另存」确认）
+            var pendingSameNameUpload by remember { mutableStateOf<SameNameUpload?>(null) }
             // T-091：手动上传流程状态（上传中/成功/失败），驱动 FileListScreen 进度指示与结果 Snackbar
             var uploadState by remember { mutableStateOf<UploadUiState?>(null) }
             val scope = rememberCoroutineScope()
@@ -83,7 +97,8 @@ class MainActivity : ComponentActivity() {
                     } catch (e: Exception) { null } ?: "uploaded_file"
 
                     scope.launch {
-                        val remotePath = "/Uploads/$fileName"
+                        // T-114：上传目标目录由 FileListScreen 目录选择器确认（未选择时兜底根目录 "/"），替代硬编码 /Uploads/
+                        val remotePath = FileRepository.joinRemotePath(uploadTargetDir ?: "/", fileName)
                         // T-091：进入上传中状态（FileListScreen 显示 FAB 进度指示）
                         uploadState = UploadUiState.Uploading(fileName)
                         val outcome = withContext(Dispatchers.IO) {
@@ -101,10 +116,13 @@ class MainActivity : ComponentActivity() {
                                         stream.copyTo(output)
                                     }
                                 }
-                                // T-089：先查目标文件当前版本作为 baseVersion，触发服务端 409 并发保护
-                                val baseVersion = repository.resolveBaseVersion(remotePath)
-                                // T-105：大文件分块上传进度反馈（块级回调）；scope.launch 切回主线程更新 Compose 状态
-                                val result = repository.uploadFile(tmpFile, remotePath, baseVersion) { uploaded, total ->
+                                // T-114：先查目标路径当前版本——>0 表示已有同名文件，弹「替换/另存」确认，不静默覆盖
+                                val existingVersion = repository.resolveBaseVersion(remotePath)
+                                if (existingVersion > 0) {
+                                    return@withContext UploadOutcome.SameName(tmpFile, remotePath, existingVersion)
+                                }
+                                // T-089/T-105：分块上传进度反馈（块级回调）；scope.launch 切回主线程更新 Compose 状态
+                                val result = repository.uploadFile(tmpFile, remotePath, existingVersion) { uploaded, total ->
                                     if (total > 0) {
                                         val p = uploaded.toFloat() / total.toFloat()
                                         scope.launch { uploadState = UploadUiState.Uploading(fileName, p) }
@@ -132,6 +150,13 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         when (outcome) {
+                            // T-114：同名文件待决——保留临时文件，弹「替换/另存」确认
+                            is UploadOutcome.SameName -> {
+                                uploadState = null
+                                pendingSameNameUpload = SameNameUpload(
+                                    outcome.localFile, outcome.remotePath, outcome.baseVersion
+                                )
+                            }
                             is UploadOutcome.Conflict ->
                                 pendingUploadConflict = UploadConflict(outcome.localFile, outcome.remotePath)
                             is UploadOutcome.Failed ->
@@ -172,6 +197,82 @@ class MainActivity : ComponentActivity() {
                 )
             }
 
+            // T-114：同名文件确认弹窗（不静默覆盖）——「替换」以 baseVersion=当前版本覆盖；「另存」自动找不冲突新路径
+            pendingSameNameUpload?.let { same ->
+                AlertDialog(
+                    onDismissRequest = {
+                        pendingSameNameUpload = null
+                        scope.launch { withContext(Dispatchers.IO) { same.localFile.delete() } }
+                    },
+                    title = { Text("同名文件已存在") },
+                    text = { Text("「${same.remotePath}」已存在。替换会覆盖原文件，另存会以新名称保存。") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            pendingSameNameUpload = null
+                            scope.launch {
+                                uploadState = UploadUiState.Uploading(remoteFileName(same.remotePath))
+                                val result = withContext(Dispatchers.IO) {
+                                    repository.uploadFile(same.localFile, same.remotePath, same.baseVersion)
+                                }
+                                when {
+                                    // T-089：替换期间被其他设备再次修改 → 保留临时文件，走并发冲突弹窗决策
+                                    result.exceptionOrNull() is FileConflictException ->
+                                        pendingUploadConflict = UploadConflict(same.localFile, same.remotePath)
+                                    result.isFailure -> {
+                                        same.localFile.delete()
+                                        uploadState = UploadUiState.Failed(
+                                            remoteFileName(same.remotePath),
+                                            ErrorAttribution.from(result.exceptionOrNull()).displayText()
+                                        )
+                                    }
+                                    else -> {
+                                        same.localFile.delete()
+                                        uploadState = UploadUiState.Success(remoteFileName(same.remotePath))
+                                        refreshTrigger++
+                                    }
+                                }
+                            }
+                        }) { Text("替换") }
+                    },
+                    dismissButton = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(onClick = {
+                                pendingSameNameUpload = null
+                                scope.launch {
+                                    uploadState = UploadUiState.Uploading(remoteFileName(same.remotePath))
+                                    val altPath = withContext(Dispatchers.IO) {
+                                        repository.findAvailablePath(same.remotePath)
+                                    }
+                                    val result = withContext(Dispatchers.IO) {
+                                        repository.uploadFile(same.localFile, altPath, 0)
+                                    }
+                                    when {
+                                        result.exceptionOrNull() is FileConflictException ->
+                                            pendingUploadConflict = UploadConflict(same.localFile, altPath)
+                                        result.isFailure -> {
+                                            same.localFile.delete()
+                                            uploadState = UploadUiState.Failed(
+                                                remoteFileName(altPath),
+                                                ErrorAttribution.from(result.exceptionOrNull()).displayText()
+                                            )
+                                        }
+                                        else -> {
+                                            same.localFile.delete()
+                                            uploadState = UploadUiState.Success(remoteFileName(altPath))
+                                            refreshTrigger++
+                                        }
+                                    }
+                                }
+                            }) { Text("另存") }
+                            TextButton(onClick = {
+                                pendingSameNameUpload = null
+                                scope.launch { withContext(Dispatchers.IO) { same.localFile.delete() } }
+                            }) { Text("取消") }
+                        }
+                    }
+                )
+            }
+
             if (showFileList) {
                 FileListScreen(
                     repository = repository,
@@ -179,7 +280,10 @@ class MainActivity : ComponentActivity() {
                         showFileList = false
                         repository.invalidateClient()  // 断开HTTP连接池
                     },
-                    onPickFileForUpload = { filePickerLauncher.launch("application/*,image/*,video/*") },
+                    onPickUploadTarget = { dir ->
+                        uploadTargetDir = dir
+                        filePickerLauncher.launch("application/*,image/*,video/*")
+                    },
                     refreshTrigger = refreshTrigger,
                     // T-091：手动上传进度/结果状态，Snackbar 展示后由回调清除
                     uploadState = uploadState,

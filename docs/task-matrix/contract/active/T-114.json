@@ -3,7 +3,7 @@
  "title": "Android moveFile 封装 + 上传目标目录选择 + 同名确认",
  "dimension": "function",
  "priority": "P1",
- "status": "todo",
+ "status": "acceptance",
  "batch": 10,
  "findingId": "F-154",
  "dependsOn": [],
@@ -40,6 +40,6 @@
  ],
  "attempts": 0,
  "statusReason": null,
- "note": null,
- "updatedAt": null
+ "note": "改动文件：CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt（moveFile 封装 + joinRemotePath + findAvailablePath）、MainActivity.kt（上传目标目录 + 同名「替换/另存」确认弹窗 + onPickUploadTarget 回调）、ui/FileListScreen.kt（长按菜单 移动/重命名/多选 + 目录选择器 DirectoryPickerDialog 复用移动/上传）。验证：本机无 Android SDK（local.properties sdk.dir 路径不存在），无法 gradle 编译（AC4 未能自动执行）；已做严格静态自查——python 剥离字符串/注释后括号配平 3 文件均 OK；AC1 grep moveFile/targetDir 匹配；每个非平凡符号追溯 import/成员/同包定义（MoveRequestDto/MoveData/moveFile 生成接口均确认；DriveFileMove/Edit/CheckBox/ArrowUpward 图标经 material-icons-extended 依赖 + filled.* 通配 import；isDirectChild/fileName/toUserMessage/FileConflictException 均同文件或已 import）；/Uploads/ 硬编码与 onPickFileForUpload 旧回调零残留。手动行为断言（AC2/AC3）待真机验证：移动/重命名后服务端 409 目标同名提示、上传目标目录落点、同名替换/另存。",
+ "updatedAt": "2026-08-04"
 }

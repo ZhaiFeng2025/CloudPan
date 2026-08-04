@@ -41,6 +41,15 @@ class FileRepository(private val settings: SettingsStore) {
 
         /** 分块大小（字节）——对齐 shared-spec.json → config.chunkSize（4MB），服务端按块索引 seek 定位。 */
         const val CHUNK_SIZE: Long = 4L * 1024 * 1024
+
+        /**
+         * 拼接远端目标路径（T-114：上传目标目录可选择，替代硬编码 /Uploads/）：
+         * 目录 + 文件名，目录尾斜杠兜底；空目录按根目录 "/" 处理。移动/上传/另存共用。
+         */
+        fun joinRemotePath(targetDir: String, fileName: String): String {
+            val dir = targetDir.trimEnd('/').ifEmpty { "/" }
+            return if (dir == "/") "/$fileName" else "$dir/$fileName"
+        }
     }
 
     private var _api: CloudPanApi? = null
@@ -193,6 +202,25 @@ class FileRepository(private val settings: SettingsStore) {
     }
 
     /**
+     * 移动/重命名文件或文件夹（T-114，POST /api/files/move，接线 CloudPanApi.moveFile）。
+     * baseVersion 为乐观并发基准版本（携带列表 fileEntry.version，对齐 Windows MoveAsync 语义）；
+     * 服务端「目标路径已存在」时返回 409（目标同名，跨设备修改由 version 递增 409 兜底）→
+     * 抛 FileConflictException，由 UI 给出具体提示（改目标目录或改名），不静默覆盖。
+     */
+    suspend fun moveFile(oldPath: String, newPath: String, baseVersion: Int): Result<MoveData> {
+        return safeCall {
+            val r = api().moveFile(MoveRequestDto(oldPath, newPath, baseVersion))
+            if (r.code() == 409) {
+                throw FileConflictException("移动失败：目标位置已有同名文件")
+            }
+            if (!r.isSuccessful) {
+                throw Exception("移动失败: ${r.code()} ${r.message()}")
+            }
+            r.body()?.data ?: throw Exception("移动失败：空响应")
+        }
+    }
+
+    /**
      * 查询目标路径当前版本（上传 baseVersion 用，T-089）。
      * 拉取目标所在文件夹子树查找该路径；文件不存在或查询失败返回 0（baseVersion=0 表示不校验）。
      */
@@ -205,6 +233,25 @@ class FileRepository(private val settings: SettingsStore) {
             } else 0
         } catch (_: Exception) {
             0
+        }
+    }
+
+    /**
+     * 为同名文件计算不冲突的上传路径（T-114「另存」确认）：
+     * 「name.ext」→「name (1).ext」→「name (2).ext」…，逐个查服务端是否已存在，返回首个空闲路径。
+     * 目录解析复用 resolveBaseVersion（查询失败返回 0 视为空闲，与删除/上传 baseVersion=0 语义一致）。
+     */
+    suspend fun findAvailablePath(path: String): String {
+        val dir = path.substringBeforeLast('/', "/").ifEmpty { "/" }
+        val name = path.substringAfterLast('/')
+        val dot = name.lastIndexOf('.')
+        val base = if (dot > 0) name.substring(0, dot) else name
+        val ext = if (dot > 0) name.substring(dot) else ""
+        var i = 1
+        while (true) {
+            val candidate = (if (dir == "/") "/" else "$dir/") + "$base ($i)$ext"
+            if (resolveBaseVersion(candidate) == 0) return candidate
+            i++
         }
     }
 
