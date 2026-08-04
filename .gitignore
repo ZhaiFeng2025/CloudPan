@@ -65,3 +65,6 @@ build.log
 build_full.log
 
 CloudPan.Android/jdk/
+
+# /mission 运行时（wave 中断恢复 checkpoint，gitignore）
+docs/task-matrix/.run/

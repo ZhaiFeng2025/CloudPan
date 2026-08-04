@@ -1,6 +1,7 @@
 # 视觉美化设计知识库（CloudPan）
 
 > 供任务产生者 task-producer 及其 UX/视觉审查子 Agent 使用。聚焦网盘**视觉美化**：配色、字体、间距、层次、状态色、深色模式。与 [ux-kb.md](ux-kb.md)（易用性）、[clouddrive-kb.md](clouddrive-kb.md)（页面/交互）互补——前两者答"好不好用、页面怎么排"，本文件答"好不好看、视觉是否统一专业"。
+> **目标服务**：可被 `goals.json` 的 `goal.kbRef` 引用为 assess 目标判据来源（文件 + §章节）。
 
 ## 1. 设计令牌（Design Tokens，禁止随手取色）
 

@@ -24,6 +24,7 @@ CONTRACT = os.path.join(ROOT, 'docs', 'task-matrix', 'contract')
 META = os.path.join(CONTRACT, 'meta.json')
 GOALS = os.path.join(CONTRACT, 'goals.json')
 HISTORY = os.path.join(CONTRACT, 'history')
+ACTIVE = os.path.join(CONTRACT, 'active')
 INDEX_JSON = os.path.join(CONTRACT, 'tasks-index.json')
 
 
@@ -66,6 +67,19 @@ def main() -> int:
                     hist_goals += 1
             _save(hp, entry)
 
+    # 2.5 active/ 单任务卡补 goalRef（与 history/tasks-index 行为一致）
+    act_goals = 0
+    if os.path.isdir(ACTIVE):
+        for fn in sorted(os.listdir(ACTIVE)):
+            if not fn.endswith('.json'):
+                continue
+            ap = os.path.join(ACTIVE, fn)
+            t = _load(ap)
+            if 'goalRef' not in t:
+                t['goalRef'] = None
+                act_goals += 1
+            _save(ap, t)
+
     # 3. tasks-index.json 行补 goalRef
     idx = _load(INDEX_JSON)
     idx_goals = 0
@@ -82,6 +96,7 @@ def main() -> int:
     print('[OK] 迁移完成（v3 → v4）')
     print(f'  goals.json: 已创建（空目标集）')
     print(f'  history 任务卡补 goalRef: {hist_goals} 条')
+    print(f'  active 卡补 goalRef: {act_goals} 条')
     print(f'  tasks-index 补 goalRef: {idx_goals} 条')
     print('  下一步: 运行 python docs/task-matrix/tools/archive.py --check 校验')
     return 0

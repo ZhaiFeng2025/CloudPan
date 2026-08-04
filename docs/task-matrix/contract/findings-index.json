@@ -1,0 +1,1110 @@
+{
+ "findings": [
+  {
+   "id": "F-01",
+   "dimension": "architecture",
+   "severity": "P0",
+   "title": "普通上传先覆盖文件再存档旧版本，StoreVersionAsync 读到新内容写入 .versions/，版本历史损坏。",
+   "location": "CloudPan.Server.Host/Controllers/FilesController.cs:105-132"
+  },
+  {
+   "id": "F-02",
+   "dimension": "architecture",
+   "severity": "P0",
+   "title": "所有文件类 Controller 直接操作 DbContext/File/手拼路径，违反 R-A3。",
+   "location": "CloudPan.Server.Host/Controllers/{Files,Share,Trash,Versions,Thumbnails,Admin}"
+  },
+  {
+   "id": "F-03",
+   "dimension": "simplicity",
+   "severity": "P0",
+   "title": "客户端手抄 7 个 API 响应 DTO，不用 Generated 类型，形状已漂移。",
+   "location": "CloudPan.Client.Core/Services/ApiClient.cs:455-529"
+  },
+  {
+   "id": "F-04",
+   "dimension": "simplicity",
+   "severity": "P0",
+   "title": "约 15 个 config 键未生成进 SpecConfig，被硬编码重复或零引用。",
+   "location": "shared-spec.json:450-485 vs ContractManifest.g.cs SpecConfig"
+  },
+  {
+   "id": "F-05",
+   "dimension": "function",
+   "severity": "P1",
+   "title": "服务端删除物理移除无墓碑，客户端永远保留本地副本。",
+   "location": "CloudPan.Server.Core/FileIndex/FileIndexService.cs:121-171"
+  },
+  {
+   "id": "F-06",
+   "dimension": "function",
+   "severity": "P1",
+   "title": "上传 BaseVersion 恒为 0，服务端跳过冲突检测，并发编辑静默覆盖。",
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Changes.cs:142-148"
+  },
+  {
+   "id": "F-07",
+   "dimension": "function",
+   "severity": "P1",
+   "title": "ShareDownload 端点不校验过期时间，过期分享仍可下载。",
+   "location": "CloudPan.Server.Host/Controllers/ShareController.cs:177-220"
+  },
+  {
+   "id": "F-08",
+   "dimension": "architecture",
+   "severity": "P1",
+   "title": "服务端与客户端均用 EnsureCreated 无 Migrations，schema 无法演进。",
+   "location": "DatabaseInitializer.cs; CloudPanDbContext.cs; ClientDbContext.cs"
+  },
+  {
+   "id": "F-09",
+   "dimension": "ux",
+   "severity": "P1",
+   "title": "每文件同步状态图标（✓↻!✗☁）完全缺失，只有全局指示灯+日志。",
+   "location": "CloudPan.Client.UI/UI/MainWindow.cs:129-155"
+  },
+  {
+   "id": "F-10",
+   "dimension": "ux",
+   "severity": "P1",
+   "title": "TextMuted 对比度 2.96:1 低于 WCAG 4.5:1，SizeCaption 8.5pt 过小。",
+   "location": "CloudPan.Client.UI/UI/DesignTokens.cs:34,201"
+  },
+  {
+   "id": "F-11",
+   "dimension": "simplicity",
+   "severity": "P1",
+   "title": "两端 DesignTokens 254 行逐字节相同，注释伪称从 spec 生成，实为手工拷贝。",
+   "location": "CloudPan.Server.UI/DesignTokens.cs + CloudPan.Client.UI/UI/DesignTokens.cs"
+  },
+  {
+   "id": "F-12",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "缩略图缓存 key 仅 path+width，文件更新返回旧图；未命中同步解码无队列限流。",
+   "location": "CloudPan.Server.Host/Controllers/ThumbnailsController.cs:56-115"
+  },
+  {
+   "id": "F-13",
+   "dimension": "ux",
+   "severity": "P1",
+   "title": "主窗口为同步状态+日志 ListBox 中心，90% 面积是最近活动日志，无文件浏览/搜索/列表网格切换/上传入口/分享",
+   "location": "CloudPan.Client.UI/UI/MainWindow.cs:107-397"
+  },
+  {
+   "id": "F-14",
+   "dimension": "ux",
+   "severity": "P1",
+   "title": "两端客户端删除均物理删除，服务端 /api/trash 三端点（列表/恢复/清空）存在但无客户端交互，误删照片/文档不可",
+   "location": "CloudPan.Client.UI 本地删除 + CloudPan.Android/FileListScreen.kt:210-258"
+  },
+  {
+   "id": "F-15",
+   "dimension": "architecture",
+   "severity": "P1",
+   "title": "Host 编译期引用 Server.UI 并直接调用其方法，架构测试白名单显式放行 Host→UI；R-Q3 要求 Ho",
+   "location": "CloudPan.Server.Host/CloudPan.Server.Host.csproj:23; Program.cs:127(TrayAppRunner.RunAsync)"
+  },
+  {
+   "id": "F-16",
+   "dimension": "architecture",
+   "severity": "P1",
+   "title": "文件夹/项目已拆四层，但全部代码命名空间仍是旧扁平；grep 全仓仅 3 个文件用新命名空间，无 CloudPan.Co",
+   "location": "全仓命名空间：Contract→CloudPan.Shared、Infrastructure→CloudPan.Server.Data/Models/Services、Server.Core→CloudPan.Server.Services、Server.Host→CloudPan.Server.Controllers、Client.Core→CloudPan.Client.Services"
+  },
+  {
+   "id": "F-17",
+   "dimension": "simplicity",
+   "severity": "P1",
+   "title": "文件 SHA-256 计算三处实现：Infrastructure 标准实现 FileStorageService.Com",
+   "location": "CloudPan.Client.Core/Services/ApiClient.cs:176-182; SyncEngine.Queue.cs:226-233 vs CloudPan.Infrastructure/Storage/FileStorageService.cs:72-77"
+  },
+  {
+   "id": "F-18",
+   "dimension": "ux",
+   "severity": "P1",
+   "title": "分享（创建/撤销/密码/过期）与版本历史（列表/回滚）服务端 API 完整，但 Windows 与 Android 客户",
+   "location": "CloudPan.Client.UI/UI/TrayAppContext.cs:296（仅设置入口）；CloudPan.Android/FileListScreen.kt"
+  },
+  {
+   "id": "F-19",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "SQLite REPLACE(Path,'/a/','/b/') 前缀替换会替换行内所有匹配段，嵌套同名目录重命名后路径",
+   "location": "CloudPan.Server.Core/FileIndex/FileIndexService.cs:196-200"
+  },
+  {
+   "id": "F-20",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "先追加 chunk 到临时文件再更新 ReceivedChunks JSON，两步间崩溃→客户端重发同块→临时文件重复字",
+   "location": "CloudPan.Server.Host/Controllers/FilesController.ChunkedUpload.cs:175-184"
+  },
+  {
+   "id": "F-21",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "DB 事务提交后单独 IOFile.Move 覆盖目标，Move 失败（文件被锁）→索引指向新 hash/version",
+   "location": "CloudPan.Server.Host/Controllers/FilesController.ChunkedUpload.cs:365-374"
+  },
+  {
+   "id": "F-22",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "SpecSettings.Keys/ServerSettingDef 已由 CodeGen 生成，但 SettingsP",
+   "location": "CloudPan.Server.UI/SettingsPage.cs:13-190 vs CloudPan.Contract/Generated/Settings.g.cs; CloudPan.Server.Host/Program.cs:72"
+  },
+  {
+   "id": "F-23",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "FullScanCoreAsync 第 3 步枚举本地文件无 CloudOnly 检查，取消勾选后仍存在的本地文件被当新",
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Scan.cs:347-355"
+  },
+  {
+   "id": "F-24",
+   "dimension": "architecture",
+   "severity": "P2",
+   "title": "MetaFileName 用户输入直接 Path.Combine 入 trashDir（存在路径穿越读取元数据文件可能）",
+   "location": "CloudPan.Server.Host/Controllers/TrashController.cs:68,175-180; FilesController.cs:271-304"
+  },
+  {
+   "id": "F-25",
+   "dimension": "architecture",
+   "severity": "P1",
+   "title": "Token 验证逻辑（ComputeSha256 + CacheKeys.TokenHash 缓存 + db.AppCo",
+   "location": "CloudPan.Server.Host/Middleware/TokenAuthMiddleware.cs:73-84,104-167; CloudPan.Server.Core/WebSocket/WebSocketHandler.cs:106-122,397-427"
+  },
+  {
+   "id": "F-26",
+   "dimension": "architecture",
+   "severity": "P1",
+   "title": "回收站 30 天清理在 Host 组合根里裸手实现：直接 Path.Combine(_syncRoot, \".cloud",
+   "location": "CloudPan.Server.Host/Hosting/BackgroundHostedService.cs:72-115"
+  },
+  {
+   "id": "F-27",
+   "dimension": "architecture",
+   "severity": "P1",
+   "title": "HttpClient 接口 ApiClient/IApiClient 为手工编写，全部路由以魔数字符串硬编码（\"/api",
+   "location": "CloudPan.Client.Core/Services/ApiClient.cs:63-369"
+  },
+  {
+   "id": "F-28",
+   "dimension": "simplicity",
+   "severity": "P1",
+   "title": "行数门禁被制度性架空：IsExcluded 用路径段 \"UI\" 排除了两端 UI 整个项目，而 serviceContr",
+   "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs:11-15,54-58,74-80; CloudPan.Client.UI/UI/MainWindow.cs(2522 行); CloudPan.Client.UI/UI/SetupForm.cs(1023 行)"
+  },
+  {
+   "id": "F-29",
+   "dimension": "simplicity",
+   "severity": "P1",
+   "title": "客户端组合根 Program.cs 534 行，承载配置解析/DPAPI/数据库完整性检查(PRAGMA quick_c",
+   "location": "CloudPan.Client.UI/Program.cs:1-534; CloudPan.Client.UI/CloudPan.Client.UI.csproj:26-27"
+  },
+  {
+   "id": "F-30",
+   "dimension": "simplicity",
+   "severity": "P1",
+   "title": "两端图标文件各 311 行，BuildIcoBytes/RenderBitmap/DrawCloud/DrawBadge",
+   "location": "CloudPan.Server.UI/ServerIcons.cs:1-311 vs CloudPan.Client.UI/UI/CloudPanIcon.cs:1-311"
+  },
+  {
+   "id": "F-31",
+   "dimension": "ux",
+   "severity": "P2",
+   "title": "同步错误透出为原始异常字符串：ErrorOccurred 直接把 HttpRequestException/Aggreg",
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Queue.cs:85,108; CloudPan.Client.UI/UI/MainWindow.cs:676-803"
+  },
+  {
+   "id": "F-32",
+   "dimension": "ux",
+   "severity": "P2",
+   "title": "深色模式完全缺失：全库无 SystemTheme/UISettings 检测、无令牌级 dark 值切换，Windows",
+   "location": "CloudPan.Infrastructure/Design/DesignTokens.cs（浅色组单集）；CloudPan.Client.UI 与 CloudPan.Server.UI 全部窗口"
+  },
+  {
+   "id": "F-33",
+   "dimension": "ux",
+   "severity": "P2",
+   "title": "Windows 文件浏览无任何上传入口（无『上传』按钮、无拖拽 Drop 支持），仅靠 Explorer 复制进同步目录",
+   "location": "CloudPan.Client.UI/UI/FileBrowserView.cs 工具栏（无上传）；CloudPan.Client.UI/UI/MainWindow.cs:1876-1895（OpenFile）"
+  },
+  {
+   "id": "F-34",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "修改同步根后新目录创建全新 DB + 全新 Token；已配置的 Windows 客户端仍指向旧目录且持旧 Token ",
+   "location": "CloudPan.Server.UI/SettingsPage.cs:388-411"
+  },
+  {
+   "id": "F-35",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "UDP 发现响应 serverInfo JSON 硬编码 version=0.2.0，与实际 v1.0.0 发布版本不符",
+   "location": "CloudPan.Server.Host/Hosting/UdpDiscoveryHostedService.cs:29-31"
+  },
+  {
+   "id": "F-36",
+   "dimension": "ux",
+   "severity": "P2",
+   "title": "冲突检测即弹模态 ShowDialog：批量冲突时对话框逐个堆叠（posted 回调在嵌套消息循环中再次 ShowDia",
+   "location": "CloudPan.Client.UI/UI/MainWindow.cs:2033-2190（ShowConflictResolution）; CloudPan.Client.UI/UI/TrayAppContext.cs:113-128"
+  },
+  {
+   "id": "F-37",
+   "dimension": "function",
+   "severity": "P1",
+   "title": "全量扫描把『快照存在但本地无文件』一律入队 Delete，不检查 SyncQueue 是否还有该路径的未决下载项；下载开",
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Scan.cs:217-223,319-331; SyncEngine.Changes.cs:137-144; SyncEngine.Queue.cs:99-121"
+  },
+  {
+   "id": "F-38",
+   "dimension": "function",
+   "severity": "P1",
+   "title": "回收站文件名 = {yyyyMMddHHmmss}_{fileName} 只到秒：两个目录下同名文件同一秒被删除（批量删",
+   "location": "CloudPan.Server.Core/Trash/TrashService.cs:233-257; CloudPan.Server.Core/Files/FileOperationService.cs:75-89"
+  },
+  {
+   "id": "F-39",
+   "dimension": "architecture",
+   "severity": "P1",
+   "title": "Android 两个『契约生成物』头部标注 AUTO-GENERATED from shared-spec.json v",
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/Dtos.kt:1,70; CloudPan.Android/app/src/main/java/com/cloudpan/android/data/CloudPanApi.kt:1"
+  },
+  {
+   "id": "F-40",
+   "dimension": "architecture",
+   "severity": "P1",
+   "title": "全库 25 处控制器以匿名对象 return Ok(new { data = new {...} }) 构造响应，而 s",
+   "location": "CloudPan.Server.Host/Controllers/FilesController.cs:124-134; FilesController.FileOps.cs; FilesController.ChunkedUpload.cs:131-178; HealthController.cs:51-63; AdminController.cs:28-61"
+  },
+  {
+   "id": "F-41",
+   "dimension": "simplicity",
+   "severity": "P1",
+   "title": "T-029 组合根下沉把版本检查死代码原样搬进 ClientBootstrap.QueryServerVersion：手",
+   "location": "CloudPan.Client.Core/Composition/ClientBootstrap.cs:393-419"
+  },
+  {
+   "id": "F-42",
+   "dimension": "simplicity",
+   "severity": "P1",
+   "title": "T-028 只拆 MainWindow/SetupForm，7 个单类仍超 ≤400 判据，CodeQualityTes",
+   "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs; CloudPan.Server.UI/ServerInstaller.cs(935); CloudPan.Client.UI/UI/FileBrowserView.cs(830); CloudPan.Client.UI/UI/SettingsForm.cs(628); CloudPan.Server.UI/ServerWindow.cs(513); CloudPan.Client.UI/UI/TrayAppContext.cs(494); CloudPan.Server.UI/SettingsPage.cs(483); CloudPan.Client.Core/Composition/ClientBootstrap.cs(420)"
+  },
+  {
+   "id": "F-43",
+   "dimension": "simplicity",
+   "severity": "P2",
+   "title": "客户端配置三套并存：ClientConfig（client-config.json 主配置，含旧 config.txt ",
+   "location": "CloudPan.Client.Core/Models/ClientConfig.cs:1-78; CloudPan.Client.Core/Services/SettingsStore.cs:1-75; CloudPan.Client.Core/Models/SyncConfig.cs:1-30; CloudPan.Client.Core/Composition/ClientBootstrap.cs:81,317; CloudPan.Client.UI/UI/TrayAppContext.cs:456,473"
+  },
+  {
+   "id": "F-44",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "备份游标 KEY_LAST_BACKUP 只在单张上传成功时推进（取成功照片最大 DATE_ADDED），照片按日期升序",
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/worker/PhotoBackupWorker.kt:118-148"
+  },
+  {
+   "id": "F-45",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "ProcessQueueAsync 对 _pendingConflicts 中的路径一律 continue（队列项既不处",
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Queue.cs:18-22,55-60"
+  },
+  {
+   "id": "F-46",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "本地新建目录不产生任何服务端条目：EnqueueLocalChangeAsync 中 !File.Exists(full",
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Changes.cs:160-164; SyncEngine.Scan.cs:287-289"
+  },
+  {
+   "id": "F-47",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "SelectiveSyncPanel.SelectedPaths 的 getter 用 CollectChecked 收",
+   "location": "CloudPan.Client.UI/UI/SelectiveSyncPanel.cs:20-24,201-212; CloudPan.Client.Core/Services/SyncEngine.Scan.cs:447-459"
+  },
+  {
+   "id": "F-48",
+   "dimension": "architecture",
+   "severity": "P2",
+   "title": "RateLimitMiddleware 内 static System.Threading.Timer 无任何 Disp",
+   "location": "CloudPan.Server.Host/Middleware/RateLimitMiddleware.cs:14-30,39-51"
+  },
+  {
+   "id": "F-49",
+   "dimension": "function",
+   "severity": "P1",
+   "title": "服务端 SoftDeleteAsync 对目录用 prefix = path.TrimEnd('/') + \"/\" 做 ",
+   "location": "CloudPan.Server.Core/FileIndex/FileIndexService.cs:129-136; CloudPan.Client.Core/Services/SyncEngine.FullScan.cs:100-118; CloudPan.Tests/Server/Services/FileIndexServiceTests.cs:88-109"
+  },
+  {
+   "id": "F-50",
+   "dimension": "ux",
+   "severity": "P1",
+   "title": "Android 删除确认框（FileListScreen.kt:210-228）与批量删除（showBulkDelete",
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt:128-133; ui/FileListScreen.kt:210-258"
+  },
+  {
+   "id": "F-51",
+   "dimension": "simplicity",
+   "severity": "P1",
+   "title": "存档旧版本(StoreVersionAsync) → 添加 VersionRecord → 裁剪超 MaxVersion",
+   "location": "CloudPan.Server.Core/Upload/UploadService.cs:52-76 vs CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.Finalize.cs:86-133"
+  },
+  {
+   "id": "F-52",
+   "dimension": "simplicity",
+   "severity": "P1",
+   "title": "进程执行辅助四处近似重复：RunExe（ArgumentList 安全路径）与 RunCmd（cmd 管道）结构相同（启",
+   "location": "CloudPan.Server.UI/ServerInstaller.Process.cs:13-121; CloudPan.Server.UI/ServiceRestartHelper.cs:69-127"
+  },
+  {
+   "id": "F-53",
+   "dimension": "simplicity",
+   "severity": "P2",
+   "title": "测试连接仍手建 new HttpClient{Timeout=5s} 并拼魔数 \"/{url}/api/health\"，",
+   "location": "CloudPan.Client.UI/UI/SettingsForm.AccountTab.cs:229-271"
+  },
+  {
+   "id": "F-54",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "T-047 排除集语义只拦截下载方向：IsPathSelected 仅在 ApplyRemoteChangesAsync",
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Scan.cs:172,188; SyncEngine.FullScan.cs:92-98,166,178; FileWatcherService.cs:106,111"
+  },
+  {
+   "id": "F-55",
+   "dimension": "architecture",
+   "severity": "P2",
+   "title": "ServerWindow 仍直接注入 IDbContextFactory<CloudPanDbContext> 并在 R",
+   "location": "CloudPan.Server.UI/ServerWindow.cs:23,37; ServerWindow.Data.cs:19"
+  },
+  {
+   "id": "F-56",
+   "dimension": "architecture",
+   "severity": "P2",
+   "title": "FilesController.Upload 内嵌冲突检测业务策略：控制器直接调用 _index.GetByPathAs",
+   "location": "CloudPan.Server.Host/Controllers/FilesController.cs:92-105"
+  },
+  {
+   "id": "F-57",
+   "dimension": "architecture",
+   "severity": "P2",
+   "title": "Server.Core 的 WebSocketHandler 作为 Singleton 服务内置 System.Thre",
+   "location": "CloudPan.Server.Core/WebSocket/WebSocketHandler.Lifecycle.cs:43-96"
+  },
+  {
+   "id": "F-58",
+   "dimension": "simplicity",
+   "severity": "P2",
+   "title": "SpecRoutes.g.cs 已生成全部 HTTP 路由常量且客户端 ApiClient 已引用（T-027），但服务",
+   "location": "CloudPan.Server.Host/Controllers/*.cs（16 处路由字面量）; CloudPan.Server.Host/Program.cs:111; CloudPan.Client.Core/Services/WebSocketClient.cs:51"
+  },
+  {
+   "id": "F-59",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "getFileTree/getFileTreeInFolder 均传 limit=100，FileTreeRespons",
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt:38-48; ui/FileListScreen.kt:159-191"
+  },
+  {
+   "id": "F-60",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "照片备份队头阻塞（T-044 连续段游标的代价）：任何一张照片上传失败即 break 停止连续段，游标只推进到连续成功段",
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/worker/PhotoBackupWorker.kt:167-175,180-182"
+  },
+  {
+   "id": "F-61",
+   "dimension": "architecture",
+   "severity": "P1",
+   "title": "Android 契约物仍为手工维护且已漂移：Dtos.kt/CloudPanApi.kt 头部标注『对齐基线 share",
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/Dtos.kt:1; CloudPan.Android/app/src/main/java/com/cloudpan/android/data/CloudPanApi.kt:1-35"
+  },
+  {
+   "id": "F-62",
+   "dimension": "architecture",
+   "severity": "P1",
+   "title": "客户端持久化实体（SyncQueueItem/RemoteSnapshot/SyncCursorState）在 Clie",
+   "location": "CloudPan.Client.Core/Models/ClientDbContext.cs:53-88; CloudPan.Client.Core/Models/RemoteSnapshot.cs; CloudPan.Client.Core/Models/SyncQueueItem.cs; CloudPan.Client.Core/Models/SyncCursorState.cs"
+  },
+  {
+   "id": "F-63",
+   "dimension": "architecture",
+   "severity": "P2",
+   "title": "delete/move/mkdir 等请求体契约仍无单一事实来源：服务端 Controller 文件内手写 record",
+   "location": "CloudPan.Server.Host/Controllers/FilesController.cs:149-155; CloudPan.Client.Core/Services/ApiClient.cs:197-214; CloudPan.Client.Core/Services/ApiClient.Trash.cs; CloudPan.Client.Core/Services/ApiClient.ShareVersion.cs"
+  },
+  {
+   "id": "F-64",
+   "dimension": "architecture",
+   "severity": "P2",
+   "title": "『单类行数 ≤ 400』门禁以单文件行数判定（MaxLines=400），partial 类按职责拆分后逻辑类聚合体量仍",
+   "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs:11-12,64-75; CloudPan.Client.Core/Services/SyncEngine*.cs（13 partial）; CloudPan.Client.UI/UI/MainWindow*.cs（12 partial）"
+  },
+  {
+   "id": "F-65",
+   "dimension": "architecture",
+   "severity": "P2",
+   "title": "TokenService 仍注入 IServiceProvider 并在 RotateAsync 内 _services",
+   "location": "CloudPan.Server.Core/Configuration/TokenService.cs:30,74; CloudPan.Server.Core/WebSocket/WebSocketHandler.cs:27-33"
+  },
+  {
+   "id": "F-66",
+   "dimension": "architecture",
+   "severity": "P2",
+   "title": "客户端持久化（DbContext + 3 个 EF Migrations + WAL PRAGMA 策略）整体位于 Cl",
+   "location": "CloudPan.Client.Core/Models/ClientDbContext.cs:1-88; CloudPan.Client.Core/Migrations/*.cs"
+  },
+  {
+   "id": "F-67",
+   "dimension": "architecture",
+   "severity": "P2",
+   "title": "spec 版本管理不一致：顶层 version=1.3.0/date=2026-08-03，changelog 中 1.",
+   "location": "shared-spec.json:version/_changelog"
+  },
+  {
+   "id": "F-68",
+   "dimension": "architecture",
+   "severity": "P3",
+   "title": "契约层 CloudPan.Contract 内含两份手工实现的纯逻辑工具：FileHasher（File.OpenRea",
+   "location": "CloudPan.Contract/FileHasher.cs:1-21; CloudPan.Contract/SyncIgnoreParser.cs:1-166"
+  },
+  {
+   "id": "F-69",
+   "dimension": "architecture",
+   "severity": "P3",
+   "title": "Server.UI 编译期引用 Server.Host 以实现 IHostUIBridge（桥契约定义在组合根 Host",
+   "location": "CloudPan.Server.UI/CloudPan.Server.UI.csproj:24-33"
+  },
+  {
+   "id": "F-70",
+   "dimension": "architecture",
+   "severity": "P3",
+   "title": "UI 层直接 new ApiClient(url, token) 构造 Core 传输客户端测连接（绕过 DI 单例装配",
+   "location": "CloudPan.Client.UI/UI/SettingsForm.AccountTab.cs:265,330-399"
+  },
+  {
+   "id": "F-71",
+   "dimension": "architecture",
+   "severity": "P3",
+   "title": "选择性同步的『排除集语义』（勾选树 ↔ 排除路径集互转：ApplySelection/CollectUnchecked/",
+   "location": "CloudPan.Client.UI/UI/SelectiveSyncPanel.cs:196-253"
+  },
+  {
+   "id": "F-72",
+   "dimension": "architecture",
+   "severity": "P3",
+   "title": "UDP 局域网发现协议响应体由手拼字符串构建（\"{\\\"server\\\":\\\"http://\" + host + \":\" ",
+   "location": "CloudPan.Server.Host/Hosting/UdpDiscoveryHostedService.cs:57-59"
+  },
+  {
+   "id": "F-73",
+   "dimension": "architecture",
+   "severity": "P3",
+   "title": "HealthController.PairingPage 在控制器内直接 Path.Combine(syncRoot, ",
+   "location": "CloudPan.Server.Host/Controllers/HealthController.cs:83-99,103-205"
+  },
+  {
+   "id": "F-74",
+   "dimension": "architecture",
+   "severity": "P3",
+   "title": "组合根 ClientBootstrap（392 行）同时承载配置解析/DPAPI/建库重建/完整性检查/健康检查多项职责",
+   "location": "CloudPan.Client.Core/Composition/ClientBootstrap.cs:236-253"
+  },
+  {
+   "id": "F-75",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "分块上传『服务端已收全部块』恢复路径仍返回 version=0：客户端循环对所有块 receivedChunks.Con",
+   "location": "CloudPan.Client.Core/Services/ApiClient.ChunkedUpload.cs:38-46,88-89; CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.cs:159-165,ChunkedUploadService.Finalize.cs:108-128"
+  },
+  {
+   "id": "F-76",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "设置改动（排除集/限速）只落盘、需重启客户端才生效：TrayAppContext.OpenSettings 仅 `cfg",
+   "location": "CloudPan.Client.UI/UI/TrayAppContext.Actions.cs:81-84; CloudPan.Client.Core/Services/SyncEngine.cs:135; CloudPan.Client.Core/Services/ApiClient.cs:41-42"
+  },
+  {
+   "id": "F-77",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "目录重命名只更新目录自身快照：ProcessRenameAsync 对目录重命名仅调服务端 Move + 移除旧目录快照",
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Transfers.cs:324-354; CloudPan.Client.Core/Services/SyncEngine.FullScan.cs:125-154"
+  },
+  {
+   "id": "F-78",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "Android 新建文件夹把尾斜杠写入服务端索引：FileListScreen 新建目录 `currentPath + ",
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt:380; CloudPan.Server.Core/Files/FileOperationService.cs:170-200; CloudPan.Server.Core/FileIndex/FileIndexService.cs:234-272"
+  },
+  {
+   "id": "F-79",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "版本回滚『DB 先提交、FS 后 Move』且 Move 失败不回滚索引：RestoreAsync 步骤 4 提交 DB",
+   "location": "CloudPan.Server.Core/Versions/VersionHistoryService.cs:106-147; CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.Finalize.cs:108-128,144-191"
+  },
+  {
+   "id": "F-80",
+   "dimension": "function",
+   "severity": "P3",
+   "title": "ProcessDeleteAsync 只对 404 容错（视为已删除继续删本地），对 409（删除时该文件恰被其他设备修",
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Transfers.cs:292-321"
+  },
+  {
+   "id": "F-81",
+   "dimension": "function",
+   "severity": "P3",
+   "title": "重命名目标路径已存在（本地 File.Move 覆盖，或跨设备同名目录碰撞）时：FileOperationService",
+   "location": "CloudPan.Server.Core/FileIndex/FileIndexService.cs:194-229; CloudPan.Server.Core/Files/FileOperationService.cs:112-167; CloudPan.Client.Core/Services/SyncEngine.Transfers.cs:324-354"
+  },
+  {
+   "id": "F-82",
+   "dimension": "function",
+   "severity": "P3",
+   "title": "磁盘空间前置检查只在 `item.FileSize.HasValue && > 50MB` 时触发（Transfers.",
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Transfers.cs:173-187,357-369; CloudPan.Client.Core/Services/SyncEngine.Conflicts.cs:53-58,91-96"
+  },
+  {
+   "id": "F-83",
+   "dimension": "function",
+   "severity": "P3",
+   "title": "KeepBoth 冲突解决把本地文件备份为 `{path}.conflict.{yyyyMMddHHmmss}`（Con",
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Conflicts.cs:62-99; CloudPan.Contract/SyncIgnoreParser.cs:13-22; CloudPan.Server.Core/Files/FileOperationService.cs:250"
+  },
+  {
+   "id": "F-84",
+   "dimension": "function",
+   "severity": "P3",
+   "title": "文件浏览主视图每 5 秒全量刷新：GetFileBrowserAsync 每次 db.RemoteSnapshots.T",
+   "location": "CloudPan.Client.UI/UI/MainWindow.cs:111; CloudPan.Client.Core/Services/SyncEngine.Browse.cs:51,63"
+  },
+  {
+   "id": "F-85",
+   "dimension": "function",
+   "severity": "P3",
+   "title": "DeleteForTrashAsync 删除目录时只清本地快照（RemoveRange 快照，81-93 行），未按路径",
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Trash.cs:81-93"
+  },
+  {
+   "id": "F-86",
+   "dimension": "function",
+   "severity": "P3",
+   "title": "回收站恢复时目标路径已存在（删除后同一路径被重新上传/重建，墓碑已被新上传 revive 为 Synced）场景无收敛路",
+   "location": "CloudPan.Server.Core/Trash/TrashService.cs:126-154"
+  },
+  {
+   "id": "F-87",
+   "dimension": "function",
+   "severity": "P3",
+   "title": "Android 删除请求 baseVersion 恒为 0（`mapOf(\"path\" to path, \"baseVe",
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt:149-165"
+  },
+  {
+   "id": "F-88",
+   "dimension": "simplicity",
+   "severity": "P2",
+   "title": "『冲突副本保存』编排仍是双份：冲突检测(baseVersion>0 && existing.Version>baseVe",
+   "location": "CloudPan.Server.Core/Files/FileOperationService.cs:241-277(HandleUploadConflictAsync) vs CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.Finalize.cs:44-84"
+  },
+  {
+   "id": "F-89",
+   "dimension": "simplicity",
+   "severity": "P2",
+   "title": "『测试连接失败白话归因』在 UI 层重写了一遍 ErrorAttribution.FromException：Class",
+   "location": "CloudPan.Client.UI/UI/SettingsForm.AccountTab.cs:289-323(ClassifyTestError+Flatten) vs CloudPan.Client.Core/Services/ErrorAttribution.cs:36-96"
+  },
+  {
+   "id": "F-90",
+   "dimension": "simplicity",
+   "severity": "P2",
+   "title": "深色模式主题跟随器仍双份：全库两文件仅命名空间与一行注释不同（归一化 diff 仅 2 行差异），143 行 Syste",
+   "location": "CloudPan.Client.UI/UI/ThemeWatcher.cs:1-144 vs CloudPan.Server.UI/ThemeWatcher.cs:1-145"
+  },
+  {
+   "id": "F-91",
+   "dimension": "simplicity",
+   "severity": "P2",
+   "title": "T-011 收敛为单一实现后死令牌仍未清理：阴影预设、多余圆角、时长、Opacity 等效果令牌在 DesignToke",
+   "location": "CloudPan.Infrastructure/Design/DesignTokens.Effects.cs:34-64(ShadowInfo/ShadowSm/Md/Lg、CornerRadiusNone/Sm/Lg/Round、DurationInstant/Fast/Slow/Emphasis、Opacity) 0 引用; DesignTokens.cs CloudPanColors 8 色(InfoBlue/TextLink/BorderFocus/BackgroundHover/BackgroundOverlay/SeparatorGray/DisabledBg/DisabledText) 0 引用; DesignTokens.Fonts.cs FontSpec+8 预设 0 引用"
+  },
+  {
+   "id": "F-92",
+   "dimension": "simplicity",
+   "severity": "P2",
+   "title": "重连退避序列 ReconnectDelays = {1000,2000,...,60000} 仍手写，未接线 SpecC",
+   "location": "CloudPan.Client.Core/Services/WebSocketClient.cs:33,140-141"
+  },
+  {
+   "id": "F-93",
+   "dimension": "simplicity",
+   "severity": "P3",
+   "title": "同一 SpecRoutes.Health 端点暴露两个方法：HealthCheckAsync（吞异常返回 bool，后台",
+   "location": "CloudPan.Client.Core/Services/ApiClient.cs:59-85(HealthCheckAsync vs EnsureHealthAsync)"
+  },
+  {
+   "id": "F-94",
+   "dimension": "simplicity",
+   "severity": "P3",
+   "title": "T-017 把哈希计算收敛为 FileHasher 单一实现，但 FileHasher 仍放在 Contract 层（实",
+   "location": "CloudPan.Contract/FileHasher.cs:1-20; CloudPan.Infrastructure/Storage/IFileStorageService.cs:10, FileStorageService.cs:73-74"
+  },
+  {
+   "id": "F-95",
+   "dimension": "simplicity",
+   "severity": "P3",
+   "title": "为 headless 支持仍保留运行时程序集探测 + 反射 Activator.CreateInstance 加载 UI",
+   "location": "CloudPan.Server.Host/Hosting/UIBridgeLocator.cs:11-38; IHostUIBridge.cs; TrayAppRunner.cs:18-29; CloudPan.Server.UI/ServerUiBridge.cs:14-20"
+  },
+  {
+   "id": "F-96",
+   "dimension": "simplicity",
+   "severity": "P3",
+   "title": "Serilog 启动装配仍双份：客户端在 ClientBootstrap.InitializeLogging 手写 Lo",
+   "location": "CloudPan.Client.Core/Composition/ClientBootstrap.cs:290-311 vs CloudPan.Server.Host/Program.cs:37-48; CloudPan.Client.Core/CloudPan.Client.Core.csproj:28 vs CloudPan.Server.UI/CloudPan.Server.UI.csproj:36"
+  },
+  {
+   "id": "F-97",
+   "dimension": "simplicity",
+   "severity": "P3",
+   "title": "应用版本字面量 \"1.0.0\"/\"v1.0.0\" 在 5 处硬编码（HealthController 的 Health/",
+   "location": "CloudPan.Server.Host/Controllers/HealthController.cs:53,69-70; CloudPan.Server.Host/Program.cs:135; CloudPan.Server.UI/ServerWindow.cs:61; CloudPan.Client.UI/UI/TrayAppContext.Menu.cs:78"
+  },
+  {
+   "id": "F-98",
+   "dimension": "simplicity",
+   "severity": "P3",
+   "title": "Android v1.0 原型中单文件 Compose 屏超过 400 行判据且持续增长：FileListScreen.",
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt:1-1112; SettingsScreen.kt:1-558; worker/PhotoBackupWorker.kt:1-506"
+  },
+  {
+   "id": "F-99",
+   "dimension": "simplicity",
+   "severity": "P3",
+   "title": "配对帮助页（/pair）把约 100 行裸 HTML+CSS 以 raw string 内嵌在 Controller 方",
+   "location": "CloudPan.Server.Host/Controllers/HealthController.cs:103-204"
+  },
+  {
+   "id": "F-100",
+   "dimension": "ux",
+   "severity": "P2",
+   "title": "Windows 文件列表仍不支持多选批量操作：ListView 未设置 MultiSelect=true/CheckBo",
+   "location": "CloudPan.Client.UI/UI/FileBrowserView.cs:304-320（ListView 初始化，未启用 MultiSelect/CheckBoxes）与 FileBrowserView.Events.cs:92、130（SelectedItems[0] 仅取单选）"
+  },
+  {
+   "id": "F-101",
+   "dimension": "ux",
+   "severity": "P2",
+   "title": "设置变更仍需重启生效：限速（UploadLimitBps/DownloadLimitBps）在 ClientBootst",
+   "location": "CloudPan.Client.UI/UI/SettingsForm.cs:79（saveHint「Token 修改需重启客户端后生效」）与 TrayAppContext.Actions.cs:82-84（「部分更改需要重启客户端后生效」弹窗）；ClientBootstrap.cs:323-324（限速固化于启动装配）"
+  },
+  {
+   "id": "F-102",
+   "dimension": "ux",
+   "severity": "P2",
+   "title": "首次配置 Token 仍是手动跨设备复制 64 位十六进制：UDP 搜索只自动填服务端地址、不自动填 Token；无二维",
+   "location": "CloudPan.Client.UI/UI/SetupForm.cs:108-117（_tokenHintLabel「在台式机上右键托盘图标 → 复制 Token，然后粘贴到上方」）与 SetupForm.Discovery.cs:55-60（UDP 搜索仅填服务端地址，不填 Token）"
+  },
+  {
+   "id": "F-103",
+   "dimension": "ux",
+   "severity": "P2",
+   "title": "版本历史对话框「设备」列仍直接展示原始 DeviceId（Windows 端为 32 位 GUID hex 字符串），未",
+   "location": "CloudPan.Client.UI/UI/MainWindow.Versions.cs:95（lvi.SubItems.Add(v.DeviceId)）"
+  },
+  {
+   "id": "F-104",
+   "dimension": "ux",
+   "severity": "P2",
+   "title": "分享接收页仍是散落字符串拼接的裸 HTML：仅文件名+大小+下载按钮，无图片/文档在线预览、无文件类型图标、无手机端排版",
+   "location": "CloudPan.Server.Host/Controllers/ShareController.cs:105-140（/share/{id} 主页与密码/错误页）"
+  },
+  {
+   "id": "F-105",
+   "dimension": "ux",
+   "severity": "P2",
+   "title": "设备列表右键菜单「查看详情」「强制断开」点击后弹出「功能开发中」占位对话框——未完成功能暴露为可点菜单，点击即死端，无禁",
+   "location": "CloudPan.Server.UI/ServerWindow.cs:91-109（设备列表右键菜单「查看详情」「强制断开」）"
+  },
+  {
+   "id": "F-106",
+   "dimension": "ux",
+   "severity": "P2",
+   "title": "托盘菜单「分享当前文件…」「版本历史…」恒为可点状态，但无选中文件时点击只显示主窗并把「请先在文件浏览中选中一个文件…」",
+   "location": "CloudPan.Client.UI/UI/TrayAppContext.Menu.cs:52-61 与 MainWindow.Share.cs:302-307、MainWindow.Versions.cs:186-193"
+  },
+  {
+   "id": "F-107",
+   "dimension": "ux",
+   "severity": "P2",
+   "title": "Android 上传仍为单文件 GetContent picker，无批量/队列/暂停/进度（选中即阻塞下载当前文件）；",
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/MainActivity.kt:43-68（单文件 GetContent 上传）与 FileListScreen.kt:651-730（无底部导航/照片墙）"
+  },
+  {
+   "id": "F-108",
+   "dimension": "ux",
+   "severity": "P3",
+   "title": "Android 文件列表不渲染每文件同步状态图标：FileEntryDto.state 已从 /api/tree 拉取（",
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt:850-920（ListItem 渲染）与 Dtos.kt:17（state 字段已存在但未使用）"
+  },
+  {
+   "id": "F-109",
+   "dimension": "ux",
+   "severity": "P3",
+   "title": "错误列表/冲突解决/回收站/分享/版本历史/冲突聚合对话框均动态 new Form 且未调用 ThemeWatcher.",
+   "location": "CloudPan.Client.UI/UI/MainWindow.Errors.cs:83、MainWindow.Conflicts.cs:78、MainWindow.Trash.cs:103、MainWindow.Share.cs:39、MainWindow.Versions.cs:37、MainWindow.ConflictDialog.cs:23（全部动态 new Form）"
+  },
+  {
+   "id": "F-110",
+   "dimension": "ux",
+   "severity": "P3",
+   "title": "文件浏览每 5 秒刷新一次，GetFileBrowserAsync 在每个首次 await 可能同步完成的 SQLite",
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Browse.cs:63（Directory.EnumerateFileSystemEntries(..., SearchOption.AllDirectories) 全树枚举 + RemoteSnapshots/SyncQueue 全表加载）与 MainWindow.Browser.cs:28-46（5 秒定时刷新）"
+  },
+  {
+   "id": "F-111",
+   "dimension": "ux",
+   "severity": "P3",
+   "title": "浅色主题状态色对比度不达标：SuccessGreen(76,175,80)≈2.78:1、WarningOrange(2",
+   "location": "CloudPan.Infrastructure/Design/DesignTokens.cs:183-185 与 FileBrowserView.List.cs:118-135（状态字形色）"
+  },
+  {
+   "id": "F-112",
+   "dimension": "ux",
+   "severity": "P3",
+   "title": "Windows 文件列表缺「修改时间」列与排序（clouddrive-kb §1 要求名称/时间/大小）；空状态文案已过",
+   "location": "CloudPan.Client.UI/UI/FileBrowserView.cs:294-296（排序下拉仅 名称/大小/类型）、318-320（列仅 状态/名称/大小/类型）与 FileBrowserView.List.cs:52（空状态文案「此文件夹为空 将文件放入同步目录即可自动同步」）"
+  },
+  {
+   "id": "F-113",
+   "dimension": "ux",
+   "severity": "P3",
+   "title": "网格视图仍用通用文件夹/文件自绘字形，无图片缩略图（服务端 /api/thumbnails 存在但 Win 端未接入）；",
+   "location": "CloudPan.Client.UI/UI/FileBrowserView.cs:307-309（View.Details/LargeIcon 切换）与 MainWindow.Trash.cs:113-118（回收站列）"
+  },
+  {
+   "id": "F-114",
+   "dimension": "ux",
+   "severity": "P3",
+   "title": "服务端设备列表「同步文件数」列恒为硬编码 \"-\" 占位，未查询真实数据（AdminStatsResponse 有 fil",
+   "location": "CloudPan.Server.UI/ServerWindow.Data.cs:47（item.SubItems.Add(\"-\") 同步文件数占位）"
+  },
+  {
+   "id": "F-115",
+   "dimension": "function",
+   "severity": "P1",
+   "title": "限速流在配额耗尽/首次调用时返回 0，被 CopyToAsync 当作 EOF 提前终止→限速下载/上传被截断。Read",
+   "location": "CloudPan.Client.Core/Services/ApiClient.ThrottledStream.cs:44-76,78-92"
+  },
+  {
+   "id": "F-116",
+   "dimension": "function",
+   "severity": "P1",
+   "title": "选择性同步排除集目录树从未被加载：LoadFromPaths 定义了方法（115 行）但全库无任何调用点；BuildSy",
+   "location": "CloudPan.Client.UI/UI/SelectiveSyncPanel.cs:115,196-232; CloudPan.Client.UI/UI/SettingsForm.SyncTab.cs:10-21"
+  },
+  {
+   "id": "F-117",
+   "dimension": "ux",
+   "severity": "P1",
+   "title": "设置里修改『服务端地址』或『同步文件夹』后，保存块只更新 cfg 持久化 + 限速下发 + 排除集热更新，Program",
+   "location": "CloudPan.Client.UI/UI/TrayAppContext.Actions.cs:71-91（OpenSettings 保存块）; SettingsForm.cs:79（saveHint『Token 修改需重启客户端后生效』）"
+  },
+  {
+   "id": "F-118",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "分块上传崩溃恢复在 Finalize 完成（record 已移除）后返回 Found=false，客户端整文件重传并可能",
+   "location": "CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.cs:183-199; CloudPan.Client.Core/Services/ApiClient.ChunkedUpload.cs:33-46,88-92"
+  },
+  {
+   "id": "F-119",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "重命名目标路径已存在时无收敛路径：MoveAsync 未先检测 newPath 是否存在，FileIndexServic",
+   "location": "CloudPan.Server.Core/Files/FileOperationService.cs:115-170; CloudPan.Server.Core/FileIndex/FileIndexService.cs:194-229"
+  },
+  {
+   "id": "F-120",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "回收站恢复目标路径已存在无收敛路径：RestoreAsync 直接 File.Move(trashFile, targe",
+   "location": "CloudPan.Server.Core/Trash/TrashService.cs:126-154; CloudPan.Client.Core/Services/SyncManageService.cs:46-59"
+  },
+  {
+   "id": "F-121",
+   "dimension": "simplicity",
+   "severity": "P2",
+   "title": "深色模式主题跟随器仍双份：全库两文件仅命名空间与一行注释不同，143 行 SystemEvents 监听器在两端 UI ",
+   "location": "CloudPan.Client.UI/UI/ThemeWatcher.cs:1-144; CloudPan.Server.UI/ThemeWatcher.cs:1-145"
+  },
+  {
+   "id": "F-122",
+   "dimension": "simplicity",
+   "severity": "P2",
+   "title": "T-011 收敛为单一实现后死令牌仍未清理：阴影预设（ShadowSm/Md/Lg/Xl/Elevated）、大部分圆角",
+   "location": "CloudPan.Infrastructure/Design/DesignTokens.Effects.cs:31-64; DesignTokens.cs; DesignTokens.Fonts.cs"
+  },
+  {
+   "id": "F-123",
+   "dimension": "architecture",
+   "severity": "P2",
+   "title": "T-070 把『单类 ≤400』门禁改成按 public 类型聚合统计，但收尾却是把最大的类型登记进 Documente",
+   "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs:75-96(DocumentedTypeCeilings) vs CloudPan.Client.Core/Services/SyncEngine*.cs(聚合 2223 行) 与 CloudPan.Client.UI/UI/MainWindow*.cs(聚合 2548 行)"
+  },
+  {
+   "id": "F-124",
+   "dimension": "architecture",
+   "severity": "P2",
+   "title": "spec 版本治理部分修复：顶层 version=1.6.0 已等于最新 changelog 条目，但 changelo",
+   "location": "shared-spec.json:_changelog（version=1.6.0）"
+  },
+  {
+   "id": "F-125",
+   "dimension": "ux",
+   "severity": "P2",
+   "title": "Windows 文件列表仍无多选批量操作：ListView 单选，所有动作（删除/分享/版本/下载）只作用于第一个选中项",
+   "location": "CloudPan.Client.UI/UI/FileBrowserView.cs:304-320（ListView 未设 MultiSelect/CheckBoxes）; FileBrowserView.Events.cs:90-96（SelectedItems[0] 仅取单选）; 工具栏（204-282 无批量入口、无右键菜单）"
+  },
+  {
+   "id": "F-126",
+   "dimension": "function",
+   "severity": "P3",
+   "title": "ProcessDeleteAsync 只对 404 容错（视为已删），对 409（删除时该文件恰被其他设备修改/上传，服",
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Transfers.cs:292-321"
+  },
+  {
+   "id": "F-127",
+   "dimension": "architecture",
+   "severity": "P1",
+   "title": "客户端没有与服务器对等的『路径安全统一防线』：SyncPath.ToLocalPath 直接 Path.Combine(",
+   "location": "CloudPan.Client.Core/Services/SyncPath.cs:43-47; SyncEngine.Changes.cs:176; SyncEngine.FullScan.cs:302; FileWatcherService.cs:198-216"
+  },
+  {
+   "id": "F-128",
+   "dimension": "architecture",
+   "severity": "P1",
+   "title": "规则 0（最高优先级）要求『HttpClient 接口：C# ApiClient、Kotlin Retrofit int",
+   "location": "CloudPan.Client.Core/Services/IApiClient.cs + ApiClient*.cs（601 行）; CloudPan.Android/app/src/main/java/com/cloudpan/android/data/CloudPanApi.kt:1-12; CloudPan.CodeGen/Program.cs（generators 字典仅输出 SpecRoutes/DTO）"
+  },
+  {
+   "id": "F-129",
+   "dimension": "function",
+   "severity": "P1",
+   "title": "『缩略图』作为 v1.0 声明功能在服务端完整实现（解码/缩放/缓存/并发门/缓存 key），但 Windows 与 A",
+   "location": "CloudPan.Server.Core/Thumbnails/ThumbnailService.cs:34-169; CloudPan.Server.Host/Controllers/ThumbnailsController.cs:31-46; CloudPan.Client.UI/UI/FileBrowseRender.cs:50（无任何客户端调用 /api/thumbnails）"
+  },
+  {
+   "id": "F-130",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "版本存档物理文件（.cloudpan/.versions/）与缩略图缓存（.cloudpan/.thumbnails/）",
+   "location": "CloudPan.Server.Core/Versions/VersionCommitHelper.cs:82-91; FileIndex/FileIndexService.cs:166-188; Thumbnails/ThumbnailService.cs:136-169; CloudPan.Server.Host/Hosting/BackgroundHostedService.cs:15-44"
+  },
+  {
+   "id": "F-131",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "Android 端所有写操作 baseVersion 恒为 0：删除请求 mapOf(path, baseVersion",
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt:151,222; worker/PhotoBackupWorker.kt:369"
+  },
+  {
+   "id": "F-132",
+   "dimension": "architecture",
+   "severity": "P2",
+   "title": "规则 8.5 要求所有路径→绝对路径转换必须经 ValidatePath，但 FileStorageService.Ge",
+   "location": "CloudPan.Infrastructure/Storage/FileStorageService.cs:28-33,80-134; CloudPan.Server.Core/Upload/UploadService.cs:69; CloudPan.Server.Host/Controllers/FilesController.cs:84,90"
+  },
+  {
+   "id": "F-133",
+   "dimension": "ux",
+   "severity": "P2",
+   "title": "Android 端所有失败反馈直接透出底层异常英文原文（连接失败: ${exceptionOrNull()?.messa",
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/SettingsScreen.kt:232-233; FileListScreen.kt:187/205/237/300/446/577/583; MainActivity.kt:55-66; worker/PhotoBackupWorker.kt:206/240"
+  },
+  {
+   "id": "F-134",
+   "dimension": "ux",
+   "severity": "P2",
+   "title": "T-083 后 Windows 批量删除落地，但无确认对话框：选中多项点「批量删除」立即全部移入回收站，仅底部 5 秒撤",
+   "location": "CloudPan.Client.UI/UI/MainWindow.Trash.cs:26-63（批量删除无确认对话框，直接逐项进回收站+5 秒撤销条）；对比 CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt:310-360（有确认对话框）"
+  },
+  {
+   "id": "F-135",
+   "dimension": "architecture",
+   "severity": "P2",
+   "title": "T-068 已将 ClientDbContext/实体/迁移下沉 Infrastructure，但 Client.Cor",
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Changes.cs:3,53,71; SyncEngine.Conflicts.cs:3,27; SyncBrowseService.cs:60-263"
+  },
+  {
+   "id": "F-136",
+   "dimension": "ux",
+   "severity": "P2",
+   "title": "回收站「恢复」失败无可见可操作反馈：Windows 端恢复失败只写 AddLog 到默认折叠的日志侧栏——用户点「恢复选",
+   "location": "CloudPan.Client.UI/UI/MainWindow.Trash.cs:263-275（恢复失败仅 AddLog 到默认折叠日志侧栏）；CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt:1099（仅『恢复失败，请稍后重试』）"
+  },
+  {
+   "id": "F-137",
+   "dimension": "simplicity",
+   "severity": "P2",
+   "title": "『测试连接失败白话归因』仍在 UI 层重写一套 ErrorAttribution：ClassifyTestError 递",
+   "location": "CloudPan.Client.UI/UI/SettingsForm.AccountTab.cs:289-323(ClassifyTestError+Flatten) 与 382-399([Obsolete]GetFolderSize)"
+  },
+  {
+   "id": "F-138",
+   "dimension": "simplicity",
+   "severity": "P2",
+   "title": "Serilog 启动装配仍双份：客户端在 ClientBootstrap.InitializeLogging 手写 Lo",
+   "location": "CloudPan.Client.Core/Composition/ClientBootstrap.cs:293-311(InitializeLogging) vs CloudPan.Server.Host/Program.cs:37-48；CloudPan.Client.Core/CloudPan.Client.Core.csproj:28-31 vs CloudPan.Server.UI/CloudPan.Server.UI.csproj:36"
+  },
+  {
+   "id": "F-139",
+   "dimension": "architecture",
+   "severity": "P1",
+   "title": "T-086 把 C# IApiClient 与 Kotlin Retrofit 签名契约化生成后，T-087 新增的缩略",
+   "location": "shared-spec.json:580（/api/thumbnails 无 clientMethod 段）；CloudPan.Contract/IApiClient.Thumbnails.cs:14-16；CloudPan.Client.Core/Services/ApiClient.cs:76；CloudPan.Android/.../data/Generated/CloudPanApi.g.kt（全缺）"
+  },
+  {
+   "id": "F-140",
+   "dimension": "function",
+   "severity": "P1",
+   "title": "T-084 把删除 409 转入 _pendingConflicts 冲突流程，但 Windows 冲突解决对话框只有『",
+   "location": "CloudPan.Client.UI/UI/ConflictResolutionDialog.cs:86-139；CloudPan.Client.Core/Services/SyncEngine.Conflicts.cs:107-123"
+  },
+  {
+   "id": "F-141",
+   "dimension": "architecture",
+   "severity": "P2",
+   "title": "豁免测试『所有public类型_聚合行数不超上限』只校验 Ceiling(2200)、『豁免表_持续下降约束』只校验 T",
+   "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs:139-156,162-207；豁免登记 :102-103；SyncEngine 聚合 2123 行（上限 2200，目标 2050）；MainWindow 聚合 2424 行（上限 2500）"
+  },
+  {
+   "id": "F-142",
+   "dimension": "architecture",
+   "severity": "P2",
+   "title": "CloudPan.Contract 作为『契约层 = spec 生成物 + 传输协议抽象』，却包含两个非生成的手工实现：",
+   "location": "CloudPan.Contract/FileHasher.cs:1；CloudPan.Contract/SyncIgnoreParser.cs:1（非 Generated 目录手工逻辑）；CloudPan.Infrastructure/Storage/IFileStorageService.cs:10；FileStorageService.cs:96"
+  },
+  {
+   "id": "F-143",
+   "dimension": "architecture",
+   "severity": "P2",
+   "title": "元数据目录路径有两套并存且互不相通：FileStorageService 构造时创建中央 {syncRoot}/.clo",
+   "location": "CloudPan.Server.Core/Thumbnails/ThumbnailService.cs:245-249；CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.cs:93-97；CloudPan.Infrastructure/Storage/FileStorageService.cs:13,20-22"
+  },
+  {
+   "id": "F-144",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "ThumbnailService.SupportedExts 不含 HEIC/HEIF。iPhone/现代 Androi",
+   "location": "CloudPan.Server.Core/Thumbnails/ThumbnailService.cs:13-16（SupportedExts 仅 jpg/jpeg/png/gif/bmp/webp）"
+  },
+  {
+   "id": "F-145",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "MoveAsync 只更新 FileEntry.Path，VersionRecords 仍挂旧 FilePath。重命名",
+   "location": "CloudPan.Server.Core/Files/FileOperationService.cs:115-180；CloudPan.Server.Core/Versions/VersionHistoryService.cs:38-48"
+  },
+  {
+   "id": "F-146",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "ThumbnailLoader 把缩略图缓存写到 %LocalAppData%\\CloudPan\\thumbnails，",
+   "location": "CloudPan.Client.UI/UI/ThumbnailLoader.cs:175-184"
+  },
+  {
+   "id": "F-147",
+   "dimension": "function",
+   "severity": "P2",
+   "title": "Android 手动上传与照片备份都走普通 multipart 端点，服务端 MultipartBodyLengthLi",
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt:253-282；worker/PhotoBackupWorker.kt:365-390；CloudPan.Server.Host/Program.cs:86-89"
+  },
+  {
+   "id": "F-148",
+   "dimension": "ux",
+   "severity": "P2",
+   "title": "Windows 端仍有 6 处把底层异常原文直接弹给家庭用户：分享『生成失败: {ex.Message}』『复制失败: ",
+   "location": "CloudPan.Client.UI/UI/MainWindow.Share.cs:239/257/288、MainWindow.Versions.cs:169、MainWindow.Status.cs:233、StartupFlow.cs:15-16"
+  },
+  {
+   "id": "F-149",
+   "dimension": "ux",
+   "severity": "P2",
+   "title": "/api/tree 已返回每个文件的 state（Synced/CloudOnly/Conflict/Deleting ",
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt:962-1006；data/Generated/Dtos.g.kt:120（FileEntryDto.state 已生成未使用）"
+  },
+  {
+   "id": "F-150",
+   "dimension": "ux",
+   "severity": "P2",
+   "title": "文件浏览每 5 秒刷新一次：GetFileBrowserAsync 在 await 后回到 UI 线程同步执行同步根全树",
+   "location": "CloudPan.Client.Core/Services/SyncBrowseService.cs:88（Directory.EnumerateFileSystemEntries AllDirectories）；CloudPan.Client.UI/UI/MainWindow.Browser.cs:113（browserRefreshTimer 5000ms）"
+  },
+  {
+   "id": "F-151",
+   "dimension": "architecture",
+   "severity": "P0",
+   "title": "『单类 ≤400』门禁到期断言当前处于测试失败状态（已实测）：批次 9 已全部 done，但 8 项 Deadline=",
+   "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs:104-140（豁免表）/240-259（到期断言）；豁免类型聚合：SetupForm 1091、FileBrowserView 847、SettingsForm 684、TrayAppContext 522、ServerInstaller 861、SettingsPage 549、ServerWindow 525、WebSocketHandler 464"
+  },
+  {
+   "id": "F-152",
+   "dimension": "function",
+   "severity": "P1",
+   "title": "服务端只有『创建/撤销分享』两个端点，无『列出我的分享』。Windows ShareDialog 注释自认『服务端仅提供",
+   "location": "shared-spec.json api.endpoints（分享仅 POST /api/shares + DELETE，无 GET 列表端点）；ShareController.cs:26-60；ShareDialog.cs:11（注释自认无列表端点）；Android FileRepository.kt:254（createShare 死代码）"
+  },
+  {
+   "id": "F-153",
+   "dimension": "function",
+   "severity": "P1",
+   "title": "照片备份定期把家人照片传到 /Photos/yyyy-MM/，但 Android 文件列表只用扩展名图标，服务端 /ap",
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt:61-71,1049-1162（仅扩展名图标）；data/Generated/CloudPanApi.g.kt:88-91（getThumbnail 已生成未接线）"
+  },
+  {
+   "id": "F-154",
+   "dimension": "function",
+   "severity": "P1",
+   "title": "moveFile 接口已生成但 FileRepository 无封装、UI 无入口；手动上传固定落 /Uploads/ ",
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt（无 moveFile 封装）；data/Generated/CloudPanApi.g.kt:60（moveFile 已生成未用）；MainActivity.kt:86（remotePath=/Uploads/$fileName 硬编码）"
+  },
+  {
+   "id": "F-155",
+   "dimension": "ux",
+   "severity": "P2",
+   "title": "Windows 端用户主动操作的全部失败反馈仍走 AddLog 一条日志文字，而日志侧栏默认折叠（用户看不见）：双击文件",
+   "location": "MainWindow.Browser.cs:162（双击打开失败 catch→AddLog）/211（下载入队失败）/231（导入失败）；MainWindow.Trash.cs:66（批量删除失败）/112（撤销失败）；TrashDialog.cs:124（清空回收站失败仅 addLog）；MainWindow.Layout.cs:243（日志侧栏默认折叠 Panel2Collapsed=true）"
+  },
+  {
+   "id": "F-156",
+   "dimension": "ux",
+   "severity": "P2",
+   "title": "Windows 客户端无法上传文件夹：拖拽整个文件夹到浏览视图时 DragEnter 判定为可拖放（显示复制光标），但 ",
+   "location": "FileBrowserView.Events.cs:169-182（DragEnter 接受含目录 FileDrop，显示复制光标）；MainWindow.Browser.cs:189（FilesDropped→ImportFilesAsync 对目录 File.Copy 抛异常）；FileBrowserView.cs:146-152（上传 OpenFileDialog 仅选文件，无文件夹选择）"
+  },
+  {
+   "id": "F-157",
+   "dimension": "ux",
+   "severity": "P2",
+   "title": "服务端把文件/设备时间存为 ISO 8601 \"O\" 格式（含小数秒与 Z），Android 两端 formatTime",
+   "location": "FileListScreen.kt:73-81（formatTimestamp 用 SimpleDateFormat(\"yyyy-MM-dd'T'HH:mm:ss\") 无时区解析）；SettingsScreen.kt:550-558（同解析）+ :527（设备最后在线）；服务端 FileIndexService.cs:346（DateTime.UtcNow.ToString(\"O\")，含小数秒+Z）；对照 VersionHistoryDialog.cs:172-182（AdjustToUniversal+ToLocalTime 正确换算）"
+  },
+  {
+   "id": "F-158",
+   "dimension": "architecture",
+   "severity": "P2",
+   "title": "Host 层 BackgroundHostedService.ChunkCleanup 直接操作 DbContext 与",
+   "location": "BackgroundHostedService.cs:118-144（ChunkCleanup 直接 db.ChunkedUploads.Where + File.Delete(s.TempPath) + db.ChunkedUploads.Remove）；而 Server.Core IChunkedUploadService 已有 CleanupIncompleteSessionsAsync 与 SafeDeleteTemp"
+  }
+ ]
+}

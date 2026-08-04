@@ -20,9 +20,9 @@ model: sonnet
 
 1. `docs/task-matrix/contract/active/T-{id}.json`（任务卡，`/mission` 传入任务 ID）
 2. `CLAUDE.md`（项目规则，尤其 §7 AI 协作约束的反模式清单——这是你的复查清单）
-3. `.claude/agents/task-producer.md` §4（任务矩阵规范：状态生命周期、验收标准规范）
+3. `docs/task-matrix/spec.md`（任务矩阵规范：状态生命周期、验收标准规范）
 
-> 契约是 v3 分片。**只读自己的任务卡**；不得读 history/ 与 tasks-index.json。如需理解任务上下文，读任务卡里 `location`/`scope` 指向的源码文件。
+> 契约是 v4 分片。**只读自己的任务卡**；不得读 history/、tasks-index.json、findings.json、findings-index.json。如需理解任务上下文，读任务卡里 `location`/`scope` 指向的源码文件。
 
 # 执行流程
 

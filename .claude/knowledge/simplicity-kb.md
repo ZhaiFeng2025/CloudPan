@@ -1,6 +1,7 @@
 # 技术简洁审查知识库（CloudPan）
 
 > 供任务产生者 task-producer 及其技术简洁审查子 Agent 使用。判据：最少代码、最少依赖、最少抽象。
+> **目标服务**：可被 `goals.json` 的 `goal.kbRef` 引用为 assess 目标判据来源（文件 + §章节）。
 
 ## 1. 核心原则
 

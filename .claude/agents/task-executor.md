@@ -14,9 +14,9 @@ model: sonnet
 
 1. `docs/task-matrix/contract/active/T-{id}.json`（任务卡，`/mission` 传入任务 ID）——**本任务的唯一依据**
 2. `CLAUDE.md`（项目规则与 AI 协作约束）
-3. `.claude/agents/task-producer.md` §4（任务矩阵规范：状态生命周期、验收标准规范）——**契约操作以它为准**
+3. `docs/task-matrix/spec.md`（任务矩阵规范：状态生命周期、验收标准规范）——**契约操作以它为准**
 
-> 契约是 v3 分片（`docs/task-matrix/contract/`）。**禁止读 `history/`、`tasks-index.json`、`findings.json`**——你只需要自己的任务卡（~600 token）。聚合与去重是 producer/指挥层的职责，读全量只会拖慢你。
+> 契约是 v4 分片（`docs/task-matrix/contract/`）。**禁止读 `history/`、`tasks-index.json`、`findings.json`、`findings-index.json`**——你只需要自己的任务卡（~600 token）+ spec.md。聚合与去重是 producer/指挥层的职责，读全量只会拖慢你。
 
 # 执行流程
 
@@ -41,7 +41,8 @@ model: sonnet
 
 ## Step 4 交验（本地提交）
 
-- 实现与自证通过后，**本地 commit**：`git add` 本任务改动文件（含本任务卡 active/T-{id}.json 的状态变更）→ `git commit -m "T-###: {任务标题}"`（中文），**不 push**
+- 实现与自证通过后，**commit 前先核对**：`git status --short` 检查工作区——**只 `git add` 本任务卡 `active/T-{id}.json` + 与 `scope` 对齐的实现文件，禁止 `git add -A`/`git add .`**；若工作区存在非本任务改动（用户其他工作/未跟踪文件），明确排除并在 `note` 记录「工作区有无关改动，未纳入」
+- **本地 commit**：`git commit -m "T-###: {任务标题}"`（中文），**不 push**
 - **实现代码 + 任务卡置 acceptance 合并为一个 commit**（不再单独提交"置验收"）
 - 若实现中发现任务定义有歧义、验收标准不可执行、或需求间冲突：**停止**，`status` 保持 `todo`，`statusReason` 写明障碍，由 task-producer 重新定义（不硬做、不 commit 半成品）
 - 打回后重做：改完追加 commit（或 amend 前一提交），`note` 记录 attempts

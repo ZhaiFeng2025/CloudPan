@@ -2,6 +2,7 @@
 
 > 供任务产生者 task-producer 及其 UX 审查子 Agent 使用。用户画像：家庭用户（含老人、小孩、非技术人员）。
 > **通用启发式见本文件；网盘产品层（页面设计/交互模式）见 [clouddrive-kb.md](clouddrive-kb.md)，视觉美化见 [visual-design-kb.md](visual-design-kb.md)，三者配合使用。**
+> **目标服务**：可被 `goals.json` 的 `goal.kbRef` 引用为 assess 目标判据来源（文件 + §章节）。
 
 ## 1. 四大零原则（项目绑定）
 

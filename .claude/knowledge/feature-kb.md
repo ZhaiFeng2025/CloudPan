@@ -2,6 +2,7 @@
 
 > 供任务产生者 task-producer 及其功能审查子 Agent 使用。判据：功能解决**真实家庭用户需求**、不多不少、边界场景有恢复路径。
 > 本文件聚焦功能逻辑与边界；**产品形态（页面如何承载功能）见 [clouddrive-kb.md](clouddrive-kb.md)。**
+> **目标服务**：可被 `goals.json` 的 `goal.kbRef` 引用为 assess 目标判据来源（文件 + §章节）。
 
 ## 1. 家庭云盘功能域
 

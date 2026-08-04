@@ -1,6 +1,7 @@
 # 架构审查知识库（CloudPan）
 
 > 供任务产生者 task-producer 及其架构审查子 Agent 使用。审查以「目标四层架构 + 契约驱动」为准绳，参照整洁架构（Clean Architecture）与 SOLID。
+> **目标服务**：可被 `goals.json` 的 `goal.kbRef` 引用为 assess 目标判据来源（文件 + §章节）。
 
 ## 1. 目标架构（项目绑定约束，违反即 P0）
 

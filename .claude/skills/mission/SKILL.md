@@ -2,7 +2,7 @@
 
 一次 `/mission` 内，三 Agent 集群（**产生 → 执行 → 验收**）**自循环**处理任务，直到**目标达成**或命中安全上限，**无需反复触发**。契约（`docs/task-matrix/contract/`）是持久化状态，可随时中断、随时续跑。
 
-**目标导向**：使命「四性」量化到 `contract/goals.json`（目标 + 指标 + 基线 + 目标值），审查子 Agent 顺带度量指标当前值，差距产出**差距任务**；收敛以「目标达成」为主导语义——目标达成由**度量驱动**，不由「任务 done」驱动（防止「任务全绿但目标未达」的假收敛，v1.0 批次 9 曾出现）。
+**目标导向**：使命「四性」量化到 `contract/goals.json`（目标 + 指标 + 基线 + 目标值），**目标度量子 Agent 独立度量**指标当前值（与审查解耦），差距产出**差距任务**；收敛以「目标达成」为主导语义——目标达成由**度量驱动**，不由「任务 done」驱动（防止「任务全绿但目标未达」的假收敛，v1.0 批次 9 曾出现）。
 
 ## 契约结构（v4 目标 + 分片）
 
@@ -10,13 +10,16 @@
 docs/task-matrix/
 ├── contract/                   # 契约（唯一事实来源）
 │   ├── meta.json               # schemaVersion=4 / currentBatch / 统计
-│   ├── state.json              # 活跃任务摘要（可领取列表来源）
+│   ├── state.json              # 活跃任务摘要（archive.py sync_state 从卡同步，卡为真值）
 │   ├── goals.json              # ★ 目标契约：愿景→能力域→量化指标 三层（level/parent/benchmark 对标基准）
+│   ├── findings-index.json     # findings 摘要（archive.py 重建，producer 去重用，不读全量）
 │   ├── active/T-{id}.json      # 单任务完整卡（含 goalRef；executor/verifier 只读写本卡）
 │   ├── history/batch-{NN}.json # 已闭合批次完整任务（归档）
-│   ├── findings.json           # 全部 findings（T→F 追溯）
+│   ├── findings.json           # 完整 findings（T→F 追溯，problem/why）
 │   └── tasks-index.json        # 全部任务一行摘要（含 goalRef；渲染 INDEX + 跨批次去重）
-├── .reviews/                   # 审查交接：{dim}.json 发现 + goals/{dim}.json 度量
+├── spec.md                     # ★ 任务矩阵规范（契约 schema v4 唯一来源，executor/verifier/producer 共享）
+├── .reviews/                   # 审查交接：{dim}.json 发现 + goals/{category}.json 度量
+├── .run/                       # 运行时：wave-checkpoint.json（中断恢复）+ goal-health.json（自动优化检测），gitignore
 ├── INDEX.md                    # 渲染视图：活状态板 + 目标面板（禁止手改）
 └── batches/batch-{NN}.md       # 渲染视图：批次完整文档（禁止手改）
 ```
@@ -26,8 +29,9 @@ docs/task-matrix/
 | 角色 | 读 | 写 |
 |---|---|---|
 | executor / verifier | 仅对应 `active/T-{id}.json` + 相关代码 | 仅本卡（status/note/attempts） |
-| producer | `tasks-index.json`（去重）+ `findings.json` + `state.json` + `goals.json`（目标差距） | 新批次：`history/batch-{NN}.json` + 新卡 `active/T-{id}.json`（含 `goalRef`）+ `state.json` 追加 + `tasks-index.json`/`findings.json` 追加 |
-| 审查子 Agent | 知识库 + `goals.json`（仅本维度 `status=active` 的目标） | `.reviews/{dim}.json` 发现 + `.reviews/goals/{dim}.json` 度量 |
+| producer | `tasks-index.json`（去重）+ `findings-index.json`（不读全量 `findings.json`）+ `state.json` + `goals.json`（目标差距） | 新批次：`history/batch-{NN}.json` + 新卡 `active/T-{id}.json`（含 `goalRef`）+ `state.json` 追加 + `tasks-index.json`/`findings.json` 追加 |
+| 审查子 Agent | 知识库 + 对应源码 | `.reviews/{dim}.json` 发现（纯审查，不度量） |
+| 目标度量子 Agent | 知识库 + `goals.json`（仅 `category={类}` 且 `status=active` 的目标） | `.reviews/goals/{category}.json` 度量 |
 | 指挥层 | `meta.json` + `state.json` + `tasks-index.json` + `goals.json` | 合并度量（`archive.py --goals`）+ 目标设定（`--goals`）+ 归档渲染（`archive.py`） |
 
 > executor/verifier **禁止读 history/ 与 tasks-index.json**——单任务卡 ~600 token，全量索引是去重用，不是执行用。这是 v3 分片的核心收益，v4 沿用（v2 的 tasks.json 690KB ≈ 16.6 万 token，占子 Agent 窗口 83%）。
@@ -36,8 +40,8 @@ docs/task-matrix/
 
 - `/mission` — 自循环，默认处理上限 **1000 个任务**（硬性兜底；实际以收敛/质量护栏为准）
 - `/mission N` — 本轮处理上限 N 个任务
-- `/mission --goals` — **目标设定/刷新**（三步引导）：① 设愿景（`level=vision`，对标声明，不量化）→ ② 拆能力域（`level=domain`，带 `benchmark` 对标基准）→ ③ 拆量化指标（`level=metric`，target 用户拍板）→ 写入 goals.json → 渲染 INDEX（不执行任务）
-- `/mission --produce` — 只补批（分发四维审查（含目标度量）→ 合并度量 → task-producer 产出，不执行）
+- `/mission --goals` — **目标设定/刷新**（三步引导）：① 设愿景（`level=vision`，对标声明，不量化）→ ② 拆能力域（`level=domain`，带 `benchmark` 对标基准）→ ③ 拆量化指标（`level=metric`，target 用户拍板，**assess 目标必带 `kbRef`**——依据哪条知识库判据，无判据支撑的目标需质疑是否拍脑袋）→ 写入 goals.json → 渲染 INDEX（不执行任务）
+- `/mission --produce` — 只补批（分发四维审查（纯找问题）+ 独立目标度量 → 合并度量 → task-producer 产出，不执行）
 - `/mission --verify` — 只验收全部 `acceptance` 任务
 - 用户说"启动任务集群 / 自循环 / 继续任务"
 
@@ -52,7 +56,7 @@ docs/task-matrix/
 | 3 | **连续 3 打回** | 连续 3 次验收失败 → 任务定义或执行存在系统性问题，交 producer 回炉 |
 | 4 | **单任务重试超限** | 某任务 attempt > 3 → `problem`，交 producer 回炉 |
 | 5 | **依赖阻塞** | 可领取清空、U > 0 且 producer 无新任务 → 报告依赖链 |
-| 6 | **目标停滞护栏** | 某 `active` 目标**连续 2 轮** currentValue 无变化且无新差距任务 → 报告「G-xx 目标或度量定义需复查」并停止该目标相关循环 |
+| 6 | **目标停滞护栏** | 某 `active` 目标**连续 2 轮** currentValue 无变化且无新差距任务 → 报告「G-xx 目标/度量/**kbRef 判据**需复查」并停止该目标相关循环——**检查其 `kbRef` 知识库判据是否过时/过严/不可操作**（知识库演进闭环，交 producer 复审） |
 | 7 | **用户中断** | 你说"停 / stop"，或会话被终止 |
 
 ## 主循环（单次 /mission 内自动进行）
@@ -60,44 +64,43 @@ docs/task-matrix/
 ### Step 0 初始化
 - 读 `contract/meta.json`，校验 `schemaVersion=4`；读 `contract/state.json` 得活跃任务摘要；读 `contract/goals.json` 得目标集（含层级）
 - 输出：初始 U（未完成）、可领取数、本轮上限 N、**目标面板**（层级：vision 显示「子x/y」+ 各 leaf 的 currentValue/target/status）
+- **中断恢复（可靠性）**：若 `docs/task-matrix/.run/wave-checkpoint.json` 存在 → 读取，报告上次中断点（已处理 X 任务、lastTaskId），本轮**跳过 checkpoint 中已 processed 的任务**（不重复执行）
 - 若全部 **leaf 级**目标已 `achieved` 且可领取为空 → 直接进入 Step 3，报告「目标已达成」（vision/domain 由子目标派生，不单独判定）
 
 ### Step 1 处理一波（wave）
-1. 取可领取列表（`state.json` 中 `status=todo` 且 `dependsOn` 全 done；**本轮未尝试者优先**，全部尝试过才重取已打回任务）
-2. 逐任务（**显式传任务 ID 与任务卡路径** `contract/active/T-{id}.json`）：
+1. **每波开始先同步派生视图**：跑 `python docs/task-matrix/tools/archive.py`（sync_state 幂等，state/tasks-index/meta 与卡对齐）——可领取列表、依赖链基于**卡真值**，防陈旧派生视图导致依赖链不解锁、「可领取空」假真
+2. 取可领取列表（`state.json` 中 `status=todo` 且 `dependsOn` 全 done；**本轮未尝试者优先**，全部尝试过才重取已打回任务；**跳过 checkpoint 中 `processed` 结果 ∈ {done, acceptance} 者——打回任务必须重新入队**，防打回任务被 checkpoint 跳过而永不重做）
+3. 逐任务（**显式传任务 ID 与任务卡路径** `contract/active/T-{id}.json`）：
    - 调 `task-executor` → 读任务卡 → 实现 + 自证 + **本地 commit（T-###）** + 写卡 `status → acceptance`
    - 调 `task-verifier` → 读任务卡 → 验收：写卡 `done` / 打回（`todo`, attempts+1）/ 留 `acceptance`（手动项，不阻塞循环）
-3. 质量护栏：连续 3 打回或单任务 attempt>3 → 停止（条件 3/4）
-4. **每 20 个任务输出 checkpoint**：已处理 X/N、done/打回/待确认数、当前 U——供你随时中断
+   - **每任务完成后更新 `docs/task-matrix/.run/wave-checkpoint.json`**：`{ wave, startedAt, updatedAt, processed: {T-id: "done|打回|acceptance"}, consecutiveRebuff, counts, lastTaskId }`——中断可续跑；**`consecutiveRebuff` 跨中断持久化**（防中断绕过「连续 3 打回」护栏）
+4. 质量护栏：连续 3 打回（含 checkpoint 累计 consecutiveRebuff）或单任务 attempt>3 → 停止（条件 3/4）
+5. **每 20 个任务输出 checkpoint 摘要**：已处理 X/N、done/打回/待确认数、当前 U——供你随时中断
 
 ### Step 2 补批（自循环关键）
 本波可领取清空后：若 **U < 3** → 补批：
 
-1. **指挥层直接分发四维审查子 Agent**（并行，subagent_type: general-purpose），每个维度除写发现 `docs/task-matrix/.reviews/{dimension}.json` 外，**顺带度量本维度 `active` 目标当前值**写入 `docs/task-matrix/.reviews/goals/{dimension}.json`——分发 Prompt 见下方「审查子 Agent 分发模板」与「维度→知识库映射」
-2. 等四个维度审查全部完成（**指挥层接收结果，不嵌套**）
-3. **指挥层合并度量**：跑 `python docs/task-matrix/tools/archive.py --goals`——把 `.reviews/goals/` 结果合并回 `goals.json`（currentValue/lastMeasuredAt/measureNote，达标自动置 `achieved`）+ 重渲染 INDEX
-4. 调 `task-producer`（subagent_type: task-producer）：读 `.reviews/` + `goals.json` **两步产批**：
-   - **差距任务**（目标驱动）：对每个未达 `active` 目标，按 `tasks-index.json` 的 `goalRef` 去重，若该目标无未闭合差距任务 → 产出差距任务并标 `goalRef`（即便审查无任何新 finding 也要产出——目标不再依赖「审查是否发现新问题」）
+1. **指挥层直接分发四维审查子 Agent**（并行，subagent_type: general-purpose），每个**只写发现** `docs/task-matrix/.reviews/{dimension}.json`（**不度量目标**——度量已解耦为独立步骤，见步骤 3）——分发 Prompt 见下方「审查子 Agent 分发模板」与「维度→知识库映射」
+2. 等四个维度审查全部完成（**指挥层接收结果，不嵌套**）；**核对落盘**：检查各 `.reviews/{dim}.json` 存在且非空——缺失/空 → **重试该维度 1 次**（重新分发同维度子 Agent，提示上次失败原因），仍失败才报告缺失维度（不因单个子 Agent 失败停整轮）
+3. **指挥层分发目标度量子 Agent**（按 `category` 分 3 个并行，subagent_type: general-purpose）：分别度量 `category=function/performance/polish` 且 `status=active` 的目标当前值，写 `docs/task-matrix/.reviews/goals/{category}.json`——见下方「目标度量子 Agent 分发模板」与「category→知识库映射」
+4. **指挥层合并度量 + 目标健康检测**：跑 `python docs/task-matrix/tools/archive.py --goals`——合并度量（含 progress 轨迹追加，达标自动置 `achieved`）+ **自动检测目标健康**写 `.run/goal-health.json`（停滞/抖动/判据失效，见「自动优化机制」）+ 重渲染 INDEX
+5. 调 `task-producer`（subagent_type: task-producer）：读 `.reviews/` + `goals.json` + **`.run/goal-health.json`** 三步产批：
+   - **差距任务**（目标驱动）：对每个未达 `active` 目标，按 `tasks-index.json` 的 `goalRef` 去重，若该目标无未闭合差距任务 → 产出差距任务并标 `goalRef`（**按 category 优先级排序**：功能→性能→美化，先产出功能差距任务）（即便审查无任何新 finding 也要产出——目标不再依赖「审查是否发现新问题」）
+   - **优化任务**（自动优化机制）：对 goal-health 中停滞/抖动/判据失效目标，按效率/可靠性/正确性三维度归因产优化任务（见「自动优化机制」节）
    - **finding 任务**（缺陷驱动）：对四维发现汇总去重产出
    - 写入 `contract/`（历史批次文件、新 active 卡含 `goalRef`、state.json 追加、tasks-index/findings 追加）+ 渲染批次文档
-5. 新批次 0 任务 → **收敛判定分流**（进入 Step 3 时按终止条件 1/1a/1b 报告）：
-   - 全部 `active` 目标达成 → 条件 1「目标收敛」
-   - 存在未达 `active` 目标 → 条件 1a「目标未达空转」
+6. 新批次 0 任务 → **收敛判定分流**（进入 Step 3 时按终止条件 1/1a/1b 报告；**统一按「全部 leaf 级 active 目标达成」判定**——与终止条件 1、Step 0 对齐，vision/domain 组织层只派生不判定，防组织层目标永堵收敛）：
+   - 全部 **leaf 级** `active` 目标达成 → 条件 1「目标收敛」
+   - 存在未达 **leaf 级** `active` 目标 → 条件 1a「目标未达空转」
    - 无 `active` 目标 → 条件 1b「无目标降级」
    - 有新任务 → 回到 Step 1 继续
 
-**审查子 Agent 分发模板**（发给每个维度审查子 Agent，替换「{维度}」「{知识库}」）：
+**审查子 Agent 分发模板**（发给每个维度审查子 Agent，替换「{维度}」「{知识库}」；**纯找问题，不度量目标**）：
 ```
 你是 /mission 派出的「{维度}」维度审查 Agent。
 背景：自托管家庭云盘（C#/.NET8 WinForms + Kotlin Android + ASP.NET Core 8 + SQLite）。
 第一步（必做）：先 Read 「{知识库}」，按其审查问题清单逐条扫描。
 第二步：全库扫描（不是 git diff），发现阻碍「最佳架构/合理功能/最佳UX/简洁技术」使命的具体问题。
-第三步（必做·目标度量）：读 docs/task-matrix/contract/goals.json，取 dimension="{维度}" 且 status=active 的目标逐条度量当前值：
-  - measure.type=command → 运行其 command，核对 expected 后按 valueFrom 计算 currentValue；命令无法运行则 measured=false 并说明
-  - measure.type=assess → 依 measure.rubric 走查判定 currentValue，measureNote 必填证据（file:line / 复现路径 / 步骤清单）
-  - 结果写 docs/task-matrix/.reviews/goals/{维度}.json：
-    { "dimension": "{维度}", "goals": [ { "id": "G-01", "currentValue": 8, "measured": true, "measureNote": "...", "lastMeasuredAt": "YYYY-MM-DD" } ] }
-  - 禁止直接写 contract/goals.json（由指挥层 archive.py --goals 统一合并，防并发写冲突）
 要求：
 1. 先读 CLAUDE.md 了解约束
 2. 每条发现：{ "dimension": "{维度}", "severity": "P0|P1|P2|P3", "location": "file:line", "problem": "现状与问题", "why": "为什么阻碍使命", "suggestion": "方向性建议" }
@@ -105,16 +108,37 @@ docs/task-matrix/
 4. 把全部发现（≤15 条，按严重度排序）写入 `docs/task-matrix/.reviews/{维度}.json`（JSON 数组），最终回复附简要总结
 ```
 
-**维度→知识库映射**：
+**目标度量子 Agent 分发模板**（发给 {category} 度量子 Agent，替换「{category}」「{知识库}」；目标度量与审查解耦，独立分发）：
+```
+你是 /mission 派出的「{category}」目标度量子 Agent。
+背景：自托管家庭云盘（C#/.NET8 WinForms + Kotlin Android + ASP.NET Core 8 + SQLite）。
+先 Read 「{知识库}」（判据来源）。
+读 docs/task-matrix/contract/goals.json，取 category="{category}" 且 status=active 的目标逐条度量当前值：
+- measure.type=command → 运行其 command，核对 expected 后按 valueFrom 计算 currentValue；命令无法运行则 measured=false 并说明
+- measure.type=assess → 先读目标 kbRef 指向的知识库章节（判据本体在知识库，rubric = kbRef 判据 + 本目标特化约束），依 rubric 走查判定 currentValue，measureNote 必填证据（file:line / 复现路径 / 步骤清单）
+- 结果写 docs/task-matrix/.reviews/goals/{category}.json：
+  { "category": "{category}", "goals": [ { "id": "G-01", "currentValue": 8, "measured": true, "measureNote": "...", "lastMeasuredAt": "YYYY-MM-DD" } ] }
+- 禁止直接写 contract/goals.json（由指挥层 archive.py --goals 统一合并，防并发写冲突）
+- 只读，禁止修改任何源码文件
+```
+
+**维度→知识库映射**（审查子 Agent 用）：
 | 维度 | 知识库 |
 |---|---|
-| architecture | `.claude/knowledge/architecture-kb.md` |
-| function | `.claude/knowledge/feature-kb.md` + `.claude/knowledge/clouddrive-kb.md`（产品形态参照） |
+| architecture | `.claude/knowledge/architecture-kb.md` + `.claude/knowledge/security-kb.md`（安全防线） |
+| function | `.claude/knowledge/feature-kb.md` + `.claude/knowledge/clouddrive-kb.md`（产品形态参照）+ `.claude/knowledge/security-kb.md`（权限/分享安全） |
 | ux | `.claude/knowledge/ux-kb.md` + `.claude/knowledge/clouddrive-kb.md` + `.claude/knowledge/visual-design-kb.md` |
 | simplicity | `.claude/knowledge/simplicity-kb.md` |
 
+**category→知识库映射**（目标度量子 Agent 用；优先级 功能→性能→美化）：
+| category | 知识库 |
+|---|---|
+| function（功能） | `.claude/knowledge/feature-kb.md` + `.claude/knowledge/clouddrive-kb.md` |
+| performance（性能） | `.claude/knowledge/architecture-kb.md` + `.claude/knowledge/simplicity-kb.md` |
+| polish（美化） | `.claude/knowledge/ux-kb.md` + `.claude/knowledge/visual-design-kb.md` + `.claude/knowledge/clouddrive-kb.md` |
+
 ### Step 3 收尾
-1. **归档**：跑 `python docs/task-matrix/tools/archive.py`——把本轮 `done` 的 active 卡移入 `history/batch-{NN}.json`、从 `state.json` 移除、更新 `tasks-index.json`、删除已归档卡、重渲染 `INDEX.md`（全自动，幂等）
+1. **归档**：跑 `python docs/task-matrix/tools/archive.py`——**sync_state（卡为真值）→ check → 把本轮 `done` 卡移入 `history/batch-{NN}.json` → 更新索引 → 删除已归档卡 → 重渲染 `INDEX.md` + 重建 `findings-index.json`**（全自动，幂等）；**清除 checkpoint**（删除 `docs/task-matrix/.run/wave-checkpoint.json`）
 2. 汇总报告：
   - 本轮处理 T 任务：done M / 打回 L / 待人工确认 P / problem Q
   - **commit 清单**（`T-### → commit hash`，未 push）
@@ -130,7 +154,20 @@ docs/task-matrix/
 - **目标达成由度量驱动，不由任务 done 驱动**：任务的 `goalRef` 只是「服务哪个目标」的元数据；目标是否 `achieved` 取决于 `archive.py --goals` 合并的度量结果（currentValue 达 target），**不是**「该目标下所有任务 done」
 - 因此允许「任务 done 但目标未达」中间态并**显性报告**——这正是对 v1.0 批次 9（108 任务全绿但行数门禁红灯）假收敛的机制性回应
 - **层级（vision→domain→metric）**：vision 是产品愿景（对标声明，不量化）、domain 是能力域分组（可量化也可不量化）、metric 是量化指标（leaf）。**收敛判定只看 leaf**——vision/domain 进度由子目标派生（面板显示「子x/y」），不直接判定
-- executor/verifier 不感知 goalRef，goal 推进不增加它们的工作量
+- executor/verifier **忽略** goalRef（读到但不消费），goal 推进不增加它们的工作量
+
+### 自动优化机制（v4，以效率/可靠性/正确性为目标的自我演进闭环）
+- **数据**：`archive.py --goals` 合并度量时自动追加目标 `progress` 轨迹（每轮 currentValue），作为健康判定的数据源
+- **检测**：同一脚本基于 progress + tasks-index 自动归因写 `.run/goal-health.json`（gitignore）：
+  - **停滞**（效率/正确性）：连续 2 轮 currentValue 无变化 且 无未闭合差距任务
+  - **抖动**（可靠性）：最后 3 轮交替增减（度量不稳定、不可复现）
+  - **判据失效**（正确性）：目标下差距任务全 done 但未达标
+- **产出**：producer 读 goal-health，按归因自动产优化任务（进队列，executor/verifier 复用流水线）：
+  - 停滞 → 「目标推进优化」（拆分/合并差距任务为可执行粒度）
+  - 抖动 → 「度量方法改进」（细化 assess rubric / 换稳定 command）
+  - 判据失效 → 「知识库判据更新」（修订 kbRef 章节判据符合真实可达性）+ 目标修订建议
+- **自动 target 修订（全自动但可审计）**：判据失效目标的 kb 更新任务 done 后，指挥层经 `--goals` 自动把 target 重设为可达值，`note` 追加「自动修订：原 X→新 Y，依据 kb 更新 Z」——你事后可 review
+- **闭环**：优化任务 done → 重跑审查度量 → 目标推进；优化后仍停滞 → 升级「目标 park」建议交 `--goals` 人工决策，**不无限循环**
 
 ### 每任务本地 commit（自循环可运行的前提）
 - 执行者在实现+自证后**本地 commit**：消息 `T-###: {标题}`（中文），**不 push**；**实现代码与任务卡状态变更（active/T-{id}.json）合并为一个 commit**
@@ -156,10 +193,15 @@ docs/task-matrix/
 
 ## 维护约定
 
-- **契约唯一事实来源 = `docs/task-matrix/contract/`**（含 `goals.json` 目标契约）；INDEX/批次文档为渲染视图，禁止手改
-- **聚合操作用脚本**：归档+渲染 = `python docs/task-matrix/tools/archive.py`；**目标度量合并 = `python docs/task-matrix/tools/archive.py --goals`**；v2→v3 迁移 = `migrate-v2-to-v3.py`；**v3→v4 迁移 = `python docs/task-matrix/tools/migrate-v3-to-v4.py`**
-- **审查交接用 `.reviews/*.json`**：四维审查由指挥层直接分发（producer 不自行分发，防嵌套回传死锁）；发现与目标度量分离——发现写 `.reviews/{dim}.json`，度量写 `.reviews/goals/{dim}.json`（禁止审查子 Agent 直接写 `goals.json`，防并发写冲突）
-- **目标设定用 `/mission --goals`**：指挥层与用户确认目标后写入 `goals.json`；assess 类目标必含 `measure.rubric`；目标 `status` 的 `parked/archived` 仅由 `--goals` 人工设定；**层级字段** `level`（vision/domain/metric）+ `parent` + `benchmark`（对标基准，描述性参照不编造数值）由 `--goals` 三步引导填写，`level` 默认 `metric`（扁平目标兼容）
+- **契约唯一事实来源 = `docs/task-matrix/contract/`**（含 `goals.json` 目标契约、`findings-index.json` 摘要）；INDEX/批次文档为渲染视图，禁止手改
+- **任务矩阵规范唯一来源 = `docs/task-matrix/spec.md`**——禁止在 producer/executor/verifier 定义中重复内嵌规范（双源必漂移）
+- **运行文件 = `docs/task-matrix/.run/`**（gitignore）——`wave-checkpoint.json` 中断恢复（收尾清除）+ `goal-health.json` 自动优化检测（`archive.py --goals` 生成）
+- **自动优化 = 目标 progress 轨迹 → goal-health 三维度归因 → producer 产优化任务 → 自动修订 target**（全自动但 `note` 记录可审计）
+- **聚合操作用脚本**：归档+渲染 = `python docs/task-matrix/tools/archive.py`；**目标度量合并 = `python docs/task-matrix/tools/archive.py --goals`**；v2→v3 迁移 = `python docs/task-matrix/tools/migrate-v2-to-v3.py`（历史迁移，不参与当前流程）；**v3→v4 迁移 = `python docs/task-matrix/tools/migrate-v3-to-v4.py`**
+- **审查交接用 `.reviews/*.json`**：四维审查由指挥层直接分发（producer 不自行分发，防嵌套回传死锁）；发现与目标度量分离——发现写 `.reviews/{dim}.json`（审查子 Agent），度量写 `.reviews/goals/{category}.json`（目标度量子 Agent，禁止度量子 Agent 直接写 `goals.json`，防并发写冲突）
+- **目标设定用 `/mission --goals`**：指挥层与用户确认目标后写入 `goals.json`；assess 类目标必含 `measure.rubric` + **`kbRef`（知识库判据来源，check 强制）**；目标 `status` 的 `parked/archived` 仅由 `--goals` 人工设定；**层级字段** `level`（vision/domain/metric）+ `parent` + `benchmark`（对标基准，描述性参照不编造数值）由 `--goals` 三步引导填写，`level` 默认 `metric`（扁平目标兼容）
 - `problem` 任务先由 task-producer 回炉，不得由执行者直接修
 - 跨任务不得改契约非本任务字段（executor/verifier 只碰自己的 active 卡）
 - 集群 Agent：`.claude/agents/task-producer.md` / `task-executor.md` / `task-verifier.md`；知识库：`.claude/knowledge/`
+使得本工具越来越好用，bug越来越少
+
