@@ -1085,7 +1085,7 @@
    "title": "Client.UI 巨型窗体真实拆分（SetupForm/FileBrowserView/SettingsForm/TrayAppContext 聚合 ≤400 + 删豁免登记）",
    "dimension": "architecture",
    "priority": "P0",
-   "status": "todo",
+   "status": "acceptance",
    "batch": 10,
    "location": "CloudPan.Client.UI/UI/{SetupForm,FileBrowserView,SettingsForm,TrayAppContext}*.cs（聚合 1091/847/684/522）",
    "goalRef": null
@@ -1095,7 +1095,7 @@
    "title": "Server.UI 巨型控件真实拆分（ServerInstaller/SettingsPage/ServerWindow 聚合 ≤400 + 删豁免登记）",
    "dimension": "architecture",
    "priority": "P0",
-   "status": "todo",
+   "status": "acceptance",
    "batch": 10,
    "location": "CloudPan.Server.UI/{ServerInstaller,SettingsPage,ServerWindow}*.cs（聚合 861/549/525）",
    "goalRef": null
@@ -1105,7 +1105,7 @@
    "title": "WebSocketHandler 真实拆分（聚合 ≤400 + HandleConnectionAsync 按阶段拆 + 删豁免登记）",
    "dimension": "architecture",
    "priority": "P0",
-   "status": "todo",
+   "status": "acceptance",
    "batch": 10,
    "location": "CloudPan.Server.Core/WebSocket/WebSocketHandler*.cs（聚合 464；HandleConnectionAsync 239 行单方法）",
    "goalRef": null
@@ -1115,7 +1115,7 @@
    "title": "分享列表端点 + 双端管理入口（GET /api/shares + 撤销 + Android 接线）",
    "dimension": "function",
    "priority": "P1",
-   "status": "todo",
+   "status": "acceptance",
    "batch": 10,
    "location": "shared-spec.json api.endpoints；ShareController.cs:26-60；ShareDialog.cs:11；Android FileRepository.kt:254",
    "goalRef": null
@@ -1125,7 +1125,7 @@
    "title": "Android 照片墙缩略图接入（getThumbnail + 相册网格 + 全屏预览翻页）",
    "dimension": "function",
    "priority": "P1",
-   "status": "todo",
+   "status": "in-progress",
    "batch": 10,
    "location": "FileListScreen.kt:61-71,1049-1162；CloudPanApi.g.kt:88-91（getThumbnail 已生成未接线）",
    "goalRef": null

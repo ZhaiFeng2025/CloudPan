@@ -1,7 +1,7 @@
 # CloudPan 任务矩阵 — 状态板
 
 > 契约: docs/task-matrix/contract/（schemaVersion=4）｜ 更新: 2026-08-04
-> 统计: 120 任务 = 108 done / 0 待验收 / 12 待办
+> 统计: 120 任务 = 108 done / 4 待验收 / 8 待办
 
 | ID | 标题 | 维度 | 优先级 | 状态 | 批次 |
 |---|---|---|---|---|---|
@@ -113,11 +113,11 @@
 | T-106 | Windows 6 处异常原文透出改 ErrorAttribution 白话（含崩溃对话框） | UX | P2 | 已完成 | 9 |
 | T-107 | Android 文件列表每文件同步状态图标 + 汇总进度（消费 FileEntryDto.state） | UX | P2 | 已完成 | 9 |
 | T-108 | Windows 浏览卡顿修复（快照缓存/事件驱动刷新，去除每 5 秒全树枚举） | UX | P2 | 已完成 | 9 |
-| T-109 | Client.UI 巨型窗体真实拆分（SetupForm/FileBrowserView/SettingsForm/TrayAppContext 聚合 ≤400 + 删豁免登记） | 架构 | P0 | 待办 | 10 |
-| T-110 | Server.UI 巨型控件真实拆分（ServerInstaller/SettingsPage/ServerWindow 聚合 ≤400 + 删豁免登记） | 架构 | P0 | 待办 | 10 |
-| T-111 | WebSocketHandler 真实拆分（聚合 ≤400 + HandleConnectionAsync 按阶段拆 + 删豁免登记） | 架构 | P0 | 待办 | 10 |
-| T-112 | 分享列表端点 + 双端管理入口（GET /api/shares + 撤销 + Android 接线） | 功能 | P1 | 待办 | 10 |
-| T-113 | Android 照片墙缩略图接入（getThumbnail + 相册网格 + 全屏预览翻页） | 功能 | P1 | 待办 | 10 |
+| T-109 | Client.UI 巨型窗体真实拆分（SetupForm/FileBrowserView/SettingsForm/TrayAppContext 聚合 ≤400 + 删豁免登记） | 架构 | P0 | 待验收 | 10 |
+| T-110 | Server.UI 巨型控件真实拆分（ServerInstaller/SettingsPage/ServerWindow 聚合 ≤400 + 删豁免登记） | 架构 | P0 | 待验收 | 10 |
+| T-111 | WebSocketHandler 真实拆分（聚合 ≤400 + HandleConnectionAsync 按阶段拆 + 删豁免登记） | 架构 | P0 | 待验收 | 10 |
+| T-112 | 分享列表端点 + 双端管理入口（GET /api/shares + 撤销 + Android 接线） | 功能 | P1 | 待验收 | 10 |
+| T-113 | Android 照片墙缩略图接入（getThumbnail + 相册网格 + 全屏预览翻页） | 功能 | P1 | 进行中 | 10 |
 | T-114 | Android moveFile 封装 + 上传目标目录选择 + 同名确认 | 功能 | P1 | 待办 | 10 |
 | T-115 | Windows 用户主动操作失败统一白话弹窗（对齐 ErrorAttribution，不再只 AddLog） | UX | P2 | 待办 | 10 |
 | T-116 | Windows 拖拽目录静默失败修复（递归批量导入或白话提示，禁止零提示零上传） | UX | P2 | 待办 | 10 |

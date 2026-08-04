@@ -5,7 +5,7 @@
    "title": "Client.UI 巨型窗体真实拆分（SetupForm/FileBrowserView/SettingsForm/TrayAppContext 聚合 ≤400 + 删豁免登记）",
    "dimension": "architecture",
    "priority": "P0",
-   "status": "todo",
+   "status": "acceptance",
    "batch": 10,
    "dependsOn": [],
    "attempts": 0
@@ -15,7 +15,7 @@
    "title": "Server.UI 巨型控件真实拆分（ServerInstaller/SettingsPage/ServerWindow 聚合 ≤400 + 删豁免登记）",
    "dimension": "architecture",
    "priority": "P0",
-   "status": "todo",
+   "status": "acceptance",
    "batch": 10,
    "dependsOn": [],
    "attempts": 0
@@ -25,7 +25,7 @@
    "title": "WebSocketHandler 真实拆分（聚合 ≤400 + HandleConnectionAsync 按阶段拆 + 删豁免登记）",
    "dimension": "architecture",
    "priority": "P0",
-   "status": "todo",
+   "status": "acceptance",
    "batch": 10,
    "dependsOn": [],
    "attempts": 0
@@ -35,7 +35,7 @@
    "title": "分享列表端点 + 双端管理入口（GET /api/shares + 撤销 + Android 接线）",
    "dimension": "function",
    "priority": "P1",
-   "status": "todo",
+   "status": "acceptance",
    "batch": 10,
    "dependsOn": [],
    "attempts": 0
@@ -45,7 +45,7 @@
    "title": "Android 照片墙缩略图接入（getThumbnail + 相册网格 + 全屏预览翻页）",
    "dimension": "function",
    "priority": "P1",
-   "status": "todo",
+   "status": "in-progress",
    "batch": 10,
    "dependsOn": [],
    "attempts": 0

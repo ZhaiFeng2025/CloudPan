@@ -3,7 +3,7 @@
  "title": "Android 照片墙缩略图接入（getThumbnail + 相册网格 + 全屏预览翻页）",
  "dimension": "function",
  "priority": "P1",
- "status": "acceptance",
+ "status": "todo",
  "batch": 10,
  "findingId": "F-153",
  "dependsOn": [],
@@ -38,8 +38,8 @@
    "command": "cd CloudPan.Android && ./gradlew assembleDebug"
   }
  ],
- "attempts": 0,
- "statusReason": null,
- "note": "改动文件：新增 data/ThumbnailLoader.kt（内存 LruCache 按 byteCount + 磁盘缓存 + Semaphore 并发上限）；data/FileRepository.kt 新增 fetchThumbnail 接线 CloudPanApi.getThumbnail(path,width)；ui/FileListScreen.kt 列表图片行缩略图 + 相册网格（yyyy-MM 分组 + 列表/网格切换）+ 全屏预览 HorizontalPager 翻页。验证：AC1 grep 'getThumbnail|thumbnail' FileListScreen.kt 有匹配（6 处）；Android 本机无 SDK/gradle，AC4 gradlew assembleDebug 无法执行；已做括号配平（非注释行 (==)）与逐文件人工语法自查；AC2/AC3 为手动行为断言，需真机验证（无真机）。",
+ "attempts": 1,
+ "statusReason": "【打回：独立复查发现确定编译错误，AC4 构建必败】FileListScreen.kt 的 T-113 新增代码 3 处调用 Dp.roundToPx()（L1207 `with(density) { 40.dp.roundToPx() }`、L1632/L1677 `with(density) { LocalConfiguration.current.screenWidthDp.dp.roundToPx() }`），但该文件仅 import androidx.compose.ui.unit.dp，未 import androidx.compose.ui.unit.roundToPx（全项目亦无任何 roundToPx 导入）。roundToPx 是 androidx.compose.ui.unit 包顶层扩展函数（Dp→Int，Density 上下文），Kotlin 扩展函数不 import 即无法解析 → Unresolved reference: roundToPx，编译失败。期望：AC4 Android 构建通过；实际：静态分析确认 3 处编译错误（本机无 SDK 未实跑 gradlew，但该错误是确定性的）。修复：补 import androidx.compose.ui.unit.roundToPx。",
+ "note": "改动文件：新增 data/ThumbnailLoader.kt（内存 LruCache 按 byteCount + 磁盘缓存 + Semaphore 并发上限）；data/FileRepository.kt 新增 fetchThumbnail 接线 CloudPanApi.getThumbnail(path,width)；ui/FileListScreen.kt 列表图片行缩略图 + 相册网格（yyyy-MM 分组 + 列表/网格切换）+ 全屏预览 HorizontalPager 翻页。验证：AC1 grep 'getThumbnail|thumbnail' FileListScreen.kt 有匹配（6 处）；Android 本机无 SDK/gradle，AC4 gradlew assembleDebug 无法执行；已做括号配平（非注释行 (==)）与逐文件人工语法自查；AC2/AC3 为手动行为断言，需真机验证（无真机）。\n【verifier 验收结论 2026-08-04：打回】\nAC1 自动 grep 通过：FileListScreen.kt 有 getThumbnail/thumbnail 匹配（6 处：L299 loader 构造、L1183/1209/1384/1628/1652 thumbnailLoader 传递；L1206 注释）。契约接线独立核对通过：CloudPanApi.g.kt L90-91 getThumbnail(@Query(path),@Query(width)) 已生成，SpecRoutes.Thumbnails=api/thumbnails，FileRepository.fetchThumbnail L434 调用 api().getThumbnail(path,width) 非手写路由。AC2/AC3 手动行为断言无法真机执行，按 verifier 规则标注「需人工确认」——但从代码路径核验：ThumbnailImage L137 produceState 调 loader.load，降级分支 L148-153 渲染 Icons.Default.Image 类型图标，降级兜底存在。\n独立复查（高风险必做）发现的确定编译错误（打回主因）：FileListScreen.kt 3 处 roundToPx 未 import（L1207/1632/1677），roundToPx 为 androidx.compose.ui.unit 顶层扩展函数，文件仅 import .unit.dp，全项目无 roundToPx import → Unresolved reference，AC4 必败。\n独立复查未放行的观察项（非打回主因，供修复时参考）：① ThumbnailLoader 磁盘缓存 cacheDir/thumbnails 无大小上限/清理策略，类注释亦未说明（cacheDir 属系统可清理目录，语义容忍，但长期累积无界）；② LruCache 跨线程访问无同步（主线程 load 开头 get + IO 线程 semaphore 内 get/put），Android 生态常见容忍竞态，但严格违反 CLAUDE.md §7.4；③ 相册网格视图未接入 loadMore（T-059 分页）：LazyVerticalGrid 无 load_more item，目录照片 >200 项时网格只显示首屏 200 项，无法翻页浏览更多（AC 未覆盖，但偏离 requirements 第 2 条『按 yyyy-MM 时间分组与列表视图可切换』的照片墙体验）；④ 全屏预览逐页请求 screenWidthPx 宽缩略图，内存 LruCache 48MB 约容纳 10 张 1080px 图，翻页 LRU 淘汰可行，OOM 风险受控。修复 roundToPx import 后建议同步处理观察项②/③。",
  "updatedAt": "2026-08-04"
 }
