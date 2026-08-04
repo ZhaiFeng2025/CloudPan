@@ -4703,7 +4703,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "服务端 CONFLICT 已由 T-078 收敛，本任务补齐两端 UI 可操作引导。\n执行：SyncManageService 新增 RestoreConflictMode+RestoreTrashResolveAsync（覆盖=同名目标移回收站后重试、改名=目标追加（恢复冲突）后缀后重试）；SyncEngine 暴露委托；新增 RestoreConflictDialog 独立 internal 类（MainWindow 聚合行数门禁），OnRestoreClick 冲突弹『已有同名文件，恢复会造成覆盖』+改名/覆盖/取消，其余失败弹 MessageBox 不再静默 AddLog；Android restoreTrash 409→FileConflictException，TrashDialog 显示原因+下一步。验证：dotnet build -c Release 0警告0错误、dotnet test 343/343 通过、AC1 grep 通过。",
+      "note": "服务端 CONFLICT 已由 T-078 收敛，本任务补齐两端 UI 可操作引导。\n执行：SyncManageService 新增 RestoreConflictMode+RestoreTrashResolveAsync（覆盖=同名目标移回收站后重试、改名=目标追加（恢复冲突）后缀后重试）；SyncEngine 暴露委托；新增 RestoreConflictDialog 独立 internal 类（MainWindow 聚合行数门禁），OnRestoreClick 冲突弹『已有同名文件，恢复会造成覆盖』+改名/覆盖/取消，其余失败弹 MessageBox 不再静默 AddLog；Android restoreTrash 409→FileConflictException，TrashDialog 显示原因+下一步。验证：dotnet build -c Release 0警告0错误、dotnet test 343/343 通过、AC1 grep 通过。\n[验收] 自动项全过：AC1（MainWindow.Trash.cs 恢复路径 MessageBox 可见提示，272-274 走 RestoreConflictDialog、288 失败弹窗非仅 AddLog）；AC3 dotnet build -c Release 0警告0错误（实测）；回归 dotnet test 343/343 通过（实测，与执行者记录一致）。独立核对通过：RestoreConflictDialog 三选项（改名/覆盖/取消）各自正确调用 RestoreTrashResolveAsync（RenameTarget/Overwrite/中止）；改名路径 RestoreConflictNewPath 同目录追加「（恢复冲突）」后缀，无路径穿越/越界；服务端 TrashService.cs:121-126 目标占用返回 409 CONFLICT+friendlyMessage，客户端 EnsureSuccessStatusCode→HttpRequestException.StatusCode=Conflict 可过滤，链路贯通；Android TrashDialog FileListScreen.kt:1207 对 FileConflictException 显示具体原因+下一步，对齐 CONFLICT 语义；OnRestoreClick async void 顶层 try-catch 合规（7.2）。待人工确认：AC2 UI 流程——同名重建→恢复弹窗→改名/覆盖/取消各分支实际点击表现。",
       "updatedAt": "2026-08-04"
     },
     {
