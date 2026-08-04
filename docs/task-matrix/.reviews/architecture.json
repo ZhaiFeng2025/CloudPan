@@ -2,73 +2,105 @@
   {
     "dimension": "architecture",
     "severity": "P1",
-    "location": "shared-spec.json:580（/api/thumbnails 无 clientMethod）；CloudPan.Contract/IApiClient.Thumbnails.cs:14-16；CloudPan.Client.Core/Services/ApiClient.cs:76；CloudPan.Android/.../data/Generated/CloudPanApi.g.kt（全缺）",
-    "problem": "GET /api/thumbnails 端点在 shared-spec.json 中只有路由声明（无 clientMethod 段），因此 C# 侧由手工 partial（IApiClient.Thumbnails.cs 的 GetThumbnailAsync(path,width)）补充、ApiClient.cs:76 手写实现，且 width/path 两个查询参数完全没有进 spec；Kotlin 端 CloudPanApi.g.kt 根本没有任何缩略图方法。双端客户端方法签名脱离契约，--verify 检不出漂移。",
-    "why": "契约驱动是项目最高优先级规则（规则 0）——『C# ApiClient、Kotlin Retrofit interface 从 endpoints 生成』。缩略图端点是唯一走『手工 partial + 参数不进 spec』的路由，spec 增/改缩略图参数时 C# 与 Kotlin 不会同步，正好落入契约驱动要消灭的双端漂移缺陷；且 Kotlin 整端缺该能力。",
-    "suggestion": "在 shared-spec.json 的 /api/thumbnails 端点补 clientMethod（含 path 查询参数、width 参数与响应类型），删除 IApiClient.Thumbnails.cs 手工 partial，改由 CodeGen 生成并纳入 --verify，两端同步覆盖。"
+    "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs:104-140（豁免表）/240-259（到期断言）；tasks.json 批次 1-9 全部 done；豁免类型聚合：SetupForm 1091、FileBrowserView 847、SettingsForm 684、TrayAppContext 522、ServerInstaller 861、SettingsPage 549、ServerWindow 525、WebSocketHandler 464",
+    "problem": "『豁免表_持续下降约束』批次 9 已全部 done，但 8 项 Deadline=批次 9 的豁免类型仍远超 400（实测聚合无拆分），T-099 到期断言（批次 done→必须 ≤400）必红；T-099 只把 TargetCeiling 重校准为当前聚合使『聚合≤TargetCeiling』断言可绿，真实拆分全部推迟到批次 10 且尚无任何拆分提交。",
+    "why": "规则 8『单类 ≤400，超标必须拆分』对全仓最高复杂度 8 个类型继续登记豁免，到期强制机制形同虚设；门禁红灯=CI 架构门禁实际失败，与『批次 9 全绿验收』结论不一致，主窗/设置/托盘/安装器/WS 分发保持全仓最高理解与回归成本。",
+    "suggestion": "批次 10 第一优先按 T-099 承诺的视图/步骤/分发边界把 8 项真实拆到 ≤400（先让 CodeQualityTests 转绿），拆不动的必须给出具体拆分提交而非续期；把『到期断言必须绿』纳入批次 10 验收硬标准。"
   },
   {
     "dimension": "architecture",
     "severity": "P2",
-    "location": "CloudPan.Contract/FileHasher.cs:1；CloudPan.Contract/SyncIgnoreParser.cs:1（非 Generated 目录手工逻辑）",
-    "problem": "CloudPan.Contract 作为『契约层 = spec 生成物 + 传输协议抽象』，却包含两个非生成的手工实现：FileHasher（SHA-256 哈希工具，被 Infrastructure.FileStorageService 与 Client.Core 共用）与 SyncIgnoreParser（客户端忽略规则解析，仅 Client.Core 使用）。它们既非 spec 生成物也非传输抽象，属基础设施/客户端领域工具，按『基础设施单一实现：两端共性设施必须在 Infrastructure』应落位 Infrastructure，而非契约层。",
-    "why": "契约层混入手工基础设施逻辑会稀释『唯一事实来源』语义：后续新增哈希/忽略规则相关改动会直接改契约层而绕开 spec 生成管线；且 SyncIgnoreParser 是纯客户端逻辑，放共享契约层使服务端无谓暴露客户端规则实现，破坏分层纯度。",
-    "suggestion": "将 FileHasher 与 SyncIgnoreParser 下沉到 CloudPan.Infrastructure（Client.Core 与 FileStorageService 均已引用 Infrastructure，依赖方向不变），Contract 层只保留 spec 生成物与传输抽象（DownloadResult/IApiClient.Config 属传输抽象可保留）。"
+    "location": "CloudPan.Server.Core 12 个服务直接 `IDbContextFactory<CloudPanDbContext>` + LINQ（FileIndexService.cs:15,22,35…、UploadService.cs:22、ChunkedUploadService.cs:15、SharingService.cs:15、SyncLogService.cs:15、VersionHistoryService.cs:14、ServerStatusService.cs:10、VersionService.cs:13、SettingsService.cs:12、TokenService.cs:25、VersionCommitHelper.cs:54）；IFileIndexService.cs:30（MoveAsync 签名为 `Func<CloudPanDbContext, Task>`）；IVersionHistoryService.cs:33（UpdateVersionPathAsync 传 CloudPanDbContext）；VersionCommitHelper.cs:54（CommitNewVersionInTransactionAsync 传 CloudPanDbContext）",
+    "problem": "Client.Core 已按 T-093 用 IClientStore 抽象彻底消除领域层直接 EF LINQ，但 Server.Core 从未做等价抽象——12 个服务直接注入 IDbContextFactory<CloudPanDbContext> 并写 LINQ/事务；且 IFileIndexService/IVersionHistoryService/VersionCommitHelper 的公开签名直接把 Infrastructure 的具体类型 CloudPanDbContext 泄漏进 Core 契约，调用方（Host Controller/测试）被迫感知 EF 类型。",
+    "why": "架构要求『领域逻辑进 Core，持久化在 Infrastructure 单一实现』，两端应同构；服务端领域层未抽象导致 Server.Core 逻辑无法脱离真实 DB 单测、契约签名绑定具体 EF 类型，与客户端 T-093 的收敛动作不一致，领域层可单测性与分层纯度被削弱。",
+    "suggestion": "仿 T-093 为 Server.Core 引入持久化抽象（如 IFileIndexStore/IClientStore 同款 Repository），把 MoveAsync/UpdateVersionPathAsync/CommitNewVersionInTransactionAsync 签名中的 CloudPanDbContext 替换为抽象存储接口，Host/Controller 不再感知 EF 类型。"
   },
   {
     "dimension": "architecture",
     "severity": "P2",
-    "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs:139-156,162-207；豁免登记 :102-103（SyncEngine Ceiling 2200 / Target 2050 / 批次 8 达 ≤400）",
-    "problem": "SyncEngine 聚合 2123 行仍远超其自身下降目标 2050（距 400 规则上限 5 倍），且豁免登记的截止描述『批次 8：拆出传输/队列逻辑后 ≤400』所指向的批次已全部 done 仍未达标；测试『所有public类型_聚合行数不超上限』只校验 Ceiling(2200)、『豁免表_持续下降约束』只校验 TargetCeiling<Ceiling 与聚合<T070 基线，均未校验 聚合<=TargetCeiling 与截止批次是否兑现。",
-    "why": "单类行数 ≤400（规则 8）对最大类型退化为『有下降意图、无强制兑现』：豁免测试只验证目标比上限小，不验证实际行数小于目标，导致 400 门禁对 SyncEngine 无限期放宽，批次 8 完成而目标未达成也被视为通过，违反『以登记方式把违规合法化』应被阻止的初衷。",
-    "suggestion": "CodeQualityTests 增加断言：聚合行数 <= TargetCeiling（不只看 Ceiling），并校验 Deadline 批次已 done 的类型必须 ≤400；SyncEngine 继续拆（传输/队列已拆出，剩余耦合需以状态机子类或事件驱动重构收敛）。"
+    "location": "CloudPan.Server.Core/WebSocket/WebSocketHandler.Broadcast.cs:20-50（匿名对象 new { type=WebSocketEvent.FileChanged, path, version, timestamp }）；CloudPan.Client.Core/Services/WebSocketClient.cs:85-90（new { type=\"auth\"... } 手写认证消息）、264-316（JsonDocument 手解析 + 硬编码字符串 \"ping\"/\"pong\"/\"file_changed\"）；shared-spec.json api.websocket 仅 endpoint/auth/heartbeat，无消息 DTO",
+    "problem": "WebSocket 协议消息形状完全非契约驱动：服务端广播用匿名对象、客户端用 JsonDocument 手解析且用字符串字面量（而非已生成的 WebSocketEvent 常量）匹配事件类型，spec 的 websocket 段只定义了 endpoint/auth/heartbeat，未定义任何消息载荷 DTO；UDP 发现响应同样手拼 JSON（UdpDiscoveryHostedService.cs:57-59）。",
+    "why": "规则 0『契约是唯一事实来源』对非 HTTP 通道未兑现——服务端与客户端两端各自手写消息形状，改字段/事件名需同步两处且无编译期校验，任一漂移即静默协议失配；这是契约驱动覆盖面（含 WebSocket 消息与 UDP 发现）的结构性空白。",
+    "suggestion": "在 shared-spec.json api.websocket 增加各事件/认证消息载荷 DTO 定义，CodeGen 生成类型化消息；服务端广播与客户端解析均改用生成 DTO（客户端事件名改用 WebSocketEvent 常量），删除匿名对象与 JsonDocument 手解析。"
   },
   {
     "dimension": "architecture",
     "severity": "P2",
-    "location": "CloudPan.Server.Core/Thumbnails/ThumbnailService.cs:245-249；CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.cs:93-97；CloudPan.Infrastructure/Storage/FileStorageService.cs:13,20-22",
-    "problem": "元数据目录路径有两套并存且互不相通：FileStorageService 构造时创建中央 {syncRoot}/.cloudpan/.thumbnails（仅创建从未被读用，死代码）；ThumbnailService 实际按『源文件所在目录/.cloudpan/.thumbnails』就近写缩略图；ChunkedUploadService 又按『文件父目录/.cloudpan/{guid}.chunk.tmp』写分块临时文件。三处都在 Server.Core 手工 Path.Combine 拼接元数据路径，未收敛到 Storage 单点。",
-    "why": "『基础设施单一实现：文件存储/路径安全在 Infrastructure』与『路径→绝对路径必须经 Storage』被架空：元数据目录布局散落在 ThumbnailService/ChunkedUploadService 两处手工拼，FileStorageService 持有的中央 _thumbnailsDir 成为无人消费的死目录；任一服务改布局（如缩略图改集中存储）需同步改多处，且新增遍历（EnumerateThumbnailCacheDirs）与写入各走一套约定。",
-    "suggestion": "将元数据目录布局（.versions/.thumbnails/分块临时目录）收敛到 FileStorageService 单一接口（如 GetThumbnailCachePath(filePath)/GetChunkTempPath(filePath)），ThumbnailService/ChunkedUploadService 只调 Storage，删除 FileStorageService 未使用的中央 _thumbnailsDir 或统一其为唯一布局。"
+    "location": "CloudPan.Server.Host/Hosting/BackgroundHostedService.cs:118-144（ChunkCleanup 直接 db.ChunkedUploads.Where + File.Delete(s.TempPath) + db.ChunkedUploads.Remove）；而 Server.Core IChunkedUploadService 已有 CleanupIncompleteSessionsAsync 与 SafeDeleteTemp",
+    "problem": "Host 层 BackgroundHostedService.ChunkCleanup 直接操作 DbContext 与 File.Delete，绕过了 Core 的 IChunkedUploadService（该服务已有 CleanupIncompleteSessionsAsync + SafeDeleteTemp 封装超时/临时文件语义），Host 与 Core 各维护一套『分块会话超时清理』领域逻辑。",
+    "why": "『领域逻辑进 Core，Host 只做宿主调度』——清理分块会话是领域行为，应归 IChunkedUploadService 单一实现；Host 直碰 DbContext+File 使清理策略（超时时长/临时文件安全删除）在两层重复，改一处漏一处即并发/孤儿文件不一致（CLAUDE.md 7.1/7.3 高危区）。",
+    "suggestion": "在 IChunkedUploadService 增加带超时参数的清理方法（如 PurgeExpiredAsync(TimeSpan)），BackgroundHostedService.ChunkCleanup 改为调用之，删除 Host 内联 DbContext+File.Delete 逻辑。"
+  },
+  {
+    "dimension": "architecture",
+    "severity": "P2",
+    "location": "CloudPan.Server.Host/Controllers/AdminController.cs:67-181（115 行内联管理面板 HTML）；CloudPan.Server.Host/Controllers/ShareController.cs:104-114,133-142（分享页/密码表单 HTML）；CloudPan.Server.Host/Controllers/HealthController.cs:83（token 路径手拼）、103-205（PairingPage 内联 HTML）",
+    "problem": "『HTML 视图内嵌 Controller』已扩散到 3 个控制器：除已登记的 HealthController PairingPage（103-205 行）外，AdminController.Dashboard 内嵌 115 行管理面板 HTML、ShareController.SharePage 内嵌分享页 HTML；且 HealthController:83 与 DatabaseInitializer.cs:95、ServerInstaller.Install.cs:154 三处手拼 token 路径（SecretStore 单点被绕过）。",
+    "why": "Controller 职责是 HTTP 适配/状态码/错误体，视图渲染是 UI 关切；HTML 内嵌使渲染层混入适配层（无法复用 Server.UI 渲染设施、改版式需改 C# 重编译），token 元数据路径三处手拼破坏路径/元数据布局单点（与 SecretStore 双事实来源）。",
+    "suggestion": "把 Admin/Share/Pair 三处 HTML 统一下沉 Server.UI（或静态资源/独立生成器），Controller 仅返回视图名；token 路径统一经 SecretStore/IFileStorageService 单点获取，删除 3 处手工 Path.Combine。"
+  },
+  {
+    "dimension": "architecture",
+    "severity": "P2",
+    "location": "CloudPan.Server.Host/Controllers/HealthController.cs:34-46（GetHealth 内联 DriveInfo.AvailableFreeSpace + GC.GetTotalMemory 计算 diskStatus/memStatus）",
+    "problem": "HealthController.GetHealth 在 Controller 内联磁盘/内存健康业务逻辑（DriveInfo、GC.GetTotalMemory、阈值 100MB/500MB），仅 DB 完整性下沉到 IServerStatusService；磁盘/内存计算仍留在 HTTP 适配层。",
+    "why": "『Controller 只做 HTTP 适配，不得直接操作 File/环境探测』——健康状态计算是领域逻辑应归 IServerStatusService 单一实现；内联在 Controller 使健康策略（阈值/数据源）无法单测、与 CheckDbIntegrityAsync 的收敛模式不一致。",
+    "suggestion": "把磁盘/内存健康状态计算并入 IServerStatusService（如 GetHealthStatusAsync），Controller 仅绑定参数并映射响应 DTO。"
   },
   {
     "dimension": "architecture",
     "severity": "P3",
-    "location": "CloudPan.Server.Host/Controllers/FilesController.ChunkedUpload.cs:56-59",
-    "problem": "分块上传 Controller 仍手写路径归一（if (!path.StartsWith('/')) path = \"/\" + path;），而普通上传 FilesController.Upload 已按 F-132 把路径归一与校验下沉到 UploadService；ChunkedUploadService 内部也未做归一（只 ValidatePath）。两端上传路径处理边界不一致。",
-    "why": "『Controller 只做 HTTP 适配，禁止在 Controller 自行处理路径』：分块上传路径归一留在 Host 层，与 Upload/FileOperation 的『归一+校验下沉 Core』约定分裂，后续若在 Core 直接调用 ChunkedUploadService 会绕过归一（StartsWith('/') 假设失效）。",
-    "suggestion": "把分块上传的路径归一下沉到 ChunkedUploadService.ReceiveChunkAsync 开头（与 UploadService 对齐），Controller 仅做参数绑定；或至少在 Core 内统一一个路径归一入口。"
+    "location": "CloudPan.Client.Core/Services/SyncBrowseService.cs（398 行）+ SyncBrowseService.Cache.cs（101 行），声明 internal sealed partial class；CloudPan.Client.Core/Services/BrowseLocalIndex.cs（193 行）+ BrowseLocalIndex.Watchers.cs（249 行），同为 internal",
+    "problem": "T-108 新建浏览快照缓存类型继续用 internal 声明绕过 CodeQualityTests『public 类型聚合 ≤400』门禁：SyncBrowseService 聚合 499 行、BrowseLocalIndex 聚合 442 行均 >400，因非 public 不被 T-070 聚合门禁覆盖；T-070 只跟踪 public 类型，internal 大类型不受规则 8 约束。",
+    "why": "规则 8『单类 ≤400，超标必须拆分』对 internal 类型无强制力，门禁盲区被持续利用；浏览/快照缓存类随事件驱动逻辑继续膨胀不受约束，与 public 侧强制拆分形成双标。",
+    "suggestion": "明确 internal 类型是否纳入聚合门禁（或为 internal 大类型设等效上限）；至少把 SyncBrowseService 的查询与缓存两块（各 ≤400 但聚合 499）继续按职责拆分，或登记过渡上限。"
   },
   {
     "dimension": "architecture",
     "severity": "P3",
-    "location": "CloudPan.Server.Host/Program.cs:155 行（组合根超 150 行指导线）",
-    "problem": "CLAUDE.md 规则 8 目标架构要求『薄组合根（Program.cs < 150 行）』，当前 Program.cs 共 155 行，略超；且内联了 ShowError 静态方法与 TrayAppRunner.RunAsync 分支，组合根已含 5 行以上的启动展示逻辑。",
-    "why": "组合根行数门禁是分层纪律的一部分——超限会随批次继续膨胀（服务注册/中间件/启动信息都在加），违背『薄组合根』约束方向。",
-    "suggestion": "将 ShowError、Kestrel 端口解析、服务注册表等外提（如 Hosting/ServiceRegistrar），把 Program.cs 压回 150 行以内，纳入 CodeQualityTests 单文件行数门禁验证。"
+    "location": "CloudPan.Server.Core/Thumbnails/ThumbnailService.cs:7,99,142-170（using SkiaSharp + SKBitmap.Decode 主路径）＋ CloudPan.Server.Core.csproj（SkiaSharp 4.150.1）；而 Infrastructure 已有 IImageDecoder/WicImageDecoder 抽象（T-102）",
+    "problem": "T-102 声称『Core 只依赖 IImageDecoder 抽象』，但实际仅 HEIC/HEIF fallback 走 IImageDecoder，常规格式主路径仍直接调用 SkiaSharp（SKBitmap.Decode）；Server.Core.csproj 直接引用第三方图形库 SkiaSharp，领域层依赖具体图像实现。",
+    "why": "『基础设施单一实现：两端共性设施（图像解码）必须位于 Infrastructure』——图像解码被 IImageDecoder 抽象后，主路径绕过抽象直用具体库，使 Core 与第三方库耦合、替换图像后端需改领域代码，抽象承诺只兑现一半。",
+    "suggestion": "把 SkiaSharp 常规解码收口到 Infrastructure 的 IImageDecoder 实现（增加 SkiaDecoder），ThumbnailService 全部经抽象调用，Server.Core 移除对 SkiaSharp 的直接依赖。"
   },
   {
     "dimension": "architecture",
     "severity": "P3",
-    "location": "CloudPan.Contract/Generated/ClientApi.g.cs:1-2；CloudPan.Client.Core/Generated/ApiClient.g.cs:1-2（及全部 .g.cs/.g.kt）",
-    "problem": "CLAUDE.md 规定生成文件头部标注『// AUTO-GENERATED from shared-spec.json v{version} — DO NOT EDIT』，实际头部为『// AUTO-GENERATED from shared-spec.json』+ 次行『// 版本: 1.8.0  日期: ...』，v{version} 未内联、无『— DO NOT EDIT』字样。",
-    "why": "生成物头注释是契约驱动可识别性的硬性约定（人/工具据此判断可否手改），格式漂移会让『DO NOT EDIT』提醒弱化，与文档约束不一致。",
-    "suggestion": "CodeGen 生成模板统一改为 CLAUDE.md 规定的『// AUTO-GENERATED from shared-spec.json v{version} — DO NOT EDIT』头注释，重跑生成并同步 --verify。"
+    "location": "CloudPan.Server.Core/WebSocket/WebSocketHandler.cs:40-200（HandleConnectionAsync 239 行单方法，含认证/注册/接收循环）+ WebSocketHandler.Lifecycle.cs + WebSocketHandler.Broadcast.cs 聚合 464 行",
+    "problem": "WebSocketHandler 聚合 464 行属豁免表 Deadline=批次 9 到期项，其中 HandleConnectionAsync 单方法承载认证、设备注册、接收循环、断连清理四大职责（含重复设备替换、1MB 限制、finally 竞态处理），生命周期逻辑与广播逻辑在 partial 间仍高度耦合。",
+    "why": "WS 分发与生命周期是全仓最高并发复杂度区域（CLAUDE.md 7.4），单方法内多条路径（认证失败/重复连接/消息过大/替换清理）的竞态正确性极难验证；批次 9 到期未拆继续推迟，风险集中点不被拆分摊薄。",
+    "suggestion": "把 HandleConnectionAsync 按阶段拆为私有方法（AuthenticateAsync/ReceiveLoopAsync/CleanupAsync）并各自单测，随批次 10 的 WS 到期拆分一并完成。"
   },
   {
     "dimension": "architecture",
     "severity": "P3",
-    "location": "CloudPan.Client.Core/Services/ErrorAttribution.cs vs CloudPan.Android/.../data/ErrorAttribution.kt",
-    "problem": "错误白话归因（异常类型→中文原因+下一步）在 C# 与 Kotlin 双端各有一份手工实现，注释仅『语义对齐』，非从 shared-spec.json 生成；两端文案与判定规则靠人工同步，无 verify 约束。",
-    "why": "双端客户端生成使命下，跨端业务判定（错误归因）手工复刻存在两端漂移风险：C# 新增异常分支 Kotlin 可能漏同步，导致同一错误两端口径不一致。",
-    "suggestion": "短期将归因规则表结构化进 shared-spec.json（如 errorAttribution 段：异常类型/状态码→原因+下一步），CodeGen 生成两端归因数据；无法契约化的文案则明确登记为『纯内部类型例外』。"
+    "location": "CloudPan.Client.Core/Composition/ClientBootstrap.cs:9,203,233,327,363,373（392 行，贴 400 门禁顶）；直接 IDbContextFactory<ClientDbContext>.CreateDbContext 建库/完整性/重建/列补（203/233/363/373）",
+    "problem": "客户端组合根仍 392 行（贴 400 门禁顶），并多处直接 IDbContextFactory<ClientDbContext> 建库/完整性检查/重建/补列，绕 T-093 IClientStore 抽象；Client.Core 仅此文件引用 Microsoft.EntityFrameworkCore，领域层持久化边界未被完全封闭。",
+    "why": "Core 组合根应保持薄且经抽象触碰持久化；直接持 EF 类型使『领域层独立可单测』纯度下降，392 行在门禁临界，批次 10 任何新增即越线（与 T-068/T-093 收敛方向冲突）。",
+    "suggestion": "把建库/完整性/重建/补列下沉 Infrastructure（如 ClientDbFactory 扩展 EnsureClientDbAsync），ClientBootstrap 仅做 DI 装配并拆分配置解析/健康检查以控制行数。"
   },
   {
     "dimension": "architecture",
     "severity": "P3",
-    "location": "CloudPan.Client.Core/Composition/ClientBootstrap.cs:392 行（含 203/233/363/373 直接创建 ClientDbContext）",
-    "problem": "ClientBootstrap 作为客户端组合根（392 行，逼近 400 上限）位于 Client.Core，并多处直接 new/使用 ClientDbContext（建库/完整性检查/重建/迁移），绕开 T-093 IClientStore 抽象；组合根同时承担配置解析/DPAPI/DI 装配/健康检查等多职责，行数已到门禁临界。",
-    "why": "Client.Core 组合根应保持薄且经抽象触碰持久化；直接在 Core 组合根持 EF 类型 + 392 行聚合使 Client.Core 的『领域层独立可单测』纯度下降，且逼近 400 行门禁，下一批次任何新增都可能越线。",
-    "suggestion": "将建库/迁移/完整性检查下沉到 Infrastructure（如 ClientDbFactory/IClientStoreFactory 扩展），ClientBootstrap 仅做 DI 装配，并拆分配置解析与健康检查为独立类以控行数。"
+    "location": "CloudPan.Server.Host/Program.cs（158 行，超 150 指导线，含内联 ShowError 静态方法与启动展示分支）",
+    "problem": "组合根仍 158 行超 CLAUDE.md『薄组合根（Program.cs < 150 行）』指导线，内联 ShowError 方法与启动分支。",
+    "why": "组合根行数是分层纪律一部分，已连续多批超限且随服务注册/中间件继续膨胀，违背薄组合根方向。",
+    "suggestion": "把 ShowError/服务注册/端口解析外提（如 Hosting/ServiceRegistrar），压回 150 行以内并纳入 CodeQualityTests 单文件门禁。"
+  },
+  {
+    "dimension": "architecture",
+    "severity": "P3",
+    "location": "CloudPan.Infrastructure/CloudPan.Infrastructure.csproj:10-15（UseWindowsForms=true）；CloudPan.Infrastructure/Design/{DesignTokens,ThemeWatcher,IconFactory}.cs",
+    "problem": "基础设施层开启 UseWindowsForms=true 并承载 UI 主题/图标（DesignTokens/ThemeWatcher/IconFactory），基础设施层耦合 WinForms UI 框架（Form/Control/System.Drawing），Server.Core/Client.Core 引用它也被迫 net8.0-windows。",
+    "why": "『基础设施单一实现』意图是两端共性设施（持久化/存储/安全/日志/配置/重试），UI 主题/图标属渲染关切，下沉把 UI 框架拖入共享层，分层纯度下降、任一纯 infra 消费者都要背 WinForms 依赖。",
+    "suggestion": "权衡需显式决策：UI 主题/图标独立为『设计令牌库』（两端 UI 引用）或留在各自 UI 项目，让 Infrastructure 回归零 UI 依赖；若保留现状须在文档登记理由。"
+  },
+  {
+    "dimension": "architecture",
+    "severity": "P3",
+    "location": "CloudPan.Client.Core/Services/FileWatcherService.cs:86,121,140（OnChanged/OnDeleted/OnRenamed 为 async void）",
+    "problem": "FileSystemWatcher 事件处理器用 async void（OnChanged/OnDeleted/OnRenamed），非 UI 事件处理器，严格违反 CLAUDE.md 7.2『async void 仅允许在 UI 事件处理器中使用』；三处虽有顶层 try-catch（崩溃风险已控制），但事件处理器内 await Task.Delay 后再操作，异常逃逸窗口仍存在。",
+    "why": "7.2 是防系统性缺陷强制规则，FileSystemWatcher 非 UI 事件却用 async void 属文字违反；虽有 try-catch 兜底，但规则要求 UI 事件之外避免 async void，避免事件源重入/未观察异常。",
+    "suggestion": "改为同步事件处理器 + Task.Run(async () => { try...catch }) 承载异步逻辑（与 Timer 回调同款模式），或至少登记为『非 UI 事件 async void 例外 + 顶层 try-catch』并保持测试守护。"
   }
 ]

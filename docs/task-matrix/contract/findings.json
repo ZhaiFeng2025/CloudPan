@@ -1198,5 +1198,69 @@
   "location": "CloudPan.Client.Core/Services/SyncBrowseService.cs:88（Directory.EnumerateFileSystemEntries AllDirectories）；CloudPan.Client.UI/UI/MainWindow.Browser.cs:113（browserRefreshTimer 5000ms）",
   "problem": "文件浏览每 5 秒刷新一次：GetFileBrowserAsync 在 await 后回到 UI 线程同步执行同步根全树递归枚举（SearchOption.AllDirectories）+ 快照全表读取，即 UI 线程每 5 秒做一次全目录扫描。家庭照片库（数万文件）下每次枚举数百毫秒到秒级，滚动/点选/缩略图滚动被周期打断，T-087 后网格+缩略图成为主视图，卡顿更易感知；搜索防抖 300ms 也触发同一全树扫描。",
   "why": "零等待焦虑要求操作不被周期性打断；大照片库是主要使用场景，每 5 秒一次 UI 冻结直接可见，浏览/缩略图体验打折。"
+ },
+ {
+  "id": "F-151",
+  "dimension": "architecture",
+  "severity": "P0",
+  "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs:104-140（豁免表）/240-259（到期断言）；豁免类型聚合：SetupForm 1091、FileBrowserView 847、SettingsForm 684、TrayAppContext 522、ServerInstaller 861、SettingsPage 549、ServerWindow 525、WebSocketHandler 464",
+  "problem": "『单类 ≤400』门禁到期断言当前处于测试失败状态（已实测）：批次 9 已全部 done，但 8 项 Deadline=批次 9 的豁免类型仍未拆到 ≤400，全部触发『截止批次已完成但聚合 >400』失败；T-099 只把 TargetCeiling 重校准为当前聚合使『聚合≤TargetCeiling』断言可绿，真实拆分全部推迟到批次 10 且尚无任何拆分提交；豁免表从 11 项基线保持不变，Deadline 机制形同虚设。",
+  "why": "规则 8『单类 ≤400，超标必须拆分』对全仓最高复杂度 8 个类型登记豁免且到期不拆，门禁强制机制失效；门禁红灯=CI 架构门禁实际失败，与『批次 9 全绿验收』结论不一致，主窗/设置/托盘/安装器/WS 分发保持全仓最高理解与回归成本。"
+ },
+ {
+  "id": "F-152",
+  "dimension": "function",
+  "severity": "P1",
+  "location": "shared-spec.json api.endpoints（分享仅 POST /api/shares + DELETE，无 GET 列表端点）；ShareController.cs:26-60；ShareDialog.cs:11（注释自认无列表端点）；Android FileRepository.kt:254（createShare 死代码）",
+  "problem": "服务端只有『创建/撤销分享』两个端点，无『列出我的分享』。Windows ShareDialog 注释自认『服务端仅提供创建/撤销端点（无列表端点），故「管理分享」=生成后直接撤销该链接』——对话框一旦关闭 shareId 即丢失，历史分享链接永久无法查看或撤销；无过期无密码的永久分享发出即失控。Android 连分享 UI 都没有：createShare 是死代码，revokeShare 在 spec 标 kotlin:false。",
+  "why": "clouddrive-kb §5 明确要求分享页『已分享列表、撤销链接、改权限』；分享是家庭向外部发文件的唯一通道，不可管理 = 链接永生 + 无安全撤销路径，属声明功能与可操作能力之间的触达落差。"
+ },
+ {
+  "id": "F-153",
+  "dimension": "function",
+  "severity": "P1",
+  "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt:61-71,1049-1162（仅扩展名图标）；data/Generated/CloudPanApi.g.kt:88-91（getThumbnail 已生成未接线）",
+  "problem": "照片备份定期把家人照片传到 /Photos/yyyy-MM/，但 Android 文件列表只用扩展名图标，服务端 /api/thumbnails（含 HEIC 解码）在 Android 完全未使用。无照片墙、无相册网格、无预览滑动翻页，clouddrive-kb §7 手机照片墙全未落实。",
+  "why": "照片备份与浏览是家庭云盘最高频路径，『只传不能看』使备份收益无法触达家人；Windows 网格已接缩略图，Android 作为照片产出主端反而缺失，双端不对称最刺眼。"
+ },
+ {
+  "id": "F-154",
+  "dimension": "function",
+  "severity": "P1",
+  "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt（无 moveFile 封装）；data/Generated/CloudPanApi.g.kt:60（moveFile 已生成未用）；MainActivity.kt:86（remotePath=/Uploads/$fileName 硬编码）",
+  "problem": "moveFile 接口已生成但 FileRepository 无封装、UI 无入口；手动上传固定落 /Uploads/ 根目录，用户无法把照片/文档归类到 /Photos 或其他目录；同名文件再传静默替换（旧版进版本历史，家人无从区分）。",
+  "why": "上传是 Android 高频动作（手机是照片/随手文档主要产出端），上传后不能移动 = 文件永久堆积 /Uploads/ 根目录，目录组织能力缺失直接破坏家庭文件归集整理。"
+ },
+ {
+  "id": "F-155",
+  "dimension": "ux",
+  "severity": "P2",
+  "location": "MainWindow.Browser.cs:162（双击打开失败 catch→AddLog）/211（下载入队失败）/231（导入失败）；MainWindow.Trash.cs:66（批量删除失败）/112（撤销失败）；TrashDialog.cs:124（清空回收站失败仅 addLog）；MainWindow.Layout.cs:243（日志侧栏默认折叠 Panel2Collapsed=true）",
+  "problem": "Windows 端用户主动操作的全部失败反馈仍走 AddLog 一条日志文字，而日志侧栏默认折叠（用户看不见）：双击文件打不开、点「下载到本机」入队失败、上传/拖拽导入失败、批量删除中途失败、撤销删除失败、清空回收站失败——这些操作失败时主界面零变化，无弹窗、无错误原因、无重试入口，功能死端。T-094/F-136 只修了回收站「恢复」一条路径，其余高频操作仍静默。",
+  "why": "违反 ux-kb 零困惑『错误=原因+下一步』与 clouddrive-kb『失败可见可重试』：家庭用户点「上传」「下载」后什么都没发生，只能困惑地反复点击或放弃；与已弹窗的恢复路径形成『部分白话、部分静默』的割裂观感，是最典型的功能死端。"
+ },
+ {
+  "id": "F-156",
+  "dimension": "ux",
+  "severity": "P2",
+  "location": "FileBrowserView.Events.cs:169-182（DragEnter 接受含目录 FileDrop，显示复制光标）；MainWindow.Browser.cs:189（FilesDropped→ImportFilesAsync 对目录 File.Copy 抛异常）；FileBrowserView.cs:146-152（上传 OpenFileDialog 仅选文件，无文件夹选择）",
+  "problem": "Windows 客户端无法上传文件夹：拖拽整个文件夹到浏览视图时 DragEnter 判定为可拖放（显示复制光标），但 ImportFilesAsync 对文件夹路径直接 File.Copy 抛异常，异常被吞进默认折叠的日志侧栏——用户拖整个相册/照片文件夹进来，界面看起来被接受，实际一个文件都没上传且无任何提示；「上传」按钮的 OpenFileDialog 也只选文件不能选文件夹。",
+  "why": "家庭用户最自然的操作是把整相册/整文件夹拖进云盘备份，当前『接受了却悄悄失败』是最恶劣的死端体验（用户误以为已备份，实际照片从未上传，数据安全感被破坏），clouddrive-kb §3 要求拖拽+批量，目录级批量未落实。"
+ },
+ {
+  "id": "F-157",
+  "dimension": "ux",
+  "severity": "P2",
+  "location": "FileListScreen.kt:73-81（formatTimestamp 用 SimpleDateFormat(\"yyyy-MM-dd'T'HH:mm:ss\") 无时区解析）；SettingsScreen.kt:550-558（同解析）+ :527（设备最后在线）；服务端 FileIndexService.cs:346（DateTime.UtcNow.ToString(\"O\")，含小数秒+Z）；对照 VersionHistoryDialog.cs:172-182（AdjustToUniversal+ToLocalTime 正确换算）",
+  "problem": "服务端把文件/设备时间存为 ISO 8601 \"O\" 格式（含小数秒与 Z），Android 两端 formatTimestamp 用 SimpleDateFormat(\"yyyy-MM-dd'T'HH:mm:ss\")（无毫秒无时区）解析，lenient 模式把时间戳前缀按设备本地时区读取并忽略 \".1234567Z\"，从不换算 UTC→本地；家庭局域网（UTC+8）下文件「修改时间」与设备「最后在线」恒显示早 8 小时的 UTC 时钟值（本地 22:23 的文件显示 14:23）。",
+  "why": "按时间找最近照片/文件是家庭高频路径，Android 显示错误时间直接误导用户；违反 ux-kb『系统与真实世界匹配』与 visual-kb『两平台行为一致』，同一函数同时污染文件列表与设备列表两处。"
+ },
+ {
+  "id": "F-158",
+  "dimension": "architecture",
+  "severity": "P2",
+  "location": "BackgroundHostedService.cs:118-144（ChunkCleanup 直接 db.ChunkedUploads.Where + File.Delete(s.TempPath) + db.ChunkedUploads.Remove）；而 Server.Core IChunkedUploadService 已有 CleanupIncompleteSessionsAsync 与 SafeDeleteTemp",
+  "problem": "Host 层 BackgroundHostedService.ChunkCleanup 直接操作 DbContext 与 File.Delete，绕过了 Core 的 IChunkedUploadService（该服务已有 CleanupIncompleteSessionsAsync + SafeDeleteTemp 封装超时/临时文件语义），Host 与 Core 各维护一套『分块会话超时清理』领域逻辑。",
+  "why": "『领域逻辑进 Core，Host 只做宿主调度』——清理分块会话是领域行为，应归 IChunkedUploadService 单一实现；Host 直碰 DbContext+File 使清理策略在两层重复，改一处漏一处即并发/孤儿文件不一致（CLAUDE.md 7.1/7.3 高危区）。"
  }
 ]

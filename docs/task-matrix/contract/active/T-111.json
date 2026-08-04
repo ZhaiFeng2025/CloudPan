@@ -1,0 +1,45 @@
+{
+ "id": "T-111",
+ "title": "WebSocketHandler 真实拆分（聚合 ≤400 + HandleConnectionAsync 按阶段拆 + 删豁免登记）",
+ "dimension": "architecture",
+ "priority": "P0",
+ "status": "todo",
+ "batch": 10,
+ "findingId": "F-151",
+ "dependsOn": [],
+ "location": "CloudPan.Server.Core/WebSocket/WebSocketHandler*.cs（聚合 464；HandleConnectionAsync 239 行单方法）；CloudPan.Tests/Architecture/CodeQualityTests.cs:104-140（豁免表）",
+ "scope": "CloudPan.Server.Core WebSocketHandler 3 partial + CodeQualityTests 豁免表登记",
+ "requirements": [
+  "按职责拆分 WebSocketHandler 聚合至 ≤400（认证/设备注册/接收循环/断连清理外提为协作类，禁止仅新增空壳 partial）",
+  "HandleConnectionAsync（239 行单方法）按阶段拆 AuthenticateAsync/ReceiveLoopAsync/CleanupAsync 私有方法，各自可单测",
+  "CodeQualityTests 豁免表删除 WebSocketHandler 登记，到期断言强制 ≤400",
+  "拆分不改变并发语义（重复设备替换/1MB 限制/finally 断连清理），CLAUDE.md 7.4 竞态路径不回归"
+ ],
+ "goal": "WebSocketHandler 聚合 ≤400，认证/接收/清理各阶段独立可单测，门禁转绿；WS 生命周期并发路径不回归",
+ "acceptanceCriteria": [
+  {
+   "text": "CodeQualityTests 到期断言 WebSocketHandler ≤400 通过且豁免表删除登记",
+   "verification": "自动",
+   "command": "dotnet test --filter CodeQualityTests"
+  },
+  {
+   "text": "行为断言：WS 生命周期单测覆盖认证失败/重复连接替换/断连清理三条路径（新增或既有 WebSocketHandlerTests）",
+   "verification": "自动",
+   "command": "dotnet test --filter WebSocket"
+  },
+  {
+   "text": "全量测试全绿 + dotnet build 全绿",
+   "verification": "自动",
+   "command": "dotnet test CloudPan.Tests -c Release && dotnet build CloudPan.sln -c Release"
+  },
+  {
+   "text": "行为断言（手动）：双客户端连接同一服务端，第二个连接替换第一个、断开后另一连接不受影响（7.4 并发）",
+   "verification": "手动",
+   "command": null
+  }
+ ],
+ "attempts": 0,
+ "statusReason": null,
+ "note": null,
+ "updatedAt": null
+}

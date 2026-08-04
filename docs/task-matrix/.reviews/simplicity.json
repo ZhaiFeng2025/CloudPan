@@ -1,75 +1,107 @@
 [
   {
     "dimension": "simplicity",
-    "severity": "P2",
-    "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs:96-141(Exemptions 豁免表) vs SyncEngine 聚合 2123 行 / MainWindow 2424 / SetupForm 1091 / ServerInstaller 861 / FileBrowserView 847 / SettingsPage 549 / TrayAppContext 522 / ServerWindow 525 / WebSocketHandler 464",
-    "problem": "『单类 ≤400』门禁（CLAUDE.md 规则 8）仍靠 11 项豁免表维持：SyncEngine 9 个 partial 合计 2123 行（豁免上限 2200，5.3 倍超限）、MainWindow 2424（上限 2500）、FileBrowserView 847、SetupForm 1091、ServerInstaller 861——最大的同步状态机与主窗体恰好是超限最严重的类型，门禁只卡新增小类型、对最大违规者失效；豁免截止批次从 8 已滑到 9，无实际到期机制。",
-    "why": "规则 8 的意图是强制可理解性/可测试性，豁免表把最高复杂度类型永久挡在门禁外；一个 2123 行的状态机仍是最高的理解与回归成本，『最简洁技术方案』使命被最贵的类型拖累，且豁免表自身成为新一层需维护的复杂度。",
-    "suggestion": "把豁免视为按批次消耗的债务而非里程碑：批次 9 优先排 SyncEngine 按状态机/队列/传输/扫描拆独立协作类、MainWindow 按视图区域继续下沉，给豁免项设置可验证的到期断言（到期未拆 → 测试失败），而非无限续期。"
+    "severity": "P0",
+    "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs:240-259(到期断言) + Exemptions 表 123-139",
+    "problem": "『单类 ≤400』门禁到期断言当前处于测试失败状态（已实测 dotnet test 复现）：批次 9 已全部 done，但 8 个 Deadline=批次 9 的豁免项仍未拆到 ≤400——SetupForm 1091、FileBrowserView 847、SettingsForm 684、TrayAppContext 522、ServerInstaller 861、SettingsPage 549、ServerWindow 525、WebSocketHandler 464，全部触发『截止批次已完成但聚合 >400』失败；豁免表反而从 11 项基线保持不变，Deadline 机制形同虚设。",
+    "why": "规则 8 门禁是『最简洁技术方案』的强制落地装置，而它现在不是督促拆分、而是已红灯——最大最贵的 8 个类型（窗体/安装器/WS 处理）仍是数千行聚合，理解与回归成本最高；门禁整体失效让『≤400』成为纸面约束，且 8 项仍靠豁免表吊着，豁免表自身成为新一层需维护的复杂度。",
+    "suggestion": "批次 10 把到期未拆设为阻塞项：SetupForm/FileBrowserView/SettingsForm/TrayAppContext/ServerInstaller/SettingsPage/ServerWindow/WebSocketHandler 逐个按视图区域/职责拆协作类，删掉对应豁免登记，让门禁恢复全绿；到期未拆就禁止继续排新批次，否则豁免表与 Deadline 机制失去公信力。"
   },
   {
     "dimension": "simplicity",
-    "severity": "P2",
+    "severity": "P1",
     "location": "CloudPan.Server.Host/CloudPan.Server.Host.csproj:24(Microsoft.AspNetCore.OpenApi 8.0.22) 与 27(Swashbuckle.AspNetCore 6.6.2)",
-    "problem": "Host 同时引用两个 OpenAPI 包，但全 Host 项目 .cs 源码 0 处调用 AddOpenApi/MapOpenApi/AddSwaggerGen/UseSwagger（已 grep 复核，仅 bin/obj 残留二进制）——两个包都是死依赖。",
-    "why": "『能减一个依赖就减一个』（KB §4）：两个未使用的 OpenAPI 包凭空增加构建体积与供应链面，且与契约驱动（spec 为 API 唯一事实来源）冲突——真要 API 文档应由 shared-spec.json 生成而非引包。",
-    "suggestion": "删除 Swashbuckle.AspNetCore 与 Microsoft.AspNetCore.OpenApi 两个 PackageReference；若 v1.1 需要 API 文档，从 shared-spec.json 契约生成，不要引包。"
+    "problem": "Host 同时引用两个 OpenAPI 包，但全仓 .cs 源码 0 处调用 AddOpenApi/MapOpenApi/AddSwaggerGen/UseSwagger（已 grep 复核，仅 bin/obj 残留二进制）——两个包都是死依赖，凭空增加构建体积与供应链面。",
+    "why": "KB §4『能减一个依赖就减一个』；且与契约驱动冲突——API 文档本应由 shared-spec.json 生成而非引第三方包，双包并存是纯冗余。",
+    "suggestion": "删除 Swashbuckle.AspNetCore 与 Microsoft.AspNetCore.OpenApi 两个 PackageReference；v1.1 若需 API 文档从 shared-spec.json 契约生成，不引包。"
+  },
+  {
+    "dimension": "simplicity",
+    "severity": "P1",
+    "location": "CloudPan.Client.UI/UI/FileBrowseRender.cs:69(FormatSize) vs UiFormat.cs:13(FormatFileSize) 逐字同构；CloudPan.Android/.../ui/FileListScreen.kt:48 与 OfflineFilesScreen.kt:24(第二份 Android formatSize)；AdminController.cs:163(内嵌 JS formatSize)；SettingsForm.AccountTab.cs:139-140,334-335(内联 GB/MB)",
+    "problem": "文件大小格式化在全仓共存 4+ 份且仍在复制：同项目 FileBrowseRender.FormatSize 与 UiFormat.FormatFileSize 逐字相同（T-070 抽出 UiFormat 却漏掉同项目副本）；Android 内部又出现第二份 formatSize（OfflineFilesScreen.kt:24 与 FileListScreen.kt:48 各自实现，连精度策略都不同）；AdminController 内嵌 HTML 另有一份 JS formatSize；SettingsForm.AccountTab 还有两处内联『>1GB?GB:MB』。",
+    "why": "UiFormat 抽取目的就是消除格式化重复，但抽取收益被同项目漏网副本 + 跨端各自为政抵消；改格式化策略（精度/单位）仍需同步 4 处，是最典型的自造重复，Android 内双副本还互相不一致。",
+    "suggestion": "FileBrowseRender.FormatSize 删除并改调 UiFormat.FormatFileSize；AccountTab 两处内联改调 UiFormat；Android 把 formatSize 抽到共享 util（FileListScreen/OfflineFilesScreen 共用）；AdminController JS 与 C# 共用同一算法源或随页面下沉删除。"
+  },
+  {
+    "dimension": "simplicity",
+    "severity": "P1",
+    "location": "CloudPan.Client.Core/Services/FileWatcherService.cs:1-272 与 CloudPan.Client.Core/Services/BrowseLocalIndex.cs:1-194 + BrowseLocalIndex.Watchers.cs:1-250（两套并行 watcher 子系统，共约 716 行）",
+    "problem": "同一进程内对同一同步根并存两套『FileSystemWatcher + 定时全量扫描兜底 + .syncignore 监控』子系统：FileWatcherService（同步引擎事件通道）与 BrowseLocalIndex（浏览缓存索引）。逐字相同的代码段包括 IsInsideSyncRoot 10 行×2（已 diff 验证逐字一致）、FileSystemWatcher 装配（64KB InternalBufferSize + IncludeSubdirectories + NotifyFilter）、.syncignore 二级 watcher（LastWrite|CreationTime）、全量扫描兜底 Timer（均取 SpecConfig.ScanIntervalMinutes + Task.Run+try-catch 包装）、StartsWith('~') 临时文件跳过。且 FileWatcherService.ToRelativePath（199-203 行）重实现了 SyncPath.ToRelativePath（SyncPath.cs:59-66）——但漏掉 \\?\\ 长路径前缀剥离，同构却不一致；两个文件注释互相『对齐 FileWatcherService』『与 FileWatcherService 一致』，是自认的平行维护。",
+    "why": "KB §3『相同逻辑多处复制』是头号简洁杀手：同一事件流被两个子系统各自监控（双份系统资源 + 双份 5 分钟全量枚举），同步路径与浏览路径的事件处理若一处改动另一处漏改即行为漂移（ToRelativePath 已实际漂移——长路径系统下 FileWatcherService 产生的相对路径未剥离 \\?\\ 前缀，与 SyncPath 结果不一致，是潜在的路径污染）；两套 716 行互相参照的维护成本远超抽取一个共享 watcher。",
+    "suggestion": "抽一个共享的同步根监控服务（单一 FileSystemWatcher + .syncignore + 全量扫描兜底），以事件/变更版本号（可复用 BrowseLocalIndex 的 Version/Changed 模型）同时供 SyncEngine 入队与浏览缓存增量；FileWatcherService 与 BrowseLocalIndex 均改为该服务的订阅者，删除各自重复装配与重复的 IsInsideSyncRoot/ToRelativePath/ShouldIgnore 私有实现（统一走 SyncPath/Infrastructure）。"
   },
   {
     "dimension": "simplicity",
     "severity": "P2",
-    "location": "CloudPan.CodeGen/Generators/ApiClientGenerator.cs:91,121(ToConstantName/ToPascalCase) vs KotlinApiGenerator.cs:53,83(注释自认『与 ApiClientGenerator.ToConstantName 语义一致』) vs ApiResponseGenerator.cs:92(ToPascalCase)；Naming.cs:1-22",
-    "problem": "CodeGen 内『路由段→常量名/PascalCase』命名逻辑仍 3 处逐字复制：ApiClientGenerator 与 KotlinApiGenerator 的 ToConstantName/ToPascalCase 同构，ApiResponseGenerator 另有第三个 ToPascalCase；共享辅助 Naming.cs 只有一种 snake_case→PascalCase 变体，未覆盖这 3 份。",
-    "why": "代码生成器本身就是契约工具，其内部命名逻辑最不该双份——改模板段 By 前缀/分隔符规则需同步 3 个生成器，漏改即 C# 与 Kotlin 生成的常量名漂移，直接把不一致写进客户端，正是契约驱动要消灭的头号缺陷。",
+    "location": "CloudPan.CodeGen/Generators/ApiClientGenerator.cs:91,121(ToConstantName/ToPascalCase) vs KotlinApiGenerator.cs:53,83(注释自认『与 ApiClientGenerator.ToConstantName 语义一致』) vs ApiResponseGenerator.cs:92(ToPascalCase)；Naming.cs:1-22 未覆盖这 3 份",
+    "problem": "CodeGen 内『路由段→常量名/PascalCase』命名逻辑仍 3 处逐字复制：ApiClientGenerator 与 KotlinApiGenerator 的 ToConstantName/ToPascalCase 同构，ApiResponseGenerator 另有第三个 ToPascalCase；共享辅助 Naming.cs 只有 snake_case→PascalCase 一种变体，未吸收这 3 份。",
+    "why": "代码生成器本身就是契约工具，其内部命名逻辑最不该双份——改模板段 By 前缀/分隔符规则需同步 3 个生成器，漏改即 C# 与 Kotlin 生成的常量名漂移，直接把不一致写进两端客户端，正是契约驱动要消灭的头号缺陷。",
     "suggestion": "把 ToConstantName/ToPascalCase（路由段按 -/_ 分词 + 模板段 By 前缀）抽入 Naming.cs 共享辅助，3 个生成器统一调用并删各自私有副本。"
   },
   {
     "dimension": "simplicity",
     "severity": "P2",
-    "location": "CloudPan.Client.UI/UI/UiFormat.cs:13(FormatFileSize) vs FileBrowseRender.cs:69(FormatSize 逐字同构) vs AdminController.cs:163(内嵌 JS formatSize) vs CloudPan.Android/.../FileListScreen.kt:48-51(formatSize) vs SettingsForm.AccountTab.cs:139-140,334-335(内联 GB/MB)",
-    "problem": "文件大小格式化（B/KB/MB/GB switch）在全仓共存 4+ 份：同一项目内 FileBrowseRender.FormatSize 与 UiFormat.FormatFileSize 逐字同构；AdminController 内嵌 HTML 页又写一份 JS formatSize；Android FileListScreen 独立一份；SettingsForm.AccountTab 另有两处内联『>1GB?GB:MB』(139-140 磁盘剩余、334-335 同步根占用)。T-070 抽出 UiFormat 只覆盖 MainWindow 系列。",
-    "why": "UiFormat 的抽取目的就是消除格式化重复，但同项目漏网副本 + 服务端内嵌 JS + Android 各自为政，『改格式化策略』仍需同步 4 处，抽取收益被抵消，是最典型的跨端自造重复。",
-    "suggestion": "FileBrowseRender.FormatSize 改调 UiFormat.FormatFileSize 并删私有副本；AccountTab 两处内联改调 UiFormat；AdminController JS 若页面保留则与 C# 共用同一算法源（或页面下沉后随行删掉）；Android formatSize 抽到共享 util 并在 v1.1 两端对齐。"
+    "location": "CloudPan.Infrastructure/Design/DesignTokens.Spacing.cs:11,12,20,23,26,32,38,39,40(CloudPanSpacing)",
+    "problem": "死令牌 9 个 0 引用：MarginSmall(16)、MarginTiny(8)、ParagraphSpacing(16)、CardPadding(20)、ListItemPadding(10)、SectionSpacing(32)、IconSmall(12)、IconMedium(16)、IconLarge(24)——已对两端 UI 与 Tests 全库 grep 复核，无任何消费点。",
+    "why": "YAGNI：无渲染层消费的令牌是纯推测物；死令牌让令牌表失真，改间距/图标尺寸时无法区分真实使用与装饰，『令牌即唯一来源』承诺被打折，还为 400 行门禁贡献无效行数。",
+    "suggestion": "删除 9 个 0 引用令牌；确需保留须逐个注释真实消费者，否则一律删。"
   },
   {
     "dimension": "simplicity",
     "severity": "P2",
-    "location": "CloudPan.Infrastructure/Design/DesignTokens.Spacing.cs:11,12,20,23,26,32,38,39,40(CloudPanSpacing)",
-    "problem": "死令牌 9 个 0 引用：MarginSmall(16)、MarginTiny(8)、ParagraphSpacing(16)、CardPadding(20)、ListItemPadding(10)、SectionSpacing(32)、IconSmall(12)、IconMedium(16)、IconLarge(24)——已对两端 UI 与 Tests 全库 grep 复核，无任何消费点；类注释甚至自认『手工维护、此前从契约生成注释为伪称』。",
-    "why": "YAGNI：无渲染层消费的令牌是纯推测物；死令牌让令牌表失真，改间距/图标尺寸时无法区分真实使用与装饰，『令牌即唯一来源』承诺被打折，且为 400 行门禁贡献无效行数。",
-    "suggestion": "删除 9 个 0 引用令牌（MarginSmall/MarginTiny/ParagraphSpacing/CardPadding/ListItemPadding/SectionSpacing/IconSmall/IconMedium/IconLarge）；确需保留须逐个注释真实消费者，否则一律删。"
+    "location": "CloudPan.Client.Core/Services/WebSocketClient.cs:33,140-141(ReconnectDelays={1000..60000} 手写字面量) vs CloudPan.CodeGen/Generators/ManifestGenerator.cs:235,283(WebSocketReconnectMaxBackoffSeconds=60 与 DiscoveryMessage=\"CLOUDPAN_DISCOVER\" 生成后 0 消费)",
+    "problem": "WS 重连退避仍手写字面量数组，而 spec 已生成的 SpecConfig.WebSocketReconnectMaxBackoffSeconds=60 无人消费；且 ManifestGenerator 生成的 DiscoveryMessage 常量全仓 0 引用（grep 复核仅生成器与 ContractManifest.g.cs 出现）。生成即死：两个 SpecConfig 常量均无真实使用点。",
+    "why": "契约驱动在 WS 侧仍未兑现——改 spec 的退避上限不传导到代码，重连策略 spec 与代码两处维护必漂移；DiscoveryMessage 是 spec 无键、纯生成器手写、无人消费的冗余常量，同仓库内与 HTTP 退避（已走 SpecConfig.RetryBackoffMs）并存双退避序列，新人无法判断唯一来源。",
+    "suggestion": "退避序列由 SpecConfig.WebSocketReconnectMaxBackoffSeconds 派生（或 CodeGen 生成数组），删除手写字面量；DiscoveryMessage 要么接入 UdpDiscovery 使用、要么从生成器删除。"
+  },
+  {
+    "dimension": "simplicity",
+    "severity": "P2",
+    "location": "CloudPan.Server.Host/Controllers/HealthController.cs:53,69,70; CloudPan.Server.UI/ServerWindow.cs:61; CloudPan.Client.UI/UI/TrayAppContext.Menu.cs:78",
+    "problem": "应用版本字面量 \"1.0.0\"/\"v1.0.0\" 散落 5 处硬编码（Health 响应 3 处、VersionResponse、ServerWindow 状态卡、TrayAppContext 回退值）；而 UdpDiscoveryHostedService.cs:26-30 已改为从程序集读取真实版本——同一仓库出现『Health 硬编码 1.0.0』与『UDP 读程序集版本』两套版本来源并存。",
+    "why": "版本是变化点多处声明：发版 1.1.0 时 Health/UI 仍报 1.0.0 而 UDP 报新版本，用户可见接口自相矛盾；硬编码多处漏改即不一致，是典型的自造成本，且与『单源』使命冲突。",
+    "suggestion": "统一走程序集版本（对齐 UdpDiscovery 的 AssemblyInformationalVersion 读取），删除 HealthController/ServerWindow/TrayAppContext 散落字面量，或 shared-spec.json 增加 appVersion 生成单一常量。"
+  },
+  {
+    "dimension": "simplicity",
+    "severity": "P2",
+    "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt:1-1326; SettingsScreen.kt:1-558; worker/PhotoBackupWorker.kt:1-557",
+    "problem": "Android v1.0 原型单文件 Compose 屏持续超 400 行判据且仍在膨胀：FileListScreen.kt 1326 行（上批次 1226）、SettingsScreen.kt 558、PhotoBackupWorker.kt 557，状态、UI、事件、格式化混杂一屏；T-061 契约生成与批次 8/9 的 Android 改动未改变这些手工屏文件。",
+    "why": "超大文件后续改版成本非线性上升，与 C# 端『单类 ≤400』收敛动作不一致，Android 侧缺少同等拆分纪律，两端复杂度标准不同——最贵屏（FileListScreen）就是最大违规者。",
+    "suggestion": "按 Compose 惯例拆 State/Hoist 与子 Composable（如 FileRow/DeviceItem），长 Worker 按阶段拆私有函数；优先拆分 1326 行的 FileListScreen.kt，并为 Android 侧引入与 C# 对等的行数门禁。"
+  },
+  {
+    "dimension": "simplicity",
+    "severity": "P2",
+    "location": "CloudPan.Server.Core/Configuration/ISettingsService.cs, ITokenService.cs; SyncLog/ISyncLogService.cs; Status/IServerStatusService.cs; Upload/IUploadService.cs; Thumbnails/IThumbnailService.cs; Versioning/IVersionService.cs; Versions/IVersionHistoryService.cs; Files/IFileOperationService.cs; FileIndex/IFileIndexService.cs; ChunkedUpload/IChunkedUploadService.cs",
+    "problem": "Server.Core 约 14 个『一接口一实现』服务接口中 9 个（ISyncLogService/IServerStatusService/IUploadService/IThumbnailService/IVersionService/IVersionHistoryService/IFileOperationService/IFileIndexService/IChunkedUploadService）经全库 grep 验证 Tests 0 引用、无 mock、无备选实现，仅剩 ISettingsService/ITokenService/ISharingService/ITrashService/IWebSocketHandler 有 DI 或测试消费——纯 DI 仪式接口层仍占多数。",
+    "why": "KB §2 明确『为一个变化点建策略/工厂/抽象基类』与『为一次性代码建抽象层/接口』是过度工程信号；9 个无第二实现的接口层是纯推测性抽象，让服务端领域层体积与检索成本无谓上升。",
+    "suggestion": "对无 mock、无备选实现、接口与实现同层同包的纯 pass-through 接口（如 ISyncLogService/IServerStatusService）直接删除接口、DI 注册具体类；仅保留确有替换点或跨层解耦需求的接口并注释理由。"
+  },
+  {
+    "dimension": "simplicity",
+    "severity": "P2",
+    "location": "CloudPan.Server.Host/Hosting/UdpDiscoveryHostedService.cs:78(\"CLOUDPAN_DISCOVER\" 硬编码) + CloudPan.Client.UI/UI/SetupForm.Discovery.cs:39(\"CLOUDPAN_DISCOVER\" 硬编码) + HealthController.cs:83/DatabaseInitializer.cs:95/TokenService.cs(52-59,97 写读 \"token.txt\" 硬编码)，而 ContractManifest.g.cs 的 SpecConfig.TokenFileName=\"token.txt\" 与 SpecConfig.DiscoveryMessage=\"CLOUDPAN_DISCOVER\" 均 0 消费（grep 复核仅生成物与生成器出现）",
+    "problem": "规则 0『契约是唯一事实来源』在两组常量上被手工字面量绕过：发现握手消息 CLOUDPAN_DISCOVER 在服务端 UDP 监听与客户端广播各硬编码 1 处（共 2 处），token 文件名 token.txt 在 HealthController/DatabaseInitializer/TokenService 硬编码 3 处，而 spec 已生成的对应常量 TokenFileName、DiscoveryMessage 全仓 0 消费——生成即死、字面量即源。",
+    "why": "契约驱动的核心承诺是『改 spec 一处生效全部』，这两组常量恰恰相反：改 spec 的发现消息/token 文件名不传导到代码，两端各自硬编码字面量（发现消息已服务端+客户端 2 处、token 文件名 3 处），任何一处漏改即两端协议失配，直接破坏局域网发现与 Token 文件约定；是对规则 0 最直接的违背。",
+    "suggestion": "把 2 处 CLOUDPAN_DISCOVER 与 3 处 token.txt 改为引用 SpecConfig.DiscoveryMessage / SpecConfig.TokenFileName（生成常量接入真实使用点），或从 spec 删除这两个无键生成物；二选一，消灭『生成即死 + 手工字面量并存』的第三事实来源。"
+  },
+  {
+    "dimension": "simplicity",
+    "severity": "P2",
+    "location": "CloudPan.Client.Core/Models/ClientConfig.cs:25-79(Load/Save，81 行) vs CloudPan.Infrastructure/Configuration/ServerSettingsFile.cs:15-75(Load/Save，75 行)",
+    "problem": "两端各自实现同一『JSON 配置持久化』模式：均手写 JsonSerializerOptions{WriteIndented, PropertyNameCaseInsensitive} 读取、先写 .tmp 再 File.Move(overwrite) 原子写入；ClientConfig（客户端持久化配置，含 DPAPI token、限速、选择同步路径）在 Client.Core/Models，ServerSettingsFile 在 Infrastructure/Configuration——同构 Load/Save 双份，客户端那份没进 Infrastructure。",
+    "why": "CLAUDE.md 规则 4『配置等两端共性设施必须位于 Infrastructure，禁止在 Server/Client 各自重复实现』；两端配置持久化的容错/原子写语义各自为政，改原子写策略或损坏回退需同步两处，且客户端配置未来再引一处配置也会复制第三份。",
+    "suggestion": "抽一个 Infrastructure 的通用 JSON 配置存储（Load<T>/Save<T> + 原子写 + PropertyNameCaseInsensitive），ServerSettingsFile 与 ClientConfig 的读写改调之；至少把客户端配置持久化迁入 Infrastructure 收敛单实现。"
   },
   {
     "dimension": "simplicity",
     "severity": "P3",
-    "location": "CloudPan.Contract/Generated/ClientApi.g.cs:23,28 与 CloudPan.Client.Core/Services/ApiClient.cs:97,119(HealthCheckAsync/EnsureHealthAsync)",
-    "problem": "同一 SpecRoutes.Health 端点仍暴露两个方法：HealthCheckAsync（吞异常返回 bool，后台轮询用）与 EnsureHealthAsync（抛异常供归因，设置页测试连接用），HTTP 调用逐字重复仅错误处理方式不同，且双方法已被写进生成的契约（ClientApi.g.cs），方法数膨胀。",
-    "why": "双方法 90% 相同，差异只有『吞 vs 抛』——调用点各自 try/catch 即可；双方法膨胀客户端接口契约，后续改超时/路径需同步两处，生成契约也会随之固化这份重复。",
+    "location": "CloudPan.Contract/Generated/ClientApi.g.cs:23,28 与 CloudPan.Client.Core/Services/ApiClient.cs:74,96(HealthCheckAsync/EnsureHealthAsync)",
+    "problem": "同一 SpecRoutes.Health 端点仍暴露两个方法：HealthCheckAsync（吞异常返回 bool，后台轮询用）与 EnsureHealthAsync（抛异常供归因，设置页测试连接用），HTTP 调用逐字重复仅错误处理方式不同，且双方法已被写进生成的契约 ClientApi.g.cs，方法数膨胀。",
+    "why": "双方法 90% 相同，差异只有『吞 vs 抛』——调用点各自 try/catch 即可；双方法膨胀客户端接口契约，后续改超时/路径需同步两处，生成契约固化这份重复。",
     "suggestion": "合并为单一 HealthCheckAsync(ct) 由调用方决定吞异常或 catch 后归因；或保留一个方法 + 显式 throwOnError 参数。"
-  },
-  {
-    "dimension": "simplicity",
-    "severity": "P3",
-    "location": "CloudPan.Client.Core/Services/WebSocketClient.cs:33,140-141(ReconnectDelays) vs CloudPan.CodeGen/Generators/ManifestGenerator.cs:221(SpecConfig.WebSocketReconnectMaxBackoffSeconds=60)",
-    "problem": "WebSocket 重连退避序列 ReconnectDelays={1000,2000,4000,8000,16000,32000,60000} 仍手写字面量数组，未接线已生成的 SpecConfig.WebSocketReconnectMaxBackoffSeconds=60；与 HTTP 重试退避（SyncEngine.Queue.cs:172 已走 SpecConfig.RetryBackoffMs）形成双退避序列并存，契约驱动在 WS 侧仍未兑现。",
-    "why": "改 spec 的退避上限不传导到代码，重连策略在 spec 与代码两处维护必漂移；同仓库内两个退避序列更让新人无法判断哪个是唯一来源。",
-    "suggestion": "退避序列由 SpecConfig.WebSocketReconnectMaxBackoffSeconds 派生（或 CodeGen 生成该数组），删除手写字面量，与 HTTP 退避共用同一契约源。"
-  },
-  {
-    "dimension": "simplicity",
-    "severity": "P3",
-    "location": "CloudPan.Server.Host/Controllers/HealthController.cs:53,69,70; Program.cs:134; CloudPan.Server.UI/ServerWindow.cs:61; CloudPan.Client.UI/UI/TrayAppContext.Menu.cs:78",
-    "problem": "应用版本字面量 \"1.0.0\"/\"v1.0.0\" 仍散落 5 处硬编码（Health 响应 3 处、启动日志、ServerWindow 状态卡、TrayAppContext 回退值），无单一来源（spec 顶层 version 是契约版本非产品版本，CodeGen 未生成 appVersion 常量）。",
-    "why": "版本是一个变化点多处声明：发版改版本号需同步 5 处，漏改即健康检查与 UI 显示不一致，是典型的自造成本。",
-    "suggestion": "shared-spec.json 增加 appVersion 字段生成单一常量，或从程序集版本集中读取；删除散落字面量。"
-  },
-  {
-    "dimension": "simplicity",
-    "severity": "P3",
-    "location": "CloudPan.Contract/FileHasher.cs:1(做文件 I/O) vs CloudPan.Infrastructure/Storage/IFileStorageService.cs:10, FileStorageService.cs:96(ComputeHashAsync 委托 FileHasher)",
-    "problem": "T-017 把哈希收敛为 FileHasher 单一实现，但 FileHasher 仍放在 Contract 层（实际做 File.OpenRead 文件 I/O，是基础设施逻辑），IFileStorageService.ComputeHashAsync 仍保留转发（服务端经接口调用、客户端直调 FileHasher）——双入口依旧。",
-    "why": "契约层承诺零依赖/纯契约，被塞入文件 I/O 基础设施，层语义不正；双入口稀释『哈希策略只改一处』的收敛效果，也违背规则 8 分层。",
-    "suggestion": "把 FileHasher 移入 Infrastructure（两端均已引用），删除 IFileStorageService.ComputeHashAsync 转发，调用点统一直连 FileHasher。"
   },
   {
     "dimension": "simplicity",
@@ -90,14 +122,6 @@
   {
     "dimension": "simplicity",
     "severity": "P3",
-    "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt:1-1226; SettingsScreen.kt:1-558; worker/PhotoBackupWorker.kt:1-543",
-    "problem": "Android v1.0 原型单文件 Compose 屏持续超 400 行判据：FileListScreen.kt 1226 行、SettingsScreen.kt 558 行、PhotoBackupWorker.kt 543 行，状态、UI、事件、格式化混杂一屏，T-061 契约生成与批次 8 的 Android 改动未改变这些手工屏文件。",
-    "why": "超大文件后续改版成本非线性上升，与 C# 端『单类 ≤400』收敛动作不一致，Android 侧缺少同等拆分纪律，两端复杂度标准不同。",
-    "suggestion": "按 Compose 惯例拆 State/Hoist 与子 Composable（如 FileRow/DeviceItem），长 Worker 按阶段拆私有函数；优先拆分 1226 行的 FileListScreen.kt。"
-  },
-  {
-    "dimension": "simplicity",
-    "severity": "P3",
     "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/Dtos.kt:1-4",
     "problem": "T-061 迁移后 Dtos.kt 只剩 4 行注释 + package 声明，成为无类型定义的死壳文件（注释自述『保留以维持源码目录引用完整性』），真实定义在 Generated/Dtos.g.kt。",
     "why": "死文件是残留，徒增检索/阅读噪音；『引用完整性』理由不成立——Kotlin 无路径引用时删除即可，保留只会让新人误以为这里还有手工 DTO。",
@@ -106,9 +130,33 @@
   {
     "dimension": "simplicity",
     "severity": "P3",
-    "location": "CloudPan.Server.Core/Configuration/ISettingsService.cs, ITokenService.cs; SyncLog/ISyncLogService.cs; Status/IServerStatusService.cs; Upload/IUploadService.cs; Thumbnails/IThumbnailService.cs; Versioning/IVersionService.cs; Versions/IVersionHistoryService.cs; Files/IFileOperationService.cs; FileIndex/IFileIndexService.cs; WebSocket/IWebSocketHandler.cs; ChunkedUpload/IChunkedUploadService.cs",
-    "problem": "Server.Core 约 14 个『一接口一实现』服务接口均为纯 DI 仪式：每个接口只有一个实现类、Tests 全库 0 引用（无 mock 也无备选实现），接口不提供任何替换点或测试接缝，仅为注入多一层文件与间接。",
-    "why": "KB §2 明确『为一个变化点建策略/工厂/抽象基类』与『为一次性代码建抽象层/接口』是过度工程信号；14 个无第二实现的接口层是纯推测性抽象，让服务端领域层体积与检索成本无谓上升。",
-    "suggestion": "对没有 mock、没有备选实现、接口与实现同层同包的纯 pass-through 接口（如 ISyncLogService/IServerStatusService）直接删除接口、DI 注册具体类；仅保留确有替换点或跨层解耦需求的接口，并注释说明理由。"
+    "location": "CloudPan.Server.Host/Program.cs:1-158",
+    "problem": "组合根 Program.cs 158 行，超过 CLAUDE.md 规则 8『薄组合根（Program.cs < 150 行）』的目标约 5%；叠加注册（AddSingleton 等）与中间件编排渐多。",
+    "why": "组合根越厚越难一眼看清服务装配与中间件依赖顺序，违背『薄组合根』约束；超限虽小但持续增长，门禁字面值被实际打破。",
+    "suggestion": "把可复用的服务注册段（基础设施/中间件）抽为扩展方法（如 AddCloudPanInfrastructure）下沉，Program.cs 收敛到 150 行内。"
+  },
+  {
+    "dimension": "simplicity",
+    "severity": "P3",
+    "location": "CloudPan.Client.Core/Services/SyncEngine.cs:59(_fileWatcher 字段), 118(第 6 参 FileWatcherService? fileWatcher), 124(赋值), 274,328(仅 Dispose 判空)；CloudPan.Client.Core/Composition/ClientBootstrap.cs:346-348(生产构造传 null)",
+    "problem": "SyncEngine 构造第 6 参 FileWatcherService? fileWatcher 是死参数：生产装配（ClientBootstrap）恒传 null，_fileWatcher 字段全仓仅赋值与两处 Dispose 判空（274/328），从未被解引用参与任何行为——DI 循环依赖重构（T-070 前 SyncEngine 内部自建 watcher）后的残留。",
+    "why": "死参数/死字段让构造签名与字段表携带一个『永不生效』的依赖，读者会误以为 SyncEngine 与 FileWatcherService 存在组合关系，实际二者已解耦；KB §3『死代码/未使用的字段』即删，且该参数还迫使每个调用点处理一个可空参数。",
+    "suggestion": "删除构造第 6 参、_fileWatcher 字段及两处 Dispose 判空（FileWatcherService 生命周期已由 DI 容器管理，无需引擎负责释放）。"
+  },
+  {
+    "dimension": "simplicity",
+    "severity": "P3",
+    "location": "CloudPan.Server.Host/Hosting/UIBridgeLocator.cs:1-39 + Hosting/IHostUIBridge.cs:10 + Hosting/TrayAppRunner.cs:20,29(UIBridgeLocator.Find() 反射) + CloudPan.Server.UI/ServerUiBridge.cs:16",
+    "problem": "可选 UI 模块经『接口 IHostUIBridge + 反射探活』装配：UIBridgeLocator 用 AssemblyLoadContext.LoadFromAssemblyPath 运行时加载 CloudPan.Server.UI.dll，GetTypes() 扫描继承者，Activator.CreateInstance 实例化——三层仪式（接口 + 反射发现 + 反射构造）支撑一个 headless/有 UI 的开关；反射失败路径还要求调用方容忍 null 回退。",
+    "why": "KB §2 将『反射』与『为一个变化点建策略/工厂』列为过度工程信号；编译期即可确定的可选 UI（Server.UI 已编译期引用 Host），运行时反射扫描徒增异常面与装配顺序敏感性，且 ServerUiBridge 仅一实现，接口+反射双重抽象都只服务『可选』这一布尔变化点。",
+    "suggestion": "评估收敛为 DI 条件注册（Host 提供 IHostUIBridge 契约，UI 程序集经 ModuleInitializer 或启动参数把桥实例注入 Host），或退化为显式工厂/启动参数开关（--ui/--service 直接决定），删除运行时反射扫描装配。"
+  },
+  {
+    "dimension": "simplicity",
+    "severity": "P3",
+    "location": "仓库根 CloudPanSync/.cloudpan/server.db, server.pfx, logs/server-20260728.log 与 CloudPan_Client/.cloudpan/client.db（gitignored，git ls-files 0 追踪，但物理驻留工作区）",
+    "problem": "根目录遗留两个运行时数据目录：CloudPanSync/ 与 CloudPan_Client/ 各含一套服务端/客户端 SQLite 库（server.db/client.db），其中 CloudPanSync 还含 server.pfx（旧私钥）与运行日志。虽被 .gitignore 忽略不进版本库，但常驻工作区，全库扫描与 grep 会反复命中其内容。",
+    "why": "运行产物混入源码工作区根，是『死数据』噪音：自动扫描（如本维度审查的全库 grep）需要人工区分运行期 DB 与源码，且遗留的 server.pfx 私钥与旧库无主、无人维护，是潜在的信息残留。",
+    "suggestion": "删除 CloudPanSync/ 与 CloudPan_Client/ 两个运行时数据目录（或移出仓库根到用户目录），保留 .gitignore 条目防再生成；server.pfx 如有他处引用则确认后清理。"
   }
 ]

@@ -1,0 +1,33 @@
+{
+ "id": "T-119",
+ "title": "版本历史「设备」列改设备友好名（对齐管理页/Android，缺失显示未知设备）",
+ "dimension": "ux",
+ "priority": "P2",
+ "status": "todo",
+ "batch": 10,
+ "findingId": "F-103",
+ "dependsOn": [],
+ "location": "VersionHistoryDialog.cs:81（lvi.SubItems.Add(v.DeviceId) 显示 32 位 GUID）；TokenService.cs:142（设备注册已生成友好名 设备-{前8位}）；AdminController.cs:157（管理页用 deviceId.substring(0,8)）",
+ "scope": "VersionHistoryDialog 设备列 + 设备名映射来源",
+ "requirements": [
+  "版本历史「设备」列改显示设备显示名（服务端设备表 name，或客户端维护 deviceId→名称映射），缺失显示「未知设备」",
+  "与 Admin 页/Android 设备列表展示形式对齐（友好名而非 32 位 GUID 全串），同一设备标识双端统一"
+ ],
+ "goal": "家人能判断是哪台设备改的版本；设备标识双端展示形式统一，无 32 位 hex 全串",
+ "acceptanceCriteria": [
+  {
+   "text": "行为断言（手动）：版本历史对已注册设备显示「设备-xxxxxxxx」，对已删除设备显示「未知设备」，不再出现 32 位 hex 全串",
+   "verification": "手动",
+   "command": null
+  },
+  {
+   "text": "全量测试全绿 + dotnet build 全绿",
+   "verification": "自动",
+   "command": "dotnet test CloudPan.Tests -c Release && dotnet build CloudPan.sln -c Release"
+  }
+ ],
+ "attempts": 0,
+ "statusReason": null,
+ "note": null,
+ "updatedAt": null
+}

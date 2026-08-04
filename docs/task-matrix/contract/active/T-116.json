@@ -1,0 +1,39 @@
+{
+ "id": "T-116",
+ "title": "Windows 拖拽目录静默失败修复（递归批量导入或白话提示，禁止零提示零上传）",
+ "dimension": "ux",
+ "priority": "P2",
+ "status": "todo",
+ "batch": 10,
+ "findingId": "F-156",
+ "dependsOn": [],
+ "location": "FileBrowserView.Events.cs:169-182（DragEnter 接受含目录 FileDrop 显示复制光标）；MainWindow.Browser.cs:189（FilesDropped→ImportFilesAsync 对目录 File.Copy 抛异常）；FileBrowserView.cs:146-152（OpenFileDialog 仅选文件）",
+ "scope": "FileBrowserView 拖放 + 上传对话框",
+ "requirements": [
+  "拖入目录时递归展开为文件清单批量导入（对齐 clouddrive-kb §3 目录级批量）；短期不实现则必须弹白话提示「暂不支持文件夹，请选择文件夹内的文件」",
+  "DragEnter 判定与实际支持一致：不支持目录则不放行复制光标或明确提示",
+  "禁止「界面接受、日志静默、零文件上传」——用户以为已备份实际照片从未上传"
+ ],
+ "goal": "拖拽整相册不再静默失败；任一路径下用户都得到明确反馈（数据安全感不被破坏）",
+ "acceptanceCriteria": [
+  {
+   "text": "行为断言（手动）：拖入含 3 张照片的子目录 → 若递归导入则 3 文件上传成功；否则弹白话提示",
+   "verification": "手动",
+   "command": null
+  },
+  {
+   "text": "行为断言（手动）：任一实现下不再出现「界面接受、无任何提示、零文件上传」",
+   "verification": "手动",
+   "command": null
+  },
+  {
+   "text": "全量测试全绿 + dotnet build 全绿",
+   "verification": "自动",
+   "command": "dotnet test CloudPan.Tests -c Release && dotnet build CloudPan.sln -c Release"
+  }
+ ],
+ "attempts": 0,
+ "statusReason": null,
+ "note": null,
+ "updatedAt": null
+}

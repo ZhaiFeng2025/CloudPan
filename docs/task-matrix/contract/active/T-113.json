@@ -1,0 +1,45 @@
+{
+ "id": "T-113",
+ "title": "Android 照片墙缩略图接入（getThumbnail + 相册网格 + 全屏预览翻页）",
+ "dimension": "function",
+ "priority": "P1",
+ "status": "todo",
+ "batch": 10,
+ "findingId": "F-153",
+ "dependsOn": [],
+ "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt:61-71,1049-1162（仅扩展名图标）；data/Generated/CloudPanApi.g.kt:88-91（getThumbnail 已生成未接线）",
+ "scope": "Android FileListScreen（缩略图渲染 + 网格视图 + 全屏预览）+ 图片加载缓存",
+ "requirements": [
+  "FileListScreen 图片类型行接入 getThumbnail 小尺寸缩略图（服务端 /api/thumbnails 已支持含 HEIC/HEIF），加载失败降级类型图标",
+  "新增相册网格视图：按 yyyy-MM 时间分组，与列表视图可切换",
+  "网格点击进入全屏预览，支持滑动翻页（对齐 clouddrive-kb §7 照片墙）",
+  "缩略图加载带内存/磁盘缓存与并发上限，滚动不 OOM 不卡顿"
+ ],
+ "goal": "手机照片墙可浏览/预览，备份收益触达家人（T-102 HEIC 解码 + T-087 缩略图端点就绪被 Android 消费）",
+ "acceptanceCriteria": [
+  {
+   "text": "FileListScreen 有调用 getThumbnail 渲染缩略图分支",
+   "verification": "自动",
+   "command": "grep -n 'getThumbnail\\|thumbnail' CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt 有匹配"
+  },
+  {
+   "text": "行为断言（手动）：打开含 jpg/heic 照片目录，网格视图渲染缩略图（非类型图标），点击进入全屏可左右翻页",
+   "verification": "手动",
+   "command": null
+  },
+  {
+   "text": "行为断言（手动）：断网/缩略图加载失败时降级类型图标不崩溃",
+   "verification": "手动",
+   "command": null
+  },
+  {
+   "text": "Android 构建通过（环境具备时）",
+   "verification": "自动",
+   "command": "cd CloudPan.Android && ./gradlew assembleDebug"
+  }
+ ],
+ "attempts": 0,
+ "statusReason": null,
+ "note": null,
+ "updatedAt": null
+}

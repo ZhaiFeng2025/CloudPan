@@ -1,0 +1,44 @@
+{
+ "id": "T-118",
+ "title": "分块会话超时清理下沉 IChunkedUploadService（Host 不再直碰 DbContext+File）",
+ "dimension": "architecture",
+ "priority": "P2",
+ "status": "todo",
+ "batch": 10,
+ "findingId": "F-158",
+ "dependsOn": [],
+ "location": "BackgroundHostedService.cs:118-144（ChunkCleanup 直接 db.ChunkedUploads.Where + File.Delete(s.TempPath)）；IChunkedUploadService（已有 CleanupIncompleteSessionsAsync + SafeDeleteTemp）",
+ "scope": "IChunkedUploadService/ChunkedUploadService + BackgroundHostedService.ChunkCleanup",
+ "requirements": [
+  "IChunkedUploadService 增加 PurgeExpiredAsync(TimeSpan 超时)（复用 CleanupIncompleteSessionsAsync + SafeDeleteTemp 语义，超时时长参数化）",
+  "BackgroundHostedService.ChunkCleanup 改为调用该服务，删除 Host 内联 DbContext+File.Delete 逻辑",
+  "清理语义（超时/临时文件安全删除）归 Core 单一实现，符合 CLAUDE.md 7.1/7.3 一致性要求"
+ ],
+ "goal": "分块会话清理领域逻辑归 IChunkedUploadService 单一实现，Host 只做宿主调度，两层重复消除",
+ "acceptanceCriteria": [
+  {
+   "text": "行为断言：新增 ChunkedUploadService 单测——构造超过超时的孤儿会话（DB record + 临时文件）→ PurgeExpiredAsync → record 与临时文件均被清理",
+   "verification": "自动",
+   "command": "dotnet test --filter ChunkedUpload"
+  },
+  {
+   "text": "高风险 AC（DB+FS 一致性）：临时文件被占用（IO 锁）时 PurgeExpiredAsync 保留 record 与临时文件，无『DB 删而文件残留』孤儿",
+   "verification": "自动",
+   "command": "dotnet test --filter ChunkedUpload"
+  },
+  {
+   "text": "BackgroundHostedService 无内联分块清理逻辑",
+   "verification": "自动",
+   "command": "grep -n 'ChunkedUploads\\|SafeDeleteTemp' CloudPan.Server.Host/Hosting/BackgroundHostedService.cs 无匹配"
+  },
+  {
+   "text": "全量测试全绿 + dotnet build 全绿",
+   "verification": "自动",
+   "command": "dotnet test CloudPan.Tests -c Release && dotnet build CloudPan.sln -c Release"
+  }
+ ],
+ "attempts": 0,
+ "statusReason": null,
+ "note": null,
+ "updatedAt": null
+}

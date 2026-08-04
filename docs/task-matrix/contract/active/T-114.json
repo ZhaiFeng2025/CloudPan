@@ -1,0 +1,45 @@
+{
+ "id": "T-114",
+ "title": "Android moveFile 封装 + 上传目标目录选择 + 同名确认",
+ "dimension": "function",
+ "priority": "P1",
+ "status": "todo",
+ "batch": 10,
+ "findingId": "F-154",
+ "dependsOn": [],
+ "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt（无 moveFile 封装）；data/Generated/CloudPanApi.g.kt:60（moveFile 已生成未用）；MainActivity.kt:86（remotePath=/Uploads/$fileName 硬编码）",
+ "scope": "Android FileRepository + MainActivity 上传 + FileListScreen 长按菜单",
+ "requirements": [
+  "FileRepository 封装 moveFile（携带 baseVersion 触发服务端 409 保护，对齐 Windows MoveAsync 语义）",
+  "FileListScreen 长按菜单加「移动/重命名」，移动支持选择目标目录",
+  "手动上传前允许选择目标目录（替代硬编码 /Uploads/）",
+  "同名文件上传弹「替换/另存」确认（对齐 409 冲突处理路径，不静默覆盖）"
+ ],
+ "goal": "Android 文件可归类整理（移入 /Photos 等目录），上传不落 /Uploads 死区、同名不静默覆盖，与 Windows 能力对齐",
+ "acceptanceCriteria": [
+  {
+   "text": "FileRepository 有 moveFile 封装与上传目标目录参数",
+   "verification": "自动",
+   "command": "grep -n 'moveFile\\|targetDir\\|moveTo' CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt 有匹配"
+  },
+  {
+   "text": "行为断言（手动）：长按文件「移动」到新目录后新位置可见、旧位置消失；重命名后服务端版本历史可查新路径（T-103 已支持）",
+   "verification": "手动",
+   "command": null
+  },
+  {
+   "text": "行为断言（手动）：上传选择 /Photos 后文件落于所选目录；同名上传弹「替换/另存」确认",
+   "verification": "手动",
+   "command": null
+  },
+  {
+   "text": "Android 构建通过（环境具备时）",
+   "verification": "自动",
+   "command": "cd CloudPan.Android && ./gradlew assembleDebug"
+  }
+ ],
+ "attempts": 0,
+ "statusReason": null,
+ "note": null,
+ "updatedAt": null
+}

@@ -1,0 +1,39 @@
+{
+ "id": "T-115",
+ "title": "Windows 用户主动操作失败统一白话弹窗（对齐 ErrorAttribution，不再只 AddLog）",
+ "dimension": "ux",
+ "priority": "P2",
+ "status": "todo",
+ "batch": 10,
+ "findingId": "F-155",
+ "dependsOn": [],
+ "location": "MainWindow.Browser.cs:162（双击打开失败）/211（下载入队失败）/231（导入失败）；MainWindow.Trash.cs:66（批量删除失败）/112（撤销失败）；TrashDialog.cs:124（清空回收站失败）；MainWindow.Layout.cs:243（日志侧栏默认折叠）",
+ "scope": "MainWindow.Browser/Trash + TrashDialog 失败反馈路径",
+ "requirements": [
+  "双击打开失败/下载入队失败/上传导入失败/批量删除失败/撤销失败/清空回收站失败 改弹可见提示，复用 ErrorAttribution.FromException 白话归因（原因+下一步，对齐 T-094/T-106 已落地路径）",
+  "批量操作至少弹「成功 N 项 / 失败 M 项」汇总对话框",
+  "失败仍保留日志（AddLog）作补充，但不再是唯一反馈"
+ ],
+ "goal": "家庭用户主动操作失败可见可重试，消除『点了没反应』的静默死端",
+ "acceptanceCriteria": [
+  {
+   "text": "行为断言（手动）：双击一个无关联程序的 .xyz 文件 → 弹白话错误对话框（含原因+下一步），主界面可见反馈",
+   "verification": "手动",
+   "command": null
+  },
+  {
+   "text": "行为断言（手动）：批量删除含 1 个不存在文件 → 弹「成功 N / 失败 M」汇总",
+   "verification": "手动",
+   "command": null
+  },
+  {
+   "text": "全量测试全绿 + dotnet build 全绿",
+   "verification": "自动",
+   "command": "dotnet test CloudPan.Tests -c Release && dotnet build CloudPan.sln -c Release"
+  }
+ ],
+ "attempts": 0,
+ "statusReason": null,
+ "note": null,
+ "updatedAt": null
+}

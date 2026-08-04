@@ -2,121 +2,81 @@
   {
     "dimension": "ux",
     "severity": "P2",
-    "location": "CloudPan.Client.UI/UI/MainWindow.Share.cs:239/257/288、MainWindow.Versions.cs:169、MainWindow.Status.cs:233、StartupFlow.cs:15-16",
-    "problem": "Windows 端仍有 6 处把底层异常原文直接弹给家庭用户：分享「生成失败: {ex.Message}」「复制失败: {ex.Message}」「撤销失败: {ex.Message}」、版本「回滚失败: {ex.Message}」、打开同步文件夹「原因: {ex.Message}」、崩溃对话框第一屏直接展示 e.Exception.Message（SocketException: A connection attempt failed… 等英文）。ErrorAttribution 白话归因已建成（T-031）但只覆盖同步/测试连接，这 6 处全绕过了它，同一产品「部分白话、部分英文原文」割裂。",
-    "why": "零困惑要求错误=白话原因+下一步；家庭用户遇到英文技术异常直接懵，且与已落地的 ErrorAttribution 并存让用户对产品能力产生不信任。",
-    "suggestion": "统一走 ErrorAttribution.FromException 白话归因；崩溃对话框改为「CloudPan 遇到问题需要重启」+ 可选的「查看详细日志」入口，不默认透出英文原始异常；复制/撤销分享等失败也给出原因与下一步。"
+    "location": "CloudPan.Client.UI/UI/MainWindow.Browser.cs:162（双击打开失败 catch→AddLog）、:211（下载入队失败）、:231（导入失败）；MainWindow.Trash.cs:66（批量删除失败）、:112（撤销失败）；TrashDialog.cs:124（清空回收站失败仅 addLog）；MainWindow.Layout.cs:243（日志侧栏默认折叠 Panel2Collapsed=true）",
+    "problem": "Windows 端用户主动操作的全部失败反馈仍走 AddLog 一条日志文字，而日志侧栏默认折叠（Layout.cs:243 Panel2Collapsed=true，用户看不见）：双击文件打不开（无关联程序/文件被占用）、点「下载到本机」入队失败、上传/拖拽导入失败、批量删除中途失败、撤销删除失败、清空回收站失败——这些操作失败时主界面零变化，无弹窗、无错误原因、无重试入口，功能死端。T-094/F-136 只修了回收站「恢复」一条路径（弹 RestoreConflictDialog），其余高频操作仍静默。",
+    "why": "违反 ux-kb 零困惑『错误=原因+下一步』与 clouddrive-kb『失败可见可重试』：家庭用户点「上传」「下载」后什么都没发生，只能困惑地反复点击或放弃；与已弹窗的恢复路径形成『部分白话、部分静默』的割裂观感，是最典型的功能死端。",
+    "suggestion": "用户主动操作（打开/下载/导入/删除/撤销/清空）失败时统一弹可见提示，复用 ErrorAttribution 白话归因+下一步（对齐 T-031/T-094 已落地路径），不再只 AddLog；批量操作至少汇总『成功 N 项 / 失败 M 项』弹窗。"
   },
   {
     "dimension": "ux",
     "severity": "P2",
-    "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt:962-1006（ListItem 仅类型图标）与 data/Generated/Dtos.g.kt:120（FileEntryDto.state 已生成未使用）",
-    "problem": "Android 文件列表不渲染每文件同步状态：/api/tree 已返回每个文件的 state（Synced/CloudOnly/Conflict/Deleting 等），FileListScreen 全屏 grep 无任何 `.state`/`FileState` 使用，ListItem 的 leading 图标仅 getFileIcon（类型图标），无 ✓/↻/!/✗/☁ 状态图标，也无同步汇总进度。家人看不到「这张照片还没传到云盘/那台设备有冲突」。",
-    "why": "clouddrive-kb §4 同步状态可视化标杆要求每文件状态+汇总进度；家庭照片备份是手机端核心场景，看不到备份完成度直接违背零等待焦虑与「家人能判断照片是否已上传」。",
-    "suggestion": "ListItem 按 file.state 叠加状态图标（与 Windows ResolveBrowseState 同语义、图标+颜色双通道，对齐视觉-kb §5）；列表顶部或状态栏加同步汇总（已备份 N 张/冲突 M 项），给家人明确「备份完成」感知。"
+    "location": "CloudPan.Client.UI/UI/MainWindow.Browser.cs:189（FilesDropped→ImportFilesAsync）；CloudPan.Client.Core/Services/SyncEngine.Changes.cs:269（File.Copy(source, destAbs) 对目录抛异常）；FileBrowserView.Events.cs:169-182（DragEnter 接受含目录的 FileDrop，显示复制光标）；FileBrowserView.cs:146-152（上传 OpenFileDialog 仅选文件，无文件夹选择）",
+    "problem": "Windows 客户端无法上传文件夹：拖拽整个文件夹到浏览视图时 DragEnter 判定为可拖放（显示复制光标），但 ImportFilesAsync 对文件夹路径直接 File.Copy 抛异常，异常被吞进默认折叠的日志侧栏——用户拖整个相册/照片文件夹进来，界面看起来被接受，实际一个文件都没上传且无任何提示；「上传」按钮的 OpenFileDialog 也只选文件不能选文件夹。Android 端 filePickerLauncher（application/*,image/*,video/*）同样无法选目录。",
+    "why": "家庭用户最自然的操作是把整相册/整文件夹拖进云盘备份，当前『接受了却悄悄失败』是最恶劣的死端体验（用户误以为已备份，实际照片从未上传，数据安全感被破坏），且 clouddrive-kb §3 要求拖拽+批量，目录级批量未落实。",
+    "suggestion": "拖拽/选择遇目录时递归展开为文件清单批量导入（或至少支持文件夹选择器）；短期不实现则必须在拖入目录时弹白话提示『暂不支持文件夹，请选择文件夹内的文件』，禁止静默失败。"
   },
   {
     "dimension": "ux",
     "severity": "P2",
-    "location": "CloudPan.Client.Core/Services/SyncBrowseService.cs:88（Directory.EnumerateFileSystemEntries AllDirectories）+ MainWindow.Browser.cs:113（browserRefreshTimer Interval=5000）",
-    "problem": "文件浏览每 5 秒刷新一次：GetFileBrowserAsync 在 await 后回到 UI 线程同步执行同步根全树递归枚举（SearchOption.AllDirectories）+ 快照全表读取，即 UI 线程每 5 秒做一次全目录扫描。家庭照片库（数万文件）下每次枚举数百毫秒到秒级，滚动/点选/缩略图滚动被周期打断，T-087 后网格+缩略图成为主视图，卡顿更易感知。搜索防抖 300ms 也触发同一全树扫描。",
-    "why": "零等待焦虑要求操作不被周期性打断；大照片库是主要使用场景，每 5 秒一次 UI 冻结直接可见，浏览/缩略图体验打折。",
-    "suggestion": "浏览数据改为「/api/tree 快照 + FileSystemWatcher 增量维护的本地缓存」，仅当前目录数据变化才刷新；或将全树枚举移到后台线程预计算并缓存结果，UI 只消费当前目录子集；刷新间隔拉长或改为事件驱动。"
+    "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt:73-81（formatTimestamp 用 SimpleDateFormat(\"yyyy-MM-dd'T'HH:mm:ss\") 解析）+ :1085（文件列表展示修改时间）；ui/SettingsScreen.kt:550-558（同解析）+ :527（设备最后在线）；服务端 CloudPan.Server.Core/FileIndex/FileIndexService.cs:346（LastModified = DateTime.UtcNow.ToString(\"O\")，含小数秒+Z）；对照 CloudPan.Client.UI/UI/VersionHistoryDialog.cs:172-182（AdjustToUniversal+ToLocalTime 正确换算）",
+    "problem": "服务端把所有文件/设备时间存为 ISO 8601 \"O\" 格式（如 2026-08-03T14:23:45.1234567Z，含小数秒与 Z 后缀）；Android 两端 formatTimestamp 用 SimpleDateFormat(\"yyyy-MM-dd'T'HH:mm:ss\")（无毫秒无时区）解析，lenient 模式把时间戳前缀按设备本地时区读取并忽略 \".1234567Z\"，从不换算 UTC→本地。家庭局域网（UTC+8）下文件「修改时间」与设备「最后在线」恒显示早 8 小时的 UTC 时钟值（本地 22:23 的文件显示 14:23）；即使解析失败走 iso.take(16) 兜底也是原始 ISO 前缀。Windows VersionHistoryDialog 正确换算，双端时间显示不一致。",
+    "why": "按时间找最近照片/文件是家庭高频路径，Android 显示错误时间直接误导用户（以为文件是 8 小时前改的）；违反 ux-kb『系统与真实世界匹配』与 visual-kb『两平台行为一致』，且同一函数同时污染文件列表与设备列表两处。",
+    "suggestion": "两端统一『解析为 UTC → 本地化显示』：Kotlin 改用 java.time.OffsetDateTime/Instant.parse（可吞小数秒与 Z）后再 ZonedDateTime.withZoneSameInstant，废弃 SimpleDateFormat；时间格式抽象为双端同源工具，与 Windows FormatTimestamp 对齐。"
   },
   {
     "dimension": "ux",
     "severity": "P2",
-    "location": "CloudPan.Server.UI/ServerWindow.cs:91-106（右键「查看详情」「强制断开」→「功能开发中」占位）与 ServerWindow.Data.cs:47（同步文件数恒 \"-\"）",
-    "problem": "服务端管理窗设备列表右键菜单「查看详情」「强制断开」点击后弹「功能开发中」占位对话框——未完成功能暴露为可点死端；「同步文件数」列注释「简化实现」恒硬编码 \"-\"，服务端已有 Devices 表与 Token 轮换/设备记录能力却未查询真实数据。",
-    "why": "可点但无用的菜单违反 Nielsen 5 错误预防；恒空统计列让家庭用户/管理员怀疑产品未完成，损伤「v1.0 正式发布版」信任（clouddrive-kb §6 设备管理信息可读）。",
-    "suggestion": "要么实现（强制断开=撤销该设备 Token 置离线，服务端已有 RotateAsync/_disconnectCheck 能力），要么隐藏这两个菜单项并删除「同步文件数」列，禁止留「开发中」占位与恒空列。"
+    "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/OfflineFilesScreen.kt:32（整页离线收藏实现：列表/打开/删除）；MainActivity.kt:175-193（showFileList 仅 SettingsScreen/FileListScreen 两屏互切，全库无任何调用 OfflineFilesScreen）",
+    "problem": "Android 离线收藏页（OfflineFilesScreen：列出已下载到设备的文件、点击打开、删除）完整实现但全库零引用——用户可以在文件列表把文件「下载到设备（离线可用）」并打星标，却没有任何导航入口进入该页面查看/管理已下载集合；星标只在原文件列表上显示「已收藏」，离线收藏作为一个独立功能对用户不可达。",
+    "why": "功能死端：声明能力（离线查看收藏）无触达路径；家庭用户在无局域网/外出时离线收藏是核心使用场景，看不了已收藏列表等于该功能白做，且与 Windows 端『下载到本机』的可见文件管理体验断裂。",
+    "suggestion": "在文件列表顶栏或设置页加入口导航到 OfflineFilesScreen（与回收站入口同级），或把已下载文件在文件列表以独立分组/筛选项聚合展示；同时统一「已收藏/离线收藏/离线可用」术语（见术语一致性发现）。"
   },
   {
     "dimension": "ux",
     "severity": "P2",
-    "location": "CloudPan.Client.UI/UI/TrayAppContext.Menu.cs:52-61（「分享当前文件…」「版本历史…」恒可点）与 MainWindow.Share.cs:302-312、MainWindow.Versions.cs:186-203（无选中仅 AddLog 到默认折叠日志侧栏）",
-    "problem": "托盘菜单「分享当前文件…」「版本历史…」恒为可点状态，但无选中文件时点击只显示主窗并把「请先在文件浏览中选中一个文件…」写进默认折叠的日志侧栏——用户看到窗口打开却毫无可见反馈，形成死端；窗口隐藏到托盘期间 SelectedItem 还可能来自过期会话。",
-    "why": "Nielsen 5 错误预防要求禁用无效操作、Nielsen 1 要求即时反馈；托盘分享/版本是家庭高频入口，点下去无声扑空直接打击信心。",
-    "suggestion": "无有效选中时禁用这两项（或先弹一次性白话提示「请先在文件列表中选中一个文件」）；或让托盘菜单直接列出最近文件作为分享/版本操作对象，避免依赖主窗记忆。"
+    "location": "CloudPan.Client.UI/UI/VersionHistoryDialog.cs:81（lvi.SubItems.Add(v.DeviceId)）；CloudPan.Client.Core/Composition/ClientBootstrap.cs:281（device.id = Guid.NewGuid().ToString(\"N\")）；CloudPan.Server.Core/Configuration/TokenService.cs:142（设备注册已生成友好名 设备-{前8位}）；对照 AdminController.cs:157（管理页用 deviceId.substring(0,8)）",
+    "problem": "版本历史对话框「设备」列直接展示服务端返回的原始 DeviceId（32 位十六进制随机 GUID，如 3f2a9c81b4d6...），家庭用户回滚版本时无法从这一串乱码判断是哪台电脑/哪部手机改的。服务端设备注册其实已生成友好名「设备-xxxxxxxx」（TokenService.cs:142），管理窗口与 Android 设备列表都用它，唯版本历史列用原始 GUID——同一设备标识在双端三种表达方式（友好名/前8位/全32位），术语分裂。",
+    "why": "版本回滚是找回误改/误删的主路径，家人需要知道『是哪个设备改的』；32 位 GUID 对家庭用户零信息量，违反『系统与真实世界匹配』，且与已有友好名机制不一致，属可简单修复的术语一致性缺口。",
+    "suggestion": "版本历史「设备」列改为设备显示名（服务端设备表 name，或客户端维护 deviceId→名称映射并截断对齐 Admin 页），缺失时显示「未知设备」；统一双端设备标识展示长度与形式。"
   },
   {
     "dimension": "ux",
     "severity": "P3",
-    "location": "CloudPan.Client.UI/UI/MainWindow.Versions.cs:95（lvi.SubItems.Add(v.DeviceId)）",
-    "problem": "版本历史对话框「设备」列直接展示原始 DeviceId（32 位 GUID hex 字符串），未映射为人类可读设备名；服务端设备列表已显示 Name，客户端版本历史未取用，同屏「版本/大小/修改时间」都是白话唯此列是技术标识。",
-    "why": "家庭用户面对 GUID 串无意义（这是哪台设备改的？），回滚决策需要理解版本来源；违反零困惑与视觉一致性（visual-kb §7）。",
-    "suggestion": "拉版本历史时携带设备名映射（/api/devices 已有 Name），或按 DeviceId 叠加注册名；不可映射时显示「其他设备」而非原始 GUID。"
+    "location": "CloudPan.Client.UI/UI/MainWindow.Browser.cs:167-171（\"该文件仅在云端…是否立即下载到本机\"）；FileBrowserView.cs:280（按钮「下载到本机」）；CloudPan.Android/.../ui/FileListScreen.kt:1153-1154（「下载到设备（离线可用）」）、:1071（星标「已收藏」）；ui/OfflineFilesScreen.kt:52（「离线收藏」）",
+    "problem": "同一『把云端文件取回设备』操作，Windows 叫「下载到本机」，Android 叫「下载到设备（离线可用）」，且 Android 额外引入「已收藏/离线收藏」概念、Windows 完全没有对等入口；同步状态文案 Windows 用「该文件仅在云端」、Android 用「仅云端」也非同一表述。家人跨设备使用同一操作遇到两个名字，同一文件在两端的可见语义不同。",
+    "why": "家庭多设备是常态，双端术语分裂直接增加学习成本，违反 ux-kb『一致性与标准』与 visual-kb『两平台视觉/行为一致』判据；离线收藏这类 Android 独有概念若无对等说明，Windows 用户会困惑。",
+    "suggestion": "统一操作名（如「下载到设备」）与状态名（「仅云端」），把「离线收藏」作为双端对等功能补齐入口，或在 Windows 侧补一个对等说明；文案改动走同一文案表避免再次分叉。"
   },
   {
     "dimension": "ux",
     "severity": "P3",
-    "location": "CloudPan.Server.Host/Hosting/BackgroundHostedService.cs:31（TrashRetention=30 天）与 CloudPan.Client.UI/UI/MainWindow.Trash.cs:129-301、CloudPan.Android/.../ui/FileListScreen.kt:1155-1200（回收站对话框均无保留期提示）",
-    "problem": "回收站条目 30 天后被自动清理（PurgeExpiredAsync 消费 TrashRetention），但 Windows 回收站对话框与 Android TrashDialog 均从不提示保留期限，只按条显示「X 天前」——家庭用户误以为删除内容永久存在，临近 30 天不紧急；或误以为随时可恢复而失去抢救窗口。",
-    "why": "clouddrive-kb §2 要求回收站有保留期限提示；删除撤销是家庭主路径，不告知自动清理时限让用户对数据可恢复性产生错误预期。",
-    "suggestion": "两端回收站对话框页脚统一加「文件将在 30 天后自动清理，请及时恢复」提示；Android TrashDialog 同步对齐。"
+    "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/worker/PhotoBackupWorker.kt:205-209（buildFailureNotification(\"照片已 Blocked\", \"照片「…」重试 3 次仍失败，已跳过备份，请手动处理\")）、:232-237（\"备份暂停：N 张已 Blocked（重试超限，请手动处理）\"）",
+    "problem": "照片备份失败/暂停通知把内部状态机术语「Blocked」直接拼进面向家庭用户的通知文案：「照片已 Blocked」「N 张已 Blocked（重试超限，请手动处理）」。家人不理解 Blocked 含义，视觉上像英文报错；「重试超限」也偏技术。同文件其余通知（「备份完成，已上传 N 张」）已白话，仅 Blocked 路径泄漏内部状态名。",
+    "why": "照片备份通知是手机端高频可见信息，术语泄漏违反 clouddrive-kb『老人小孩无专业术语（同步→已保存）』与 Android 已白话化其余反馈的一致性，削弱产品可信度。",
+    "suggestion": "通知文案全部白话（如「1 张照片连续多次失败，已跳过，请手动检查照片是否可读取」），「Blocked」仅保留在日志与内部注释。"
   },
   {
     "dimension": "ux",
     "severity": "P3",
-    "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt:831-845（顶栏「设置」「断开连接」双图标按钮均 onBackToSettings()）",
-    "problem": "Android 文件列表顶栏同时放「设置」与「断开连接」两个图标按钮，二者 onClick 都调用 onBackToSettings()——行为完全相同（都回设置页），「断开连接」（LinkOff 图标）并不真正断开/登出（仅 invalidateClient 清理连接池），而设置页内才有真实断开按钮（SettingsScreen.kt:269-272），双按钮冗余且误导。",
-    "why": "Nielsen 4 一致性：同义同形；「断开连接」图标让用户对语义产生错误预期（以为会真正断开/登出），操作入口混乱。",
-    "suggestion": "删除顶栏「断开连接」图标按钮，仅保留设置入口；若需提供断开，改为设置页内明确的「断开连接」动作并给已断开反馈（设置页已有真实断开按钮）。"
+    "location": "CloudPan.Server.UI/ServerWindow.cs:90-106（设备右键菜单「查看详情」「强制断开」点击弹「功能开发中」）、:61（CreateStatCard(..., \"v1.0.0\", 3) 版本卡硬编码）；:47（同步文件数占位 \"-\" 已另见前批次）",
+    "problem": "服务端管理窗口设备列表右键菜单提供「查看详情」「强制断开」两项，点击后弹「功能开发中」——向家庭管理员展示了不存在的能力，属可点无果死端；右上角「版本」状态卡硬编码字符串 \"v1.0.0\"，与真实发布版本脱节，客户端升级后管理窗口仍显示旧版号，与客户端托盘动态版本不一致。",
+    "why": "管理窗口是家长（家庭管理员）查看设备健康的主入口；已发布产品中出现「开发中」占位与过期版本号直接损伤可信度，与前批次已报的「同步文件数 -」占位列叠加成三处『未完成』观感。",
+    "suggestion": "移除未实现的右键菜单项（仅保留已实现功能），或实现后接入 IServerStatusService；版本卡从程序集/契约版本动态读取；「同步文件数」接真实数据或隐藏列。"
   },
   {
     "dimension": "ux",
     "severity": "P3",
-    "location": "CloudPan.Client.UI/UI/FileBrowserView.cs:321-324（列仅 状态/名称/大小/类型）与 FileBrowserView.cs:95-96（_sortMode 本地状态，未持久化）",
-    "problem": "Windows 文件列表缺「修改时间」列与按时间排序（clouddrive-kb §1 要求名称/时间/大小）；排序模式（名称/大小/类型）、升降序与列表/网格视图选择全部只存于 FileBrowserView 内存状态，重启客户端即回默认——系统不记住用户选择。",
-    "why": "按时间找最近修改是家庭高频路径，缺时间排序只能肉眼扫；「系统记住偏好」是零记忆负担承诺，重启丢失选择直接违背。",
-    "suggestion": "增加「修改时间」列与排序（升/降，对齐 Android 已支持的按日期排序）；把排序模式/升降序/视图模式持久化到 ClientConfig，重启恢复。"
+    "location": "CloudPan.Client.UI/UI/TrayAppContext.Menu.cs:22-38（「立即同步」fire-and-forget 调 FullScanAsync，仅气泡「正在重新扫描变更...」，扫描结束无任何反馈）",
+    "problem": "点击托盘「立即同步」只弹一次「正在重新扫描变更...」气泡，随后后台 FullScanAsync 执行期间无进度、结束后无完成提示（不弹气泡、托盘图标不恢复同步态、无『同步了 N 个文件』汇总）。全量扫描大照片库需要较长时间，用户无从判断是否还在扫、是否已结束。",
+    "why": "违反 Nielsen『系统状态可见』：主动触发且耗时>1s 的操作无终点反馈，用户无法确认同步完成，只能反复点或猜测；与 ux-kb 零等待焦虑『>1s 操作有进度反馈』不符。",
+    "suggestion": "扫描期间托盘图标/气泡保持进行中态，完成后弹一次性摘要气泡（如「扫描完成，同步了 N 个文件」），或在「立即同步」菜单项上短暂显示进度状态。"
   },
   {
     "dimension": "ux",
     "severity": "P3",
-    "location": "CloudPan.Client.UI/UI/FileBrowserView.List.cs:28（空状态「将文件放入同步目录即可自动同步」）",
-    "problem": "Windows 文件浏览空状态文案过时：T-033 后已提供工具栏「上传」按钮与窗口拖拽导入，文案仍指向「把文件放入同步目录」，未引导用户使用现有入口，也没有显式动作按钮，老人小孩面对空白页不知下一步做什么。",
-    "why": "空状态应给「下一步动作」（clouddrive-kb §2 空状态引导）；文案与实际能力脱节使引导失效，违背零门槛。",
-    "suggestion": "空状态改为「点击『上传』按钮，或直接把文件拖进窗口开始同步」并加显式「上传文件」按钮；搜索空结果与目录空态区分文案。"
-  },
-  {
-    "dimension": "ux",
-    "severity": "P3",
-    "location": "CloudPan.Client.UI/UI/SetupForm.cs:74/111（「64 字符家庭 Token」「复制 Token」）与 SettingsForm.AccountTab.cs:150/170（磁盘 {drive.DriveType} 英文枚举、Token 提示）vs CloudPan.Server.UI/SettingsPage.Guide.cs:42-45（「连接钥匙（Token）」）",
-    "problem": "术语与技术信息跨端/跨窗口不一致：客户端首启/设置全用「家庭 Token」，而同一生态的服务端设置页与重配引导用白话「连接钥匙（Token）」——同一概念两种叫法并存；设置页磁盘类型显示英文枚举（Fixed/Network/Removable）；Android 设置页 placeholder「输入服务端分配的 Token」也是术语残留。",
-    "why": "visual-kb §7 平台一致性 + 零困惑白话原则：老人小孩看到 Token 与「连接钥匙」两种叫法会困惑是否同一物；英文枚举是典型技术残留，家庭用户无法理解。",
-    "suggestion": "统一产品词汇：客户端首启/设置页改用「连接钥匙」，首次出现时可写「连接钥匙（Token）」括号注释一次；磁盘类型映射为中文（固定/网络/可移动）；Android 设置页 placeholder 同步改「粘贴家人分享的连接钥匙」。"
-  },
-  {
-    "dimension": "ux",
-    "severity": "P3",
-    "location": "CloudPan.Client.UI/UI/MainWindow.Share.cs:232-233（statusLabel「已生成（过期 {result.Data.ExpiresAt}）」）",
-    "problem": "分享成功后状态提示直接透出服务端返回的 ISO-8601 UTC 原始串（如 2026-08-04T15:00:00Z），家庭用户无法读成「7 天后过期」；过期选择框明明提供了「1 天后/7 天后/30 天后」白话选项，生成后却回退成技术格式。",
-    "why": "同一对话框内「选择时白话、结果时 ISO」自相矛盾，直接违背零困惑；过期时间是分享安全性的关键信息，必须可读。",
-    "suggestion": "状态提示按所选过期项映射回白话（如「已生成，7 天后过期，点击『复制链接』发送给家人」），或把 ExpiresAt 解析为本地相对时间（「x 天后过期」）。"
-  },
-  {
-    "dimension": "ux",
-    "severity": "P3",
-    "location": "CloudPan.Client.UI/UI/MainWindow.cs:125、SettingsForm.cs:62、SetupForm.cs:195（仅 3 处 ThemeWatcher.Watch）与 MainWindow.Share.cs:35-47、MainWindow.Versions.cs:37-44、MainWindow.Trash.cs:133-140、MainWindow.Errors.cs:83-92、MainWindow.Conflicts.cs:78-84、ConflictResolutionDialog.cs:29-38、RestoreConflictDialog.cs:64-74（全部动态 new Form 未 Watch）",
-    "problem": "Windows 端所有业务弹窗均为动态 new Form：分享/版本/回收站/错误列表/冲突列表/冲突解决/恢复冲突对话框均未调用 ThemeWatcher.Watch——系统主题运行时切换时这些已打开弹窗不刷新（仅主窗/设置/配置 3 处刷新），部分窗体未显式设 BackColor（分享/版本/回收站对话框），深色模式下与背景不协调，浅深混排割裂。",
-    "why": "visual-kb §6 要求深色模式令牌级切换、视觉一致；弹窗是家庭用户高频触达面，浅深混排破坏「同一系统」观感。",
-    "suggestion": "为动态弹窗统一设置 BackColor=CloudPanColors.BackgroundWhite 并接入 ThemeWatcher.Watch；或把各弹窗抽为独立 Form 子类统一主题跟随（配合架构规则 8 拆分）。"
-  },
-  {
-    "dimension": "ux",
-    "severity": "P3",
-    "location": "CloudPan.Infrastructure/Design/DesignTokens.cs:170-171（Light.SuccessGreen(76,175,80)≈2.8:1、Light.WarningOrange(255,152,0)≈2.2:1）与 CloudPan.Client.UI/UI/MainWindow.Browser.cs:223-245（每文件状态字形颜色）",
-    "problem": "浅色主题状态色对比度不达标：SuccessGreen(76,175,80)≈2.8:1、WarningOrange(255,152,0)≈2.2:1，用于每文件状态字形（✓/↻/!/✗/☁）颜色；虽双通道有字形兜底，但颜色通道本身低于 WCAG 1.4.3 非文本图形 ≥3:1，弱视/老年用户辨认困难（家庭场景含老人）。",
-    "why": "visual-kb §3 状态色语义全局统一且对比度达标；家庭场景含老人，颜色+图标双通道都须稳健才算达标。",
-    "suggestion": "浅色组 SuccessGreen/WarningOrange 加深（如绿 #2E7D32≈4.9:1、琥珀 #F57C00≈3.4:1），或给字形加深色描边，保证颜色通道独立达标；同步校验对比度后再发布。"
-  },
-  {
-    "dimension": "ux",
-    "severity": "P3",
-    "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt:478（新建文件夹失败仅「创建失败」）与 FileListScreen.kt:416-417（批量删除失败项仅「N 项失败」无明细）",
-    "problem": "Android 两处失败反馈缺失原因与下一步：新建文件夹失败只弹泛化「创建失败」（无原因、无重试路径，名称含非法字符/同名已存在等常见失败不可区分）；批量删除后「N 项失败」不列出哪些文件失败、为何失败，家人无法定位并针对性重试，失败项悄然流失。",
-    "why": "零困惑要求错误=原因+下一步，失败可见可重试；批量删除失败项无明细让用户以为已全部删除，违背「删除可恢复」的信任。",
-    "suggestion": "新建文件夹失败按 FileConflictException/HTTP 状态码映射白话原因（如「已存在同名文件夹，请换一个名称」）；批量删除失败弹明细列表（文件+原因）并支持对失败项单独重试。"
+    "location": "CloudPan.Client.UI/UI/MainWindow.Layout.cs:92-103（_errorCountLabel 为 Label 控件绑定 Click，未设 TabStop/AccessibleName）；MainWindow.Errors.cs:61（ErrorCountLabel_Click 打开错误列表）",
+    "problem": "状态栏错误计数（「❌ N」）是可点击 Label，不在 Tab 键焦点链内、键盘无法触发、屏幕阅读器不可达；它是查看同步错误的主入口（顶部「重试」按钮只在状态字符串含「错误/失败」关键字时出现），键盘/读屏用户完全无法访问错误列表。",
+    "why": "违反 WCAG 2.1 键盘可操作与 ux-kb 无障碍要点；错误可见性是核心 UX，入口却排除键盘与读屏用户，且错误列表内「重试/忽略」是右键菜单（同样键盘不可达）。",
+    "suggestion": "错误计数改为真实 Button（或 Label 设 TabStop+AccessibleName），错误列表右键菜单补充可见的「重试/忽略」按钮行，保证键盘可达。"
   }
 ]

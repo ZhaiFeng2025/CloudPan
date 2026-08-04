@@ -1,0 +1,50 @@
+{
+ "id": "T-112",
+ "title": "分享列表端点 + 双端管理入口（GET /api/shares + 撤销 + Android 接线）",
+ "dimension": "function",
+ "priority": "P1",
+ "status": "todo",
+ "batch": 10,
+ "findingId": "F-152",
+ "dependsOn": [],
+ "location": "shared-spec.json api.endpoints（分享仅 POST/DELETE 无列表）；ShareController.cs:26-60；ShareDialog.cs:11（注释自认无列表端点）；CloudPan.Android FileRepository.kt:254（createShare 死代码）",
+ "scope": "shared-spec.json + CodeGen + ShareController + Windows ShareDialog/文件右键 + Android 接线",
+ "requirements": [
+  "shared-spec.json 加 GET /api/shares（列出当前设备创建分享：path/有密码/过期时间/maxDownloads/已用次数/createdAt），CodeGen 生成响应 DTO + C#/Kotlin 客户端方法，纳入 --verify",
+  "ShareController 实现列表端点（复用 SharingService，响应不含 token 等敏感字段）",
+  "Windows ShareDialog/文件右键加「管理分享」入口：列表 + 撤销（替代『生成后即撤销』，历史链接可查看/撤销）",
+  "Android 补 createShare/revokeShare 接线（删除死代码；revokeShare 移除 spec kotlin:false）"
+ ],
+ "goal": "历史分享链接可查看/撤销，双端可管理；Android 分享从死代码变为真实可用",
+ "acceptanceCriteria": [
+  {
+   "text": "行为断言：新增 SharingService 单测——创建分享→GET 列表含该分享→撤销→列表不含",
+   "verification": "自动",
+   "command": "dotnet test --filter Share"
+  },
+  {
+   "text": "spec 含 GET /api/shares 端点且 CodeGen --verify 通过",
+   "verification": "自动",
+   "command": "dotnet run --project CloudPan.CodeGen -- --verify"
+  },
+  {
+   "text": "全量测试全绿 + dotnet build 全绿",
+   "verification": "自动",
+   "command": "dotnet test CloudPan.Tests -c Release && dotnet build CloudPan.sln -c Release"
+  },
+  {
+   "text": "行为断言（手动）：Windows「管理分享」列出历史链接、可撤销、撤销后 URL 失效",
+   "verification": "手动",
+   "command": null
+  },
+  {
+   "text": "行为断言（手动）：Android 创建分享成功且另一设备用 URL 打开可下载",
+   "verification": "手动",
+   "command": null
+  }
+ ],
+ "attempts": 0,
+ "statusReason": null,
+ "note": null,
+ "updatedAt": null
+}

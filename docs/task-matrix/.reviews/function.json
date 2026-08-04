@@ -2,105 +2,113 @@
   {
     "dimension": "function",
     "severity": "P1",
-    "location": "CloudPan.Client.UI/UI/ConflictResolutionDialog.cs:86-139; CloudPan.Client.Core/Services/SyncEngine.Conflicts.cs:107-123",
-    "problem": "T-084 把删除 409 转入 _pendingConflicts 冲突流程，但 Windows 冲突解决对话框只提供『保留两者/保留本机/保留服务端/对比版本』四选项，无一能完成删除意图；且 HandleDeleteConflictAsync 生成的 ConflictInfo 三个远程字段（RemoteHash/RemoteSize/RemoteModifiedTime）全为 null，对话框云盘版本显示『未知』。用户删除被并发修改拦截后无法从冲突对话框完成删除：选『保留本机』会以 baseVersion=0 重传覆盖（撤销删除意图），选『保留服务端/保留两者』会重新下载，均把文件恢复。Android 端同场景有『仍删除（强制 baseVersion=0）』弹窗，Windows 缺失，删除意图卡死在冲突列表。",
-    "why": "删除是文件管理最高频操作，删除与并发编辑撞车是双设备家庭常态；T-084 目标正是『删除冲突可见可操作』，结果 Windows 端只有可见没有可操作，且解决选项主动撤销删除意图，违反 clouddrive-kb『冲突处理给出选项而非静默』与两端一致性判据。",
-    "suggestion": "冲突解决对话框识别删除冲突（队列项为 Delete 操作或 RemoteHash==null）时追加『仍删除（强制）』选项（对齐 Android 弹窗，走 baseVersion=0 强制删除），并把冲突远程版本信息（来自快照）填入对话框。"
+    "location": "shared-spec.json → api.endpoints（分享仅 POST /api/shares + DELETE /api/shares/{id}，无 GET 列表端点）；CloudPan.Server.Host/Controllers/ShareController.cs:26-60；CloudPan.Client.UI/UI/ShareDialog.cs:11（注释自认）",
+    "problem": "服务端只有『创建/撤销分享』两个端点，没有『列出我的分享』。Windows ShareDialog 注释自认『服务端仅提供创建/撤销端点（无列表端点），故「管理分享」= 生成后直接撤销该链接』——对话框一旦关闭，shareId 即丢失，历史分享链接永久无法查看或撤销；无过期无密码的永久分享发出即失控。Android 端连分享 UI 都没有：FileRepository.createShare 是死代码，revokeShare 在 spec 标 kotlin:false。",
+    "why": "clouddrive-kb §5 明确要求分享页『已分享列表、撤销链接、改权限』。分享是家庭向外部（家人/临时用户）发文件的唯一通道，不可管理 = 链接永生 + 无安全撤销路径，属声明功能（分享链接）与可操作能力之间的触达落差。",
+    "suggestion": "契约加 GET /api/shares（列出当前设备创建：路径/密码/过期/已用下载次数），双端加『我的分享』管理页；Android 补 createShare/revokeShare 接线而非留死代码。"
+  },
+  {
+    "dimension": "function",
+    "severity": "P1",
+    "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt:61-71,1049-1162（列表项仅 getFileIcon 扩展名图标）；data/Generated/CloudPanApi.g.kt:88-91（getThumbnail 已生成未接线）",
+    "problem": "PhotoBackupWorker（T-044/T-060）定期把家人照片传到 /Photos/yyyy-MM/，这是家庭第一场景；但 Android 文件列表只用扩展名映射图标，服务端 /api/thumbnails（含 HEIC 解码，T-087/T-102 已完成）在 Android 完全未使用。无照片墙、无相册网格、无预览滑动翻页，clouddrive-kb §7『手机：照片墙缩略图、下拉刷新、预览滑动翻页、相册按时间分组』全未落实。",
+    "why": "照片备份与浏览是家庭云盘最高频路径，『只传不能看』使备份收益无法触达家人；Windows 网格已接缩略图，Android 作为照片产出主端反而缺失，双端不对称最刺眼。",
+    "suggestion": "FileListScreen 对图片类型行接入 getThumbnail 小尺寸缩略图；新增相册网格视图（按 yyyy-MM 时间分组）+ 全屏预览翻页。"
+  },
+  {
+    "dimension": "function",
+    "severity": "P1",
+    "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt（无 moveFile 封装）；data/Generated/CloudPanApi.g.kt:60（moveFile 已生成未用）；MainActivity.kt:86（remotePath 硬编码 /Uploads/$fileName）",
+    "problem": "Windows 有移动/重命名（POST /api/files/move + MoveAsync，T-078 版本跟随已完成）；Android 的 moveFile 接口已生成但 FileRepository 无封装、UI 无入口。手动上传固定落 /Uploads/ 根目录，用户无法把照片/文档归类到 /Photos 或其他目录。",
+    "why": "上传是 Android 高频动作（手机是照片/随手文档主要产出端），上传后不能移动 = 文件永久堆积 /Uploads/ 根目录，目录组织能力缺失直接破坏家庭文件的归集整理。",
+    "suggestion": "FileRepository 封装 moveFile（携带 baseVersion 触发 409 保护），列表长按菜单加『移动/重命名』；上传时允许选择目标目录。"
+  },
+  {
+    "dimension": "function",
+    "severity": "P1",
+    "location": "shared-spec.json → api.endpoints（GET /api/versions、POST /api/versions/restore 均标记 kotlin:false）；CloudPan.Server.Host/Controllers/VersionsController.cs:13-68",
+    "problem": "版本历史/回滚端点对 Android 标记 kotlin:false，Android 无任何入口（Windows 有 VersionHistoryDialog）。家庭场景误删/误改的第一恢复路径是回收站，但回收站 30 天自动清理后，版本历史（保留 5 版）是唯一第二道防线；手机端（照片误删重灾区）完全缺失。",
+    "why": "家人误删照片后，超过回收站保留期即无任何找回手段，服务端明明保存了历史版本却无法从手机触达；双端不对称。",
+    "suggestion": "spec 放开这两个端点（移除 kotlin:false），Android 文件详情加『版本历史』入口（列表 + 回滚，对齐 Windows VersionHistoryDialog）。"
   },
   {
     "dimension": "function",
     "severity": "P2",
-    "location": "CloudPan.Server.Core/Thumbnails/ThumbnailService.cs:13-16",
-    "problem": "ThumbnailService.SupportedExts 仅 jpg/jpeg/png/gif/bmp/webp。iPhone/现代 Android 默认 HEIC 照片（家庭相册主体格式）同步到云盘后，ThumbnailsController 对 .heic/.heif 直接返回 NOT_FOUND，Windows 网格视图（T-087 刚接入 /api/thumbnails）对 HEIC 显示文件字形——照片墙对最重要的照片格式不可见。",
-    "why": "家庭相册是云盘核心场景（clouddrive-kb 照片墙/相册）；T-087 接入缩略图后 HEIC 缺口让该功能对主格式失效，接入收益被大幅稀释。",
-    "suggestion": "v1.1 引入 HEIC 解码——Windows 可经系统 WIC（Windows Imaging Component 原生支持 HEIF）而非第三方编解码器，Android 用 BitmapFactory；把 .heic/.heif 加入 SupportedExts 并补端到端测试。"
+    "location": "CloudPan.Server.Host/Controllers/FilesController.cs:112-132（Download 无 Range 支持）；CloudPan.Client.Core/Services/ApiClient.cs:140-160（下载无 offset/续传）",
+    "problem": "服务端下载端点不支持 HTTP Range，客户端下载也不带 offset；大文件（视频、照片原片、安装包）断网/中断后必须整文件重下。与分块上传（POST /api/files/upload/chunk，T-105 已支持断点续传）不对称。",
+    "why": "家庭局域网弱网/断电场景下，大文件下载是同步兜底路径；不能续传 = 反复消耗带宽与家人耐心，且与已完成的『分块上传可续传』形成能力反差。",
+    "suggestion": "下载端点支持 Range 头（206 分段），客户端按固定块大小断点续传（对齐分块上传语义），.tmp 残留文件可复用。"
   },
   {
     "dimension": "function",
     "severity": "P2",
-    "location": "CloudPan.Server.Core/Files/FileOperationService.cs:115-180; CloudPan.Server.Core/Versions/VersionHistoryService.cs:38-48",
-    "problem": "MoveAsync 只更新 FileEntry.Path，VersionRecords 仍挂旧 FilePath。重命名后新路径版本历史为空、旧路径历史不可达；旧路径的 .versions 存档因仍被 VersionRecords 引用而永不进入孤儿集合，T-088 的 PurgeOrphanVersionArchivesAsync 不会回收——历史既不可见又永久滞留磁盘。目录重命名时整棵子树的版本历史一并丢失。",
-    "why": "版本历史是 v1.0 声明核心功能（回滚是修复误改/误删的主路径）；家庭用户整理相册/重命名文件是最常见的整理动作，重命名后无法回滚到先前版本，功能对最高频路径失效，且存储回收（T-088 刚闭合）在重命名维度留下漏洞。",
-    "suggestion": "MoveAsync 事务内按前缀把该路径（及目录子树）的 VersionRecords.FilePath 一并迁移到新路径，使历史随文件移动；迁移后旧存档可被孤儿回收正常清理。"
+    "location": "CloudPan.Client.UI/UI/SelectiveSyncPanel.cs + SettingsForm.BandwidthTab.cs（Windows 有选择性同步与限速）；CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/SettingsScreen.kt（无对应项）",
+    "problem": "Windows 有选择性同步（CloudOnly 排除目录）与运行时限速（T-063）；Android 无选择性同步、无限速、无同步暂停开关。家人手机若关闭 wifiOnly 走流量备份，或批量下载照片，没有任何节流手段。",
+    "why": "手机流量/电量/存储最稀缺，却是照片备份主端；clouddrive-kb §6 设置页明确含限速与选择性同步，Android 缺失会使手机在弱流量环境失控。",
+    "suggestion": "Android 设置页加备份目录选择（简单版选择性同步）+ 上传限速（复用 ApiClient 节流思路）。"
   },
   {
     "dimension": "function",
     "severity": "P2",
-    "location": "CloudPan.Client.UI/UI/ThumbnailLoader.cs:175-184",
-    "problem": "ThumbnailLoader 把缩略图缓存写到 %LocalAppData%\\CloudPan\\thumbnails，缓存 key 含文件版本（v=item.Version），文件每更新一次就新增一个缓存文件、旧文件永不删除；全库无该目录任何清理逻辑（仅内存 ImageList 有 MaxThumbImages=800 上限，不涉及磁盘）。家庭相册数千张照片 × 每代版本，本地缓存只增不减。",
-    "why": "T-088 目标『长期运行存储只增不减』在客户端缓存维度未闭合——服务端 .thumbnails 有 30 天回收，Windows 本地缓存完全没有，磁盘被派生数据无声蚕食。",
-    "suggestion": "客户端启动或定期对缩略图本地缓存做 LRU/时间回收（重建成本低，与 T-088 语义对齐），或缓存 key 复用内容指纹使失效即可删。"
+    "location": "CloudPan.Server.Core/Thumbnails/ThumbnailService.cs:14-17（SupportedExts 仅图片）",
+    "problem": "服务端缩略图仅支持 jpg/jpeg/png/gif/bmp/webp/heic/heif，mp4/mov 视频无预览帧；Windows 与 Android 文件浏览对视频只显示 Videocam 图标。家庭相册中手机视频占比越来越高，无法预览。",
+    "why": "视频与照片并列的家庭回忆主内容；只缩略图片不缩略视频，照片墙对视频断裂，浏览体验不完整。",
+    "suggestion": "缩略图服务加视频首帧抽取（FFmpeg/Windows 媒体 API），生成 mp4/mov 预览帧；或先支持常用编码的首帧图。"
   },
   {
     "dimension": "function",
     "severity": "P2",
-    "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt:253-282; worker/PhotoBackupWorker.kt:365-390; CloudPan.Server.Host/Program.cs:86-89",
-    "problem": "Android 手动上传与照片备份都走普通 multipart 端点，服务端 MultipartBodyLengthLimit=50MB（Program.cs:86-89）。手动上传文件选择器接受 video/*，>50MB 视频直接 413 失败且无重试/续传路径；Windows 端 ≥10MB 走分块+断点续传，Android 无对应能力，两端大文件上传落差明显。",
-    "why": "手机 4K 视频（数百 MB）是家庭备份真实需求；Android 作为手机主力上传端对大文件不可用，声明功能『分块上传』实际只服务 Windows。",
-    "suggestion": "Android 复用 /api/files/upload/chunk 分块端点（对齐 C# ApiClient.ChunkedUpload），补 Retrofit 分块接口、进度与断点续传；照片备份视频备份纳入 v1.1 规划。"
+    "location": "CloudPan.Client.UI/UI/SetupForm.Discovery.cs（Windows 有 UDP 局域网发现）；CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/SettingsScreen.kt:38,133-218（手输 serverUrl）",
+    "problem": "Windows 首启有 UDP 局域网发现（8450 端口广播，UdpDiscoveryHostedService），Android 需手输 http://192.168.x.x:8443 + Token；家人（尤其老人）手机接入流程纯手输，极易输错 IP/端口。",
+    "why": "家庭局域网部署，手机是主要接入端；clouddrive-kb §6『首次配置 3 步内完成』，自动发现可把 3 步压到 1 步，符合老人小孩白话路径。",
+    "suggestion": "Android 复用 8450 UDP 广播协议做『自动发现服务器列表』（点击即填），Token 仍需粘贴或二维码扫码配对。"
   },
   {
     "dimension": "function",
     "severity": "P2",
-    "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/OfflineCacheEntity.kt:9-16; ui/FileListScreen.kt:952-955,643-681",
-    "problem": "离线缓存下载到 filesDir/offline_cache，OfflineCacheEntity 无版本字段、无容量上限、无自动回收（仅可手动删除）。远程文件更新后离线副本不失效——FileListScreen 星标只查 getByPath(path)!=null，用户打开看到旧内容且无『已过期可重新下载』提示。",
-    "why": "『离线可用』是 clouddrive-kb 扩展功能；缓存无界增长占满手机内部存储，陈旧内容误导用户以为离线副本是最新（数据安全误解）。",
-    "suggestion": "离线缓存记录版本并在文件版本变更时标记陈旧+提示重下；加容量/数量上限（如 500MB）+ LRU 清理。"
+    "location": "CloudPan.Client.UI/UI/ShareDialog.cs:203（maxDownloads 恒传 null）；CloudPan.Android/.../data/FileRepository.kt:254（createShare 传 null,null）",
+    "problem": "服务端已实现 maxDownloads 原子计数上限（SharingService.PrepareDownloadAsync:179-189，并发下条件 UPDATE 防突破），但 Windows/Android 分享 UI 都不提供该选项，恒传 null；『限次分享』（临时给 3 次下载）无法从界面配置。",
+    "why": "服务端能力被 UI 浪费；家庭外发场景限次可防止链接无限扩散，是分享合理设计的应有选项。",
+    "suggestion": "ShareDialog/SettingsScreen 加『下载次数限制』输入项透传 maxDownloads，与密码/过期并列。"
+  },
+  {
+    "dimension": "function",
+    "severity": "P2",
+    "location": "CloudPan.Server.Host/Hosting/BackgroundHostedService.cs:28-34（TrashRetention=30 天硬编码）；CloudPan.Client.UI/UI/TrashDialog.cs / MainWindow.Trash.cs（无保留期展示）",
+    "problem": "回收站 30 天自动清理、版本历史 maxVersionsDefault=5 裁剪均为硬编码/契约默认，UI 不提示用户保留期；用户在 30 天后找不到已删文件会以为数据丢失。clouddrive-kb §2 回收站页面要求『保留期限提示』未落实。",
+    "why": "家庭用户对『删除后还能找回多久』无感知，是误删焦虑来源；竞品（Dropbox/坚果云）都在回收站明示保留期。",
+    "suggestion": "回收站对话框展示『回收站保留 30 天』文案；版本历史对话框注明『保留最近 5 个版本』；保留值上移至 spec 配置。"
+  },
+  {
+    "dimension": "function",
+    "severity": "P2",
+    "location": "shared-spec.json → api.endpoints（GET /api/devices，无 DELETE 设备端点）；CloudPan.Android/.../ui/SettingsScreen.kt:489（只读设备列表）",
+    "problem": "契约只有查询设备列表（GET /api/devices），无撤销设备端点；客户端与 Android 只能看到已配对设备，无法踢出（旧手机卖出/设备换新）。配对 token 泄露后无远程失效手段。",
+    "why": "家庭多设备是常态（手机/多台 PC），clouddrive-kb §6『设备管理：查看/撤销已配对设备』；只读列表无撤销闭环，安全与设备治理缺失。",
+    "suggestion": "契约加 DELETE /api/devices/{deviceId}（撤销后该设备 token 立即失效），双端设备页加『撤销设备』操作。"
   },
   {
     "dimension": "function",
     "severity": "P3",
-    "location": "CloudPan.Contract/IApiClient.Thumbnails.cs:1-14",
-    "problem": "T-086 刚把 C# IApiClient 与 Kotlin Retrofit 签名契约化生成，T-087 新加的缩略图客户端调用仍为手工 partial（注释自认 spec 未定义 clientMethod）。spec 增改该端点时 --verify 检不出签名漂移，契约驱动在缩略图维度重新开口。",
-    "why": "规则 0 最高优先级（spec 是唯一事实来源）；跨三语种手工翻译正是契约驱动要消灭的头号缺陷。",
-    "suggestion": "把 /api/thumbnails 补进 shared-spec.json api.endpoints（含 clientMethod/参数），重跑 CodeGen 生成 C#/Kotlin 签名并删除手工 partial。"
+    "location": "CloudPan.Server.Host/Controllers/FilesController.FileOps.cs:88（q.Length < 2）",
+    "problem": "搜索要求关键词 ≥2 字符；中文单字文件名（如『家』『税』）或英文单字母无法命中。家庭文件命名多为短中文（照片/发票/合同），单字搜索被硬性拒绝。",
+    "why": "与中文命名习惯冲突，大批量照片库下搜索是核心检索路径；1 字符拒绝让高频短名检索失效。",
+    "suggestion": "放宽为 ≥1 字符并对单字做前缀匹配（评估 LIKE 性能，或对短词走索引扫描）。"
   },
   {
     "dimension": "function",
     "severity": "P3",
-    "location": "CloudPan.Client.Core/Services/SyncEngine.Conflicts.cs:107-123",
-    "problem": "HandleDeleteConflictAsync 无条件 File.GetLastWriteTimeUtc(localPath)；409 到达前本地文件若已被其他路径删除（双删/重命名竞态），FileNotFoundException 逃逸到 ProcessQueueAsync 泛化 catch，删除冲突未入列、用户无任何提示。",
-    "why": "失败路径可恢复判据——异常恢复路径自身失效，且 CLAUDE.md 7.3 点名 catch/异常路径需验证。",
-    "suggestion": "捕获 FileNotFoundException：本地文件缺失时跳过冲突入列，按服务端 409（提示其他设备有改动）直接返回处理结果，不抛异常。"
+    "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/MainActivity.kt:86（remotePath=/Uploads/$fileName 硬编码）",
+    "problem": "Android 手动上传无目标目录选择，全部进 /Uploads/ 根目录；同名文件再传时 resolveBaseVersion 返回当前版本 → 上传即静默替换（旧版进版本历史），家人无从区分两次同名上传的内容差异。与 Windows（上传到当前浏览目录 + 冲突弹窗）不对称。",
+    "why": "上传是手机高频动作，固定落盘 + 静默覆盖易造成文件管理困惑；照片备份已按 /Photos/月/哈希名 规避同名，手动上传却无同类保护。",
+    "suggestion": "上传前让用户选择目标目录；同名文件给出『替换/另存』确认（对齐 409 冲突处理路径）。"
   },
   {
     "dimension": "function",
     "severity": "P3",
-    "location": "CloudPan.Client.Core/Services/WebSocketClient.cs:33",
-    "problem": "ReconnectDelays 硬编码 {1s,2s,4s,8s,16s,32s,60s}，spec 已定义 websocketReconnectMaxBackoffSeconds=60 但未接线；改重连策略需改代码而非契约，且与 retryBackoffMs 治理方式不一致。",
-    "why": "断网/弱网重连是知识库边界清单点名场景；退避策略单源化后改一处生效，两端（Android 未来接 WS）可对齐。",
-    "suggestion": "ReconnectDelays 从 SpecConfig 生成（按 max 构造指数序列），纳入契约治理。"
-  },
-  {
-    "dimension": "function",
-    "severity": "P3",
-    "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt:186-196; worker/PhotoBackupWorker.kt:397-414",
-    "problem": "resolveBaseVersion 与 photo backup 的 resolveRemoteVersion 用 getFileTreeInFolder(folder, 10000, null) 单页拉取，服务端 GetTree 取 min(limit,10000)。月目录照片数超 10000 时排序靠后的照片 path 不在返回内 → baseVersion=0 → 该照片上传/删除失去 409 并发保护（T-089 目标在超大相册下部分失效）。",
-    "why": "T-089 的并发保护是删除/上传静默覆盖的最后防线；多年家庭相册单月 >10000 张是可预期边界。",
-    "suggestion": "resolveBaseVersion 走 cursor 翻页直到命中目标/取全量，或服务端新增按 path 查版本的轻量端点。"
-  },
-  {
-    "dimension": "function",
-    "severity": "P3",
-    "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt:200-250",
-    "problem": "子文件夹浏览用 getFileTreeInFolder 拉整棵子树（服务端按 Path 前缀+游标分页），客户端再过滤直系子项。若文件夹含大量深层嵌套项且直系文件按 Path 排序靠后，hasMore 需翻完整个子树页才能显示全部直系子项，深层大文件夹浏览卡顿/延迟。",
-    "why": "知识库『海量小文件』边界；家庭共享目录常含深层嵌套，浏览体验受分页语义拖累。",
-    "suggestion": "服务端 GetTree 支持『仅直系子项』或客户端按目录层级翻页，避免整棵子树参与分页。"
-  },
-  {
-    "dimension": "function",
-    "severity": "P3",
-    "location": "CloudPan.Server.Host/Controllers/HealthController.cs:64-73; Program.cs:49-52",
-    "problem": "/api/version（含 GitHub releases 地址）已为自动更新铺路，但 Windows/Android 客户端均无更新检查/下载/安装路径；远程访问（WAN）零实现，仍是局域网 HTTP（Kestrel ListenAnyIP + 无 TLS）。两项 v1.1 规划若无排期将重演『声明功能零触达』（第二个 T-087）。",
-    "why": "v1.1 前瞻审查点名项；自动更新端点空置、远程访问缺位会让家庭用户外出无法访问数据，且端点先于消费违背『不多不少』判据。",
-    "suggestion": "v1.1 排期落地——客户端更新检查器复用 /api/version；远程访问明确方案（Tailscale/内网穿透或 TLS+认证），避免端点先行而无消费者。"
-  },
-  {
-    "dimension": "function",
-    "severity": "P3",
-    "location": "CloudPan.Client.Core/Services/SyncEngine.FullScan.cs:186-196",
-    "problem": "FullScanCoreAsync 对 size==snapshot.Size 的快照一律重算本地 SHA-256。家庭相册数千张同相机同尺寸照片时，每 5 分钟兜底扫描对全部照片全量哈希（读全盘），与缩略图解码叠加拖累家庭 PC；FileSystemWatcher 主通道本可覆盖绝大多数变更。",
-    "why": "知识库『海量小文件：数千照片同步吞吐』点名场景；兜底扫描的哈希风暴影响长期运行吞吐。",
-    "suggestion": "对 size 匹配且文件 mtime 未变的快照跳过哈希重算（仅 mtime/大小变化者重算），保留正确性且降 IO；或将全量扫描间隔设为可配置。"
+    "location": "CloudPan.Client.Core/Services/WebSocketClient.cs（仅 Windows SyncEngine/TrayAppContext 使用）；CloudPan.Android 无 ws 消费",
+    "problem": "服务端 /ws 实时推送（file_changed/file_deleted/file_renamed/conflict）只有 Windows 客户端消费；Android 文件列表只靠手动下拉刷新/重新进入页面，其他设备变更无法被动感知（15 分钟 PhotoBackupWorker 只负责上传，不拉取）。",
+    "why": "家庭多设备协同，手机端看不到他人刚传的照片/文件，需手动刷新，『同步感』缺失；androidPollIntervalMinutes=15 只覆盖备份上传。",
+    "suggestion": "Android 接入 WebSocket（或降级为前台页面定时轮询 tree），文件变更自动刷新列表与同步状态。"
   }
 ]

@@ -1,0 +1,45 @@
+{
+ "id": "T-110",
+ "title": "Server.UI 巨型控件真实拆分（ServerInstaller/SettingsPage/ServerWindow 聚合 ≤400 + 删豁免登记）",
+ "dimension": "architecture",
+ "priority": "P0",
+ "status": "todo",
+ "batch": 10,
+ "findingId": "F-151",
+ "dependsOn": [],
+ "location": "CloudPan.Server.UI/{ServerInstaller,SettingsPage,ServerWindow}*.cs（聚合 861/549/525）；CloudPan.Tests/Architecture/CodeQualityTests.cs:104-140（豁免表）",
+ "scope": "CloudPan.Server.UI 3 个 public 类型 + CodeQualityTests 豁免表登记",
+ "requirements": [
+  "按职责把 ServerInstaller（聚合 861）拆为协作类至 ≤400（安装步骤/进程执行/服务注册外提，禁止仅新增空壳 partial）",
+  "拆分 SettingsPage（聚合 549）至 ≤400（设置项渲染/保存逻辑外提）",
+  "拆分 ServerWindow（聚合 525）至 ≤400（设备列表/状态卡/右键菜单外提）",
+  "CodeQualityTests 豁免表删除这 3 项 Deadline 登记，到期断言强制 ≤400"
+ ],
+ "goal": "3 个 public 类型聚合 ≤400，豁免表无残留登记，CodeQualityTests 到期断言转绿",
+ "acceptanceCriteria": [
+  {
+   "text": "CodeQualityTests 到期断言对 ServerInstaller/SettingsPage/ServerWindow 全部通过（聚合≤400 且豁免表删除登记）",
+   "verification": "自动",
+   "command": "dotnet test --filter CodeQualityTests"
+  },
+  {
+   "text": "行为断言：拆分后 3 类聚合行数独立核对 ≤400（wc 聚合各 partial 文件）",
+   "verification": "自动",
+   "command": "wc -l CloudPan.Server.UI/ServerInstaller*.cs CloudPan.Server.UI/SettingsPage*.cs CloudPan.Server.UI/ServerWindow*.cs"
+  },
+  {
+   "text": "全量测试全绿 + dotnet build 全绿",
+   "verification": "自动",
+   "command": "dotnet test CloudPan.Tests -c Release && dotnet build CloudPan.sln -c Release"
+  },
+  {
+   "text": "行为断言（手动回归）：安装器向导、设置页、设备窗口三项核心操作功能不回归",
+   "verification": "手动",
+   "command": null
+  }
+ ],
+ "attempts": 0,
+ "statusReason": null,
+ "note": null,
+ "updatedAt": null
+}

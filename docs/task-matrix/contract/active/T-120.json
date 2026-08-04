@@ -1,0 +1,38 @@
+{
+ "id": "T-120",
+ "title": "应用版本字面量单源化（统一程序集版本，删 5 处硬编码）",
+ "dimension": "simplicity",
+ "priority": "P2",
+ "status": "todo",
+ "batch": 10,
+ "findingId": "F-97",
+ "dependsOn": [],
+ "location": "HealthController.cs:53/69/70；ServerWindow.cs:61（状态卡硬编码 v1.0.0）；TrayAppContext.Menu.cs:78（版本回退值）；对齐 UdpDiscoveryHostedService.cs:26-30（已改程序集版本读取）",
+ "scope": "HealthController + ServerWindow + TrayAppContext 版本来源",
+ "requirements": [
+  "版本统一从程序集版本读取（AssemblyInformationalVersion，对齐 UdpDiscoveryHostedService 既有实现）",
+  "删除 Health 响应 3 处/ServerWindow 状态卡/TrayAppContext 回退值共 5 处硬编码 \"1.0.0\"/\"v1.0.0\" 字面量"
+ ],
+ "goal": "应用版本单一来源：发版改一处生效全部，Health/管理窗/托盘/UDP 显示一致，无『Health 硬编码 vs UDP 程序集』双源并存",
+ "acceptanceCriteria": [
+  {
+   "text": "行为断言：修改程序集版本号后 GET /api/version 与 ServerWindow 状态卡显示一致的新版本",
+   "verification": "手动",
+   "command": null
+  },
+  {
+   "text": "HealthController/ServerWindow/TrayAppContext 无 \"1.0.0\"/\"v1.0.0\" 硬编码字面量",
+   "verification": "自动",
+   "command": "grep -n '\"1.0.0\"\\|\"v1.0.0\"' CloudPan.Server.Host/Controllers/HealthController.cs CloudPan.Server.UI/ServerWindow.cs CloudPan.Client.UI/UI/TrayAppContext.Menu.cs 无匹配"
+  },
+  {
+   "text": "全量测试全绿 + dotnet build 全绿",
+   "verification": "自动",
+   "command": "dotnet test CloudPan.Tests -c Release && dotnet build CloudPan.sln -c Release"
+  }
+ ],
+ "attempts": 0,
+ "statusReason": null,
+ "note": null,
+ "updatedAt": null
+}

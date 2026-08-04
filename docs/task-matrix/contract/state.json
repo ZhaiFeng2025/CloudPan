@@ -1,3 +1,124 @@
 {
- "active": []
+ "active": [
+  {
+   "id": "T-109",
+   "title": "Client.UI 巨型窗体真实拆分（SetupForm/FileBrowserView/SettingsForm/TrayAppContext 聚合 ≤400 + 删豁免登记）",
+   "dimension": "architecture",
+   "priority": "P0",
+   "status": "todo",
+   "batch": 10,
+   "dependsOn": [],
+   "attempts": 0
+  },
+  {
+   "id": "T-110",
+   "title": "Server.UI 巨型控件真实拆分（ServerInstaller/SettingsPage/ServerWindow 聚合 ≤400 + 删豁免登记）",
+   "dimension": "architecture",
+   "priority": "P0",
+   "status": "todo",
+   "batch": 10,
+   "dependsOn": [],
+   "attempts": 0
+  },
+  {
+   "id": "T-111",
+   "title": "WebSocketHandler 真实拆分（聚合 ≤400 + HandleConnectionAsync 按阶段拆 + 删豁免登记）",
+   "dimension": "architecture",
+   "priority": "P0",
+   "status": "todo",
+   "batch": 10,
+   "dependsOn": [],
+   "attempts": 0
+  },
+  {
+   "id": "T-112",
+   "title": "分享列表端点 + 双端管理入口（GET /api/shares + 撤销 + Android 接线）",
+   "dimension": "function",
+   "priority": "P1",
+   "status": "todo",
+   "batch": 10,
+   "dependsOn": [],
+   "attempts": 0
+  },
+  {
+   "id": "T-113",
+   "title": "Android 照片墙缩略图接入（getThumbnail + 相册网格 + 全屏预览翻页）",
+   "dimension": "function",
+   "priority": "P1",
+   "status": "todo",
+   "batch": 10,
+   "dependsOn": [],
+   "attempts": 0
+  },
+  {
+   "id": "T-114",
+   "title": "Android moveFile 封装 + 上传目标目录选择 + 同名确认",
+   "dimension": "function",
+   "priority": "P1",
+   "status": "todo",
+   "batch": 10,
+   "dependsOn": [],
+   "attempts": 0
+  },
+  {
+   "id": "T-115",
+   "title": "Windows 用户主动操作失败统一白话弹窗（对齐 ErrorAttribution，不再只 AddLog）",
+   "dimension": "ux",
+   "priority": "P2",
+   "status": "todo",
+   "batch": 10,
+   "dependsOn": [],
+   "attempts": 0
+  },
+  {
+   "id": "T-116",
+   "title": "Windows 拖拽目录静默失败修复（递归批量导入或白话提示，禁止零提示零上传）",
+   "dimension": "ux",
+   "priority": "P2",
+   "status": "todo",
+   "batch": 10,
+   "dependsOn": [],
+   "attempts": 0
+  },
+  {
+   "id": "T-117",
+   "title": "Android 时间显示 UTC→本地换算（java.time 解析 ISO 带 Z 时间戳）",
+   "dimension": "ux",
+   "priority": "P2",
+   "status": "todo",
+   "batch": 10,
+   "dependsOn": [],
+   "attempts": 0
+  },
+  {
+   "id": "T-118",
+   "title": "分块会话超时清理下沉 IChunkedUploadService（Host 不再直碰 DbContext+File）",
+   "dimension": "architecture",
+   "priority": "P2",
+   "status": "todo",
+   "batch": 10,
+   "dependsOn": [],
+   "attempts": 0
+  },
+  {
+   "id": "T-119",
+   "title": "版本历史「设备」列改设备友好名（对齐管理页/Android，缺失显示未知设备）",
+   "dimension": "ux",
+   "priority": "P2",
+   "status": "todo",
+   "batch": 10,
+   "dependsOn": [],
+   "attempts": 0
+  },
+  {
+   "id": "T-120",
+   "title": "应用版本字面量单源化（统一程序集版本，删 5 处硬编码）",
+   "dimension": "simplicity",
+   "priority": "P2",
+   "status": "todo",
+   "batch": 10,
+   "dependsOn": [],
+   "attempts": 0
+  }
+ ]
 }
