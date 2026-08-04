@@ -32,7 +32,8 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.10" />
     <PackageReference Include="SkiaSharp" Version="4.150.1" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
-    <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
+    <!-- 版本由 Directory.Build.props 单源化（T-096） -->
+    <PackageReference Include="Serilog.AspNetCore" Version="$(SerilogAspNetCoreVersion)" />
   </ItemGroup>
 
   <ItemGroup>

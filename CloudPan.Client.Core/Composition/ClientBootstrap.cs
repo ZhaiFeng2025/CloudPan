@@ -3,6 +3,7 @@ using System.Text;
 using CloudPan.Client.Core.Models;
 using CloudPan.Client.Core.Services;
 using CloudPan.Contract;
+using CloudPan.Infrastructure.Logging;
 using CloudPan.Infrastructure.Persistence;
 using CloudPan.Infrastructure.Persistence.Client;
 using Microsoft.EntityFrameworkCore;
@@ -296,16 +297,8 @@ public sealed class ClientBootstrap
         string logDir = Path.Combine(syncRoot, ".cloudpan", "logs");
         Directory.CreateDirectory(logDir);
 
-        Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Information()
-            .WriteTo.Console(
-                outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
-            .WriteTo.File(
-                Path.Combine(logDir, "client-.log"),
-                rollingInterval: RollingInterval.Day,
-                retainedFileCountLimit: 7,
-                outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
-            .CreateLogger();
+        // T-096：装配统一由 Infrastructure 日志工厂承担（WriteTo.Console + WriteTo.File + 输出模板单一来源）
+        Log.Logger = SerilogFactory.CreateLogger(Path.Combine(logDir, "client-.log"));
     }
 
     private ServiceProvider BuildContainer()

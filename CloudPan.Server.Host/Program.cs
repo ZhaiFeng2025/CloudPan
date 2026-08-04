@@ -1,5 +1,6 @@
 using CloudPan.Contract;
 using CloudPan.Infrastructure.Configuration;
+using CloudPan.Infrastructure.Logging;
 using CloudPan.Infrastructure.Persistence;
 using CloudPan.Infrastructure.Storage;
 using CloudPan.Server.Core;
@@ -34,18 +35,12 @@ catch (Exception ex)
     return;
 }
 
-Log.Logger = new LoggerConfiguration()
-    .MinimumLevel.Information()
-    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
-    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
-    .WriteTo.Console(
-        outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
-    .WriteTo.File(
-        Path.Combine(logDir, "server-.log"),
-        rollingInterval: RollingInterval.Day,
-        retainedFileCountLimit: 7,
-        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
-    .CreateLogger();
+// T-096：装配统一由 Infrastructure 日志工厂承担（WriteTo.Console + WriteTo.File + 输出模板单一来源）；
+// Microsoft 框架日志压至 Warning 为服务端既有策略，经工厂最小级别覆盖参数保留
+Log.Logger = SerilogFactory.CreateLogger(
+    Path.Combine(logDir, "server-.log"),
+    ("Microsoft", LogEventLevel.Warning),
+    ("Microsoft.AspNetCore", LogEventLevel.Warning));
 builder.Host.UseSerilog();
 
 string dbPath = Path.Combine(syncRoot, ".cloudpan", "server.db");

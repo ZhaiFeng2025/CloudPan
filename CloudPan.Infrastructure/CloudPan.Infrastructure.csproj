@@ -19,6 +19,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- T-096：日志工厂（SerilogFactory）宿主；版本由 Directory.Build.props 单源化 -->
+    <PackageReference Include="Serilog" Version="$(SerilogVersion)" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="$(SerilogSinksConsoleVersion)" />
+    <PackageReference Include="Serilog.Sinks.File" Version="$(SerilogSinksFileVersion)" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.22" />
     <!-- SQLite 原生库：自包含单文件发布必需，解决 DllNotFoundException -->
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.10" />

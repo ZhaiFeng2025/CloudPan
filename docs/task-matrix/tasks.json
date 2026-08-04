@@ -4749,7 +4749,7 @@
       "title": "Serilog 装配单源化 + CentralPackageVersions 统一版本",
       "dimension": "simplicity",
       "priority": "P2",
-      "status": "todo",
+      "status": "in-progress",
       "batch": 8,
       "findingId": "F-138",
       "dependsOn": [],
@@ -4780,7 +4780,7 @@
       "attempts": 0,
       "statusReason": null,
       "note": null,
-      "updatedAt": null
+      "updatedAt": "2026-08-04"
     }
   ]
 }
