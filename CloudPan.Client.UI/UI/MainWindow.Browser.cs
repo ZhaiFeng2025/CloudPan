@@ -220,7 +220,9 @@ public partial class MainWindow
         }
     }
 
-    /// <summary>T-033：导入文件到当前浏览目录（复制 + 入队上传 + 立即刷新）。async void 调用方内部捕获全部异常。</summary>
+    /// <summary>T-033/T-116：导入文件/目录到当前浏览目录（复制 + 入队上传 + 立即刷新）。
+    /// 目录拖入由 SyncEngine 递归展开批量导入（T-116），返回实际导入文件数；为 0 时弹白话提示（禁静默零上传）。
+    /// async void 调用方内部捕获全部异常。</summary>
     private async Task ImportFilesAsync(string[] files)
     {
         if (files.Length == 0)
@@ -230,8 +232,20 @@ public partial class MainWindow
 
         try
         {
-            await _engine.ImportFilesAsync(files, _currentPath);
-            AddLog($"已导入 {files.Length} 个文件到 {_currentPath}");
+            int imported = await _engine.ImportFilesAsync(files, _currentPath);
+            if (imported == 0)
+            {
+                // T-116：拖入空目录/全部为系统忽略文件——明确告知，不再「界面接受、日志静默、零文件上传」
+                AddLog($"未导入任何文件: {_currentPath}");
+                MessageBox.Show(this,
+                    "未导入任何文件：拖入的文件夹为空，或内容均为系统忽略的临时/元数据文件。",
+                    "CloudPan — 导入文件",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                return;
+            }
+
+            AddLog($"已导入 {imported} 个文件到 {_currentPath}");
             await LoadBrowserAsync();
         }
         catch (Exception ex)

@@ -3,7 +3,7 @@
  "title": "Windows 拖拽目录静默失败修复（递归批量导入或白话提示，禁止零提示零上传）",
  "dimension": "ux",
  "priority": "P2",
- "status": "todo",
+ "status": "acceptance",
  "batch": 10,
  "findingId": "F-156",
  "dependsOn": [],
@@ -34,6 +34,6 @@
  ],
  "attempts": 0,
  "statusReason": null,
- "note": null,
- "updatedAt": null
+ "note": "执行记录（T-116）：改动文件：① CloudPan.Client.Core/Services/SyncEngine.Changes.cs——ImportFilesAsync 支持目录递归展开（保留目录内相对子路径逐个导入，走既有复制+入队上传通道，未绕过服务端校验），返回实际导入文件数；拆分 ImportSingleFileAsync 并在复制前过滤忽略规则（.cloudpan/*.tmp/.syncignore），防拖入同步根自身把 DB/版本历史上传。② CloudPan.Client.UI/UI/MainWindow.Browser.cs——导入包装改用返回计数，计数为 0（空目录/全忽略）时弹白话提示「未导入任何文件：拖入的文件夹为空，或内容均为系统忽略的临时/元数据文件」，消除静默零上传。③ CloudPan.Client.UI/UI/FileBrowserEvents.cs——DragEnter 注释更新（目录已支持递归导入，判定与实际支持一致）。④ CloudPan.Tests/Client/Services/SyncEngineTests.cs——新增 3 条目录导入测试（递归展开保留相对路径 / 忽略 .cloudpan 与 .tmp / 空目录返回 0）。验证：dotnet build CloudPan.sln -c Release 全绿（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 全绿（376/376 通过，含新增 3 条）。取舍：目录拖入保留目录内相对子路径（不重复目录名），防同名文件互相覆盖；AC 手动断言（拖入含 3 张照片子目录→3 文件上传成功；不再出现界面接受零上传）按递归导入路径实现。",
+ "updatedAt": "2026-08-04"
 }

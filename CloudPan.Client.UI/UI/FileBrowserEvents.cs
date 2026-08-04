@@ -169,7 +169,7 @@ internal sealed class FileBrowserEvents
         }
     }
 
-    /// <summary>T-033：拖拽进入浏览视图：仅接受文件拖放（显示复制效果）。</summary>
+    /// <summary>T-033/T-116：拖拽进入浏览视图：接受文件与目录拖放（目录由宿主递归展开批量导入，显示复制效果）。</summary>
     internal void FileBrowser_DragEnter(object? sender, DragEventArgs e)
     {
         e.Effect = e.Data?.GetDataPresent(DataFormats.FileDrop) == true

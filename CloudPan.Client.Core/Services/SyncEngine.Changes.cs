@@ -242,34 +242,71 @@ public partial class SyncEngine
     }
 
     /// <summary>
-    /// 上传入口（T-033）：将本地文件复制到同步目录并纳入上传队列（普通/分块由队列处理）。
+    /// 上传入口（T-033/T-116）：将本地文件或目录复制到同步目录并纳入上传队列（普通/分块由队列处理）。
     /// <paramref name="destRelativeDir"/> 为同步树内的相对目录（"/" 为同步根）；目标重名时覆盖，视为新版本上传。
     /// 供文件浏览视图「上传」按钮与主窗口拖拽导入复用。
+    /// T-116：目录拖入时递归展开为文件清单——保留目录内相对子路径逐个导入，消除「界面接受、日志静默、零文件上传」。
     /// </summary>
-    public async Task ImportFilesAsync(IReadOnlyList<string> sourceFiles, string destRelativeDir = "/", CancellationToken ct = default)
+    /// <returns>实际导入（复制并入队上传）的文件数；拖入内容为空或全部命中忽略规则时返回 0，供 UI 明确反馈。</returns>
+    public async Task<int> ImportFilesAsync(IReadOnlyList<string> sourceFiles, string destRelativeDir = "/", CancellationToken ct = default)
     {
         // 防御：目标目录须为同步树内路径（拒绝上级跳转穿越同步根）
         string cleanDir = destRelativeDir.Replace('\\', '/').TrimEnd('/');
         if (cleanDir.Split('/', StringSplitOptions.RemoveEmptyEntries).Any(seg => seg == ".."))
         {
             _logger.LogWarning("拒绝导入：目标目录含上级跳转: {Dir}", destRelativeDir);
-            return;
+            return 0;
         }
 
+        int imported = 0;
         foreach (string source in sourceFiles)
         {
             ct.ThrowIfCancellationRequested();
 
+            // T-116：目录拖入 → 递归展开为文件清单，逐文件保留目录内相对路径导入（防同名文件互相覆盖）
+            if (Directory.Exists(source))
+            {
+                foreach (string file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+                {
+                    ct.ThrowIfCancellationRequested();
+                    string subRel = Path.GetRelativePath(source, file).Replace('\\', '/');
+                    if (await ImportSingleFileAsync(file, "/" + (cleanDir + "/" + subRel).TrimStart('/'), ct))
+                    {
+                        imported++;
+                    }
+                }
+                continue;
+            }
+
             string fileName = Path.GetFileName(source);
             string destRel = "/" + (cleanDir + "/" + fileName).TrimStart('/');
-            string destAbs = ToLocalPath(destRel);
-            Directory.CreateDirectory(Path.GetDirectoryName(destAbs)!);
-
-            // 复制到同步目录后入队上传；FileWatcher 若已入队同操作，EnqueueLocalChangeAsync 去重，无重复上传
-            await Task.Run(() => File.Copy(source, destAbs, overwrite: true), ct);
-            await EnqueueLocalChangeAsync(destRel, SyncOperation.Upload);
-
-            _logger.LogInformation("导入文件入队上传: {Source} → {Dest}", source, destRel);
+            if (await ImportSingleFileAsync(source, destRel, ct))
+            {
+                imported++;
+            }
         }
+        return imported;
+    }
+
+    /// <summary>复制单个源文件到同步树目标相对路径并入队上传（T-116 拆分共享）；目标命中忽略规则（.cloudpan 元数据目录/临时文件）时跳过并返回 false。</summary>
+    private async Task<bool> ImportSingleFileAsync(string source, string destRel, CancellationToken ct)
+    {
+        // T-116：命中忽略规则（.cloudpan 元数据目录、*.tmp 临时文件、用户 .syncignore）不复制不入队——
+        // 防止拖入同步根自身把 DB/版本历史当作相册内容复制上传
+        if (_paths.ShouldIgnore(destRel))
+        {
+            _logger.LogDebug("跳过导入（命中忽略规则）: {Source} → {Dest}", source, destRel);
+            return false;
+        }
+
+        string destAbs = ToLocalPath(destRel);
+        Directory.CreateDirectory(Path.GetDirectoryName(destAbs)!);
+
+        // 复制到同步目录后入队上传；FileWatcher 若已入队同操作，EnqueueLocalChangeAsync 去重，无重复上传
+        await Task.Run(() => File.Copy(source, destAbs, overwrite: true), ct);
+        await EnqueueLocalChangeAsync(destRel, SyncOperation.Upload);
+
+        _logger.LogInformation("导入文件入队上传: {Source} → {Dest}", source, destRel);
+        return true;
     }
 }

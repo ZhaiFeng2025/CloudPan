@@ -1469,6 +1469,60 @@ public class SyncEngineTests : IDisposable
         Assert.Equal(0, await dbCheck.SyncQueue.CountAsync());
     }
 
+    // T-116：目录拖入递归展开批量导入——保留目录内相对子路径（同名文件不互相覆盖），逐文件走既有上传通道
+    [Fact]
+    public async Task ImportFilesAsync_目录拖入_递归展开全部文件并保留相对路径上传()
+    {
+        string album = Path.Combine(_tempDir, "album");
+        Directory.CreateDirectory(Path.Combine(album, "sub"));
+        await File.WriteAllTextAsync(Path.Combine(album, "b.png"), "png");
+        await File.WriteAllTextAsync(Path.Combine(album, "sub", "a.jpg"), "jpeg");
+
+        int imported = await _engine.ImportFilesAsync([album], "/photos");
+
+        // 目录内结构保留：/photos/b.png 与 /photos/sub/a.jpg
+        Assert.Equal(2, imported);
+        Assert.True(File.Exists(Path.Combine(_syncRoot, "photos", "b.png")));
+        Assert.True(File.Exists(Path.Combine(_syncRoot, "photos", "sub", "a.jpg")));
+        await using var dbCheck = await _dbFactory.CreateDbContextAsync();
+        Assert.Equal(2, await dbCheck.SyncQueue.CountAsync(q => q.Operation == (int)SyncOperation.Upload));
+        Assert.NotNull(await dbCheck.SyncQueue.FirstOrDefaultAsync(q => q.FilePath == "/photos/sub/a.jpg"));
+    }
+
+    // T-116：目录内命中忽略规则（.cloudpan 元数据目录 / *.tmp 临时文件）不复制不入队——防止拖入同步根自身时把 DB 上传
+    [Fact]
+    public async Task ImportFilesAsync_目录拖入_忽略cloudpan与临时文件()
+    {
+        string album = Path.Combine(_tempDir, "album2");
+        Directory.CreateDirectory(Path.Combine(album, ".cloudpan"));
+        await File.WriteAllTextAsync(Path.Combine(album, "photo.jpg"), "jpeg");
+        await File.WriteAllTextAsync(Path.Combine(album, ".cloudpan", "pan.db"), "db");
+        await File.WriteAllTextAsync(Path.Combine(album, "temp.tmp"), "tmp");
+
+        int imported = await _engine.ImportFilesAsync([album], "/");
+
+        Assert.Equal(1, imported); // 仅 photo.jpg 计入
+        Assert.False(File.Exists(Path.Combine(_syncRoot, ".cloudpan", "pan.db"))); // 元数据未复制
+        Assert.False(File.Exists(Path.Combine(_syncRoot, "temp.tmp")));            // 临时文件未复制
+        await using var dbCheck = await _dbFactory.CreateDbContextAsync();
+        Assert.Equal(1, await dbCheck.SyncQueue.CountAsync(q => q.Operation == (int)SyncOperation.Upload));
+        Assert.NotNull(await dbCheck.SyncQueue.FirstOrDefaultAsync(q => q.FilePath == "/photo.jpg"));
+    }
+
+    // T-116：空目录拖入 → 返回 0（UI 据此弹白话提示），不再「界面接受、日志静默、零文件上传」
+    [Fact]
+    public async Task ImportFilesAsync_目录拖入_空目录_返回0不入队()
+    {
+        string empty = Path.Combine(_tempDir, "empty-album");
+        Directory.CreateDirectory(empty);
+
+        int imported = await _engine.ImportFilesAsync([empty], "/");
+
+        Assert.Equal(0, imported);
+        await using var dbCheck = await _dbFactory.CreateDbContextAsync();
+        Assert.Equal(0, await dbCheck.SyncQueue.CountAsync());
+    }
+
     [Fact]
     public async Task DownloadPathAsync_CloudOnly文件_入队下载()
     {
