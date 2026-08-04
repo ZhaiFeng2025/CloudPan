@@ -1,0 +1,976 @@
+{
+ "tasks": [
+  {
+   "id": "T-001",
+   "title": "修复普通上传版本存档顺序（先存档后覆盖）",
+   "dimension": "architecture",
+   "priority": "P0",
+   "status": "done",
+   "batch": 1,
+   "location": "CloudPan.Server.Host/Controllers/FilesController.cs:105-132"
+  },
+  {
+   "id": "T-002",
+   "title": "文件类 Controller 领域逻辑下沉 Server.Core",
+   "dimension": "architecture",
+   "priority": "P0",
+   "status": "done",
+   "batch": 1,
+   "location": "CloudPan.Server.Host/Controllers/{Share,Trash,Versions,Thumbnails,Files}.cs"
+  },
+  {
+   "id": "T-003",
+   "title": "客户端 API 响应 DTO 改用 Generated 类型",
+   "dimension": "simplicity",
+   "priority": "P0",
+   "status": "done",
+   "batch": 1,
+   "location": "CloudPan.Client.Core/Services/ApiClient.cs:455-529"
+  },
+  {
+   "id": "T-004",
+   "title": "spec config 键生成并接线，消除硬编码重复",
+   "dimension": "simplicity",
+   "priority": "P0",
+   "status": "done",
+   "batch": 1,
+   "location": "shared-spec.json config 段 + ContractManifest.g.cs SpecConfig"
+  },
+  {
+   "id": "T-005",
+   "title": "服务端删除传播到客户端（墓碑机制）",
+   "dimension": "function",
+   "priority": "P1",
+   "status": "done",
+   "batch": 1,
+   "location": "CloudPan.Server.Core/FileIndex/FileIndexService.cs:121-171 + SyncEngine.Scan.cs"
+  },
+  {
+   "id": "T-006",
+   "title": "上传冲突检测 BaseVersion 接线",
+   "dimension": "function",
+   "priority": "P1",
+   "status": "done",
+   "batch": 1,
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Changes.cs:142-148"
+  },
+  {
+   "id": "T-007",
+   "title": "分享下载端点补过期校验",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 1,
+   "location": "CloudPan.Server.Host/Controllers/ShareController.cs:177-220"
+  },
+  {
+   "id": "T-008",
+   "title": "EF Migrations 替换 EnsureCreated（服务端+客户端）",
+   "dimension": "architecture",
+   "priority": "P2",
+   "status": "done",
+   "batch": 1,
+   "location": "DatabaseInitializer.cs + CloudPanDbContext.cs + ClientDbContext.cs"
+  },
+  {
+   "id": "T-009",
+   "title": "Windows 客户端每文件同步状态图标",
+   "dimension": "ux",
+   "priority": "P2",
+   "status": "done",
+   "batch": 1,
+   "location": "CloudPan.Client.UI/UI/MainWindow.cs:129-155"
+  },
+  {
+   "id": "T-010",
+   "title": "无障碍修复：对比度与最小字号（WCAG 2.1 AA）",
+   "dimension": "ux",
+   "priority": "P2",
+   "status": "done",
+   "batch": 1,
+   "location": "CloudPan.Client.UI/UI/DesignTokens.cs:34,201"
+  },
+  {
+   "id": "T-011",
+   "title": "两端 DesignTokens/图标收敛为共享单一实现",
+   "dimension": "simplicity",
+   "priority": "P2",
+   "status": "done",
+   "batch": 1,
+   "location": "CloudPan.Server.UI/DesignTokens.cs + CloudPan.Client.UI/UI/DesignTokens.cs"
+  },
+  {
+   "id": "T-012",
+   "title": "缩略图缓存 key 加入版本 + 受限生成队列",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 1,
+   "location": "CloudPan.Server.Host/Controllers/ThumbnailsController.cs:56-115"
+  },
+  {
+   "id": "T-013",
+   "title": "主窗口从日志中心改版为文件浏览主视图",
+   "dimension": "ux",
+   "priority": "P1",
+   "status": "done",
+   "batch": 2,
+   "location": "CloudPan.Client.UI/UI/MainWindow.cs:107-397"
+  },
+  {
+   "id": "T-014",
+   "title": "客户端删除默认走回收站并支持恢复/撤销",
+   "dimension": "ux",
+   "priority": "P1",
+   "status": "done",
+   "batch": 2,
+   "location": "CloudPan.Client.UI（文件浏览删除流程）+ 回收站 API 对接"
+  },
+  {
+   "id": "T-015",
+   "title": "Host 与 Server.UI 解耦，headless 可编译",
+   "dimension": "architecture",
+   "priority": "P1",
+   "status": "done",
+   "batch": 2,
+   "location": "CloudPan.Server.Host/CloudPan.Server.Host.csproj:23; Program.cs:127"
+  },
+  {
+   "id": "T-016",
+   "title": "命名空间对齐目标四层",
+   "dimension": "architecture",
+   "priority": "P1",
+   "status": "done",
+   "batch": 2,
+   "location": "全仓命名空间"
+  },
+  {
+   "id": "T-017",
+   "title": "文件哈希计算收敛为单一实现",
+   "dimension": "simplicity",
+   "priority": "P1",
+   "status": "done",
+   "batch": 2,
+   "location": "ApiClient.cs:176-182; SyncEngine.Queue.cs:226-233 vs FileStorageService.cs:72-77"
+  },
+  {
+   "id": "T-018",
+   "title": "分享创建/撤销 + 版本历史回滚 UI 入口",
+   "dimension": "ux",
+   "priority": "P1",
+   "status": "done",
+   "batch": 2,
+   "location": "TrayAppContext.cs:296（新增入口）；文件浏览详情面板"
+  },
+  {
+   "id": "T-019",
+   "title": "目录重命名索引前缀替换修复",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 2,
+   "location": "CloudPan.Server.Core/FileIndex/FileIndexService.cs:196-200"
+  },
+  {
+   "id": "T-020",
+   "title": "分块上传崩溃恢复幂等化",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 2,
+   "location": "CloudPan.Server.Host/Controllers/FilesController.ChunkedUpload.cs:175-184"
+  },
+  {
+   "id": "T-021",
+   "title": "分块上传 Finalize 原子化（DB/FS 一致）",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 2,
+   "location": "CloudPan.Server.Host/Controllers/FilesController.ChunkedUpload.cs:365-374"
+  },
+  {
+   "id": "T-022",
+   "title": "设置页改由 SpecSettings 契约驱动",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 2,
+   "location": "CloudPan.Server.UI/SettingsPage.cs:13-190; Program.cs:72"
+  },
+  {
+   "id": "T-023",
+   "title": "选择性同步取消勾选振荡修复",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 2,
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Scan.cs:347-355"
+  },
+  {
+   "id": "T-024",
+   "title": "回收站元数据文件名路径穿越修复",
+   "dimension": "architecture",
+   "priority": "P2",
+   "status": "done",
+   "batch": 2,
+   "location": "CloudPan.Server.Host/Controllers/TrashController.cs:68,175-180; FilesController.cs:271-304"
+  },
+  {
+   "id": "T-025",
+   "title": "Token 验证与设备注册收敛为 Server.Core 单一服务",
+   "dimension": "architecture",
+   "priority": "P1",
+   "status": "done",
+   "batch": 3,
+   "location": "CloudPan.Server.Host/Middleware/TokenAuthMiddleware.cs:73-84,104-167; CloudPan.Server.Core/WebSocket/WebSocketHandler.cs:106-122,397-427"
+  },
+  {
+   "id": "T-026",
+   "title": "回收站保留期清理下沉 TrashService",
+   "dimension": "architecture",
+   "priority": "P1",
+   "status": "done",
+   "batch": 3,
+   "location": "CloudPan.Server.Host/Hosting/BackgroundHostedService.cs:72-115"
+  },
+  {
+   "id": "T-027",
+   "title": "ApiClient 路由契约化（CodeGen 增 ApiClientGenerator）",
+   "dimension": "architecture",
+   "priority": "P1",
+   "status": "done",
+   "batch": 3,
+   "location": "CloudPan.Client.Core/Services/ApiClient.cs:63-369"
+  },
+  {
+   "id": "T-028",
+   "title": "行数门禁修复 + MainWindow/SetupForm 拆 partial",
+   "dimension": "simplicity",
+   "priority": "P1",
+   "status": "done",
+   "batch": 3,
+   "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs:11-15,54-58,74-80; CloudPan.Client.UI/UI/MainWindow.cs:1-2522; CloudPan.Client.UI/UI/SetupForm.cs:1-1023"
+  },
+  {
+   "id": "T-029",
+   "title": "客户端组合根下沉 Client.Core",
+   "dimension": "simplicity",
+   "priority": "P1",
+   "status": "done",
+   "batch": 3,
+   "location": "CloudPan.Client.UI/Program.cs:1-534; CloudPan.Client.UI/CloudPan.Client.UI.csproj:26-27"
+  },
+  {
+   "id": "T-030",
+   "title": "两端图标收敛为共享单一实现",
+   "dimension": "simplicity",
+   "priority": "P1",
+   "status": "done",
+   "batch": 3,
+   "location": "CloudPan.Server.UI/ServerIcons.cs:1-311; CloudPan.Client.UI/UI/CloudPanIcon.cs:1-311"
+  },
+  {
+   "id": "T-031",
+   "title": "同步错误白话归因与异常解包",
+   "dimension": "ux",
+   "priority": "P2",
+   "status": "done",
+   "batch": 3,
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Queue.cs:85,108; CloudPan.Client.UI/UI/MainWindow.cs:676-803"
+  },
+  {
+   "id": "T-032",
+   "title": "深色模式令牌级切换",
+   "dimension": "ux",
+   "priority": "P2",
+   "status": "done",
+   "batch": 3,
+   "location": "CloudPan.Infrastructure/Design/DesignTokens.cs（浅色组单集）"
+  },
+  {
+   "id": "T-033",
+   "title": "Windows 上传入口与 CloudOnly 按需下载",
+   "dimension": "ux",
+   "priority": "P2",
+   "status": "done",
+   "batch": 3,
+   "location": "CloudPan.Client.UI/UI/FileBrowserView.cs 工具栏; CloudPan.Client.UI/UI/MainWindow.cs:1876-1895（OpenFile）"
+  },
+  {
+   "id": "T-034",
+   "title": "同步根变更客户端重配引导",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 3,
+   "location": "CloudPan.Server.UI/SettingsPage.cs:388-411"
+  },
+  {
+   "id": "T-035",
+   "title": "UDP 发现响应版本与主机名修复",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 3,
+   "location": "CloudPan.Server.Host/Hosting/UdpDiscoveryHostedService.cs:29-31"
+  },
+  {
+   "id": "T-036",
+   "title": "冲突弹窗改非模态聚合",
+   "dimension": "ux",
+   "priority": "P2",
+   "status": "done",
+   "batch": 3,
+   "location": "CloudPan.Client.UI/UI/MainWindow.cs:2033-2190; CloudPan.Client.UI/UI/TrayAppContext.cs:113-128"
+  },
+  {
+   "id": "T-037",
+   "title": "修复全量扫描误删下载中文件（远端新文件首次下载保护）",
+   "dimension": "function",
+   "priority": "P1",
+   "status": "done",
+   "batch": 4,
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Scan.cs:217-223,319-331; SyncEngine.Changes.cs:137-144; SyncEngine.Queue.cs:99-121"
+  },
+  {
+   "id": "T-038",
+   "title": "回收站文件名唯一化，移入失败不再物理删除兜底",
+   "dimension": "function",
+   "priority": "P1",
+   "status": "done",
+   "batch": 4,
+   "location": "CloudPan.Server.Core/Trash/TrashService.cs:233-257; CloudPan.Server.Core/Files/FileOperationService.cs:75-89"
+  },
+  {
+   "id": "T-039",
+   "title": "Android FileState 枚举对齐 C# 并诚实化契约头标注",
+   "dimension": "architecture",
+   "priority": "P1",
+   "status": "done",
+   "batch": 4,
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/Dtos.kt:1,70; CloudPan.Android/app/src/main/java/com/cloudpan/android/data/CloudPanApi.kt:1"
+  },
+  {
+   "id": "T-040",
+   "title": "服务端控制器改用生成响应 DTO（删除匿名对象）",
+   "dimension": "architecture",
+   "priority": "P1",
+   "status": "done",
+   "batch": 4,
+   "location": "CloudPan.Server.Host/Controllers/{Files,Files.FileOps,Files.ChunkedUpload,Health,Admin}.cs"
+  },
+  {
+   "id": "T-041",
+   "title": "删除 QueryServerVersion 死代码，客户端 HTTP 单一入口",
+   "dimension": "simplicity",
+   "priority": "P1",
+   "status": "done",
+   "batch": 4,
+   "location": "CloudPan.Client.Core/Composition/ClientBootstrap.cs:393-419"
+  },
+  {
+   "id": "T-042",
+   "title": "行数门禁下调至 400，7 个超大单类拆 partial",
+   "dimension": "simplicity",
+   "priority": "P1",
+   "status": "done",
+   "batch": 4,
+   "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs; CloudPan.Server.UI/ServerInstaller.cs(935); CloudPan.Client.UI/UI/FileBrowserView.cs(830); CloudPan.Client.UI/UI/SettingsForm.cs(628); CloudPan.Server.UI/ServerWindow.cs(513); CloudPan.Client.UI/UI/TrayAppContext.cs(494); CloudPan.Server.UI/SettingsPage.cs(483); CloudPan.Client.Core/Composition/ClientBootstrap.cs(420)"
+  },
+  {
+   "id": "T-043",
+   "title": "客户端配置三套收敛为单一来源",
+   "dimension": "simplicity",
+   "priority": "P2",
+   "status": "done",
+   "batch": 4,
+   "location": "CloudPan.Client.Core/Models/ClientConfig.cs:1-78; CloudPan.Client.Core/Services/SettingsStore.cs:1-75; CloudPan.Client.Core/Models/SyncConfig.cs:1-30; CloudPan.Client.Core/Composition/ClientBootstrap.cs:81,317; CloudPan.Client.UI/UI/TrayAppContext.cs:456,473"
+  },
+  {
+   "id": "T-044",
+   "title": "Android 照片备份改连续段游标并接线 BackupLog",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 4,
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/worker/PhotoBackupWorker.kt:118-148"
+  },
+  {
+   "id": "T-045",
+   "title": "冲突项不阻塞队列其他传输（解除队列饥饿）",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 4,
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Queue.cs:18-22,55-60"
+  },
+  {
+   "id": "T-046",
+   "title": "本地目录创建同步为服务端条目",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 4,
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Changes.cs:160-164; SyncEngine.Scan.cs:287-289"
+  },
+  {
+   "id": "T-047",
+   "title": "选择性同步选择集改排除集语义",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 4,
+   "location": "CloudPan.Client.UI/UI/SelectiveSyncPanel.cs:20-24,201-212; CloudPan.Client.Core/Services/SyncEngine.Scan.cs:447-459"
+  },
+  {
+   "id": "T-048",
+   "title": "RateLimit 中间件 Timer 泄漏修复 + 豁免清单契约化",
+   "dimension": "architecture",
+   "priority": "P2",
+   "status": "done",
+   "batch": 4,
+   "location": "CloudPan.Server.Host/Middleware/RateLimitMiddleware.cs:14-30,39-51"
+  },
+  {
+   "id": "T-049",
+   "title": "修复目录删除传播断裂（目录自身墓碑化 + FullScan 目录删除兜底）",
+   "dimension": "function",
+   "priority": "P1",
+   "status": "done",
+   "batch": 5,
+   "location": "CloudPan.Server.Core/FileIndex/FileIndexService.cs:129-136; CloudPan.Client.Core/Services/SyncEngine.FullScan.cs:100-118; CloudPan.Tests/Server/Services/FileIndexServiceTests.cs:88-109"
+  },
+  {
+   "id": "T-050",
+   "title": "Android 删除改走回收站（软删 + 撤销 Snackbar + 回收站入口）",
+   "dimension": "ux",
+   "priority": "P1",
+   "status": "done",
+   "batch": 5,
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt:128-133; ui/FileListScreen.kt:210-258"
+  },
+  {
+   "id": "T-051",
+   "title": "提交新版本编排收敛为单一领域辅助（Upload/ChunkedUpload 共用）",
+   "dimension": "simplicity",
+   "priority": "P1",
+   "status": "done",
+   "batch": 5,
+   "location": "CloudPan.Server.Core/Upload/UploadService.cs:52-76 vs CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.Finalize.cs:86-133"
+  },
+  {
+   "id": "T-052",
+   "title": "进程执行辅助收敛为单一 ProcessRunner",
+   "dimension": "simplicity",
+   "priority": "P1",
+   "status": "done",
+   "batch": 5,
+   "location": "CloudPan.Server.UI/ServerInstaller.Process.cs:13-121; CloudPan.Server.UI/ServiceRestartHelper.cs:69-127"
+  },
+  {
+   "id": "T-053",
+   "title": "SettingsForm 测试连接回炉：改走 IApiClient + 白话反馈（T-041 残留）",
+   "dimension": "simplicity",
+   "priority": "P2",
+   "status": "done",
+   "batch": 5,
+   "location": "CloudPan.Client.UI/UI/SettingsForm.AccountTab.cs:229-271"
+  },
+  {
+   "id": "T-054",
+   "title": "排除集语义闭环：覆盖上传方向 + 重新勾选恢复（T-047 补全）",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 5,
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Scan.cs:172,188; SyncEngine.FullScan.cs:92-98,166,178; FileWatcherService.cs:106,111"
+  },
+  {
+   "id": "T-055",
+   "title": "ServerWindow 改经 IServerStatusService（消除直连 DbContext 与服务定位器）",
+   "dimension": "architecture",
+   "priority": "P2",
+   "status": "done",
+   "batch": 5,
+   "location": "CloudPan.Server.UI/ServerWindow.cs:23,37; ServerWindow.Data.cs:19"
+  },
+  {
+   "id": "T-056",
+   "title": "FilesController.Upload 冲突检测下沉 Core",
+   "dimension": "architecture",
+   "priority": "P2",
+   "status": "done",
+   "batch": 5,
+   "location": "CloudPan.Server.Host/Controllers/FilesController.cs:92-105"
+  },
+  {
+   "id": "T-057",
+   "title": "WebSocket 心跳迁移 IHostedService（间隔读 SpecConfig）",
+   "dimension": "architecture",
+   "priority": "P2",
+   "status": "done",
+   "batch": 5,
+   "location": "CloudPan.Server.Core/WebSocket/WebSocketHandler.Lifecycle.cs:43-96"
+  },
+  {
+   "id": "T-058",
+   "title": "服务端路由字面量契约化 + /ws 路径生成",
+   "dimension": "simplicity",
+   "priority": "P2",
+   "status": "done",
+   "batch": 5,
+   "location": "CloudPan.Server.Host/Controllers/*.cs（16 处）; CloudPan.Server.Host/Program.cs:111; CloudPan.Client.Core/Services/WebSocketClient.cs:51"
+  },
+  {
+   "id": "T-059",
+   "title": "Android 文件列表分页（nextCursor 增量加载）",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 5,
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt:38-48; ui/FileListScreen.kt:159-191"
+  },
+  {
+   "id": "T-060",
+   "title": "照片备份队头阻塞修复（失败重试上限 + 游标越过）",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 5,
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/worker/PhotoBackupWorker.kt:167-175,180-182"
+  },
+  {
+   "id": "T-061",
+   "title": "Android 契约基线更新至 spec v1.3.0 并补 Kotlin 生成器纳入 --verify",
+   "dimension": "architecture",
+   "priority": "P1",
+   "status": "done",
+   "batch": 6,
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/Dtos.kt:1; CloudPan.Android/app/src/main/java/com/cloudpan/android/data/CloudPanApi.kt:1-35"
+  },
+  {
+   "id": "T-062",
+   "title": "客户端 EF 实体改由 spec entities 生成（含 RemoteSnapshot 字段回流）",
+   "dimension": "architecture",
+   "priority": "P1",
+   "status": "done",
+   "batch": 6,
+   "location": "CloudPan.Client.Core/Models/ClientDbContext.cs:53-88; CloudPan.Client.Core/Models/RemoteSnapshot.cs; SyncQueueItem.cs; SyncCursorState.cs"
+  },
+  {
+   "id": "T-063",
+   "title": "设置改动即时生效：排除集热更新 + 限速运行时下发",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 6,
+   "location": "CloudPan.Client.UI/UI/TrayAppContext.Actions.cs:81-84; CloudPan.Client.Core/Services/SyncEngine.cs:135; CloudPan.Client.Core/Services/ApiClient.cs:41-42"
+  },
+  {
+   "id": "T-064",
+   "title": "分块上传恢复路径返回真实版本号并兜底 isComplete 未落盘会话",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 6,
+   "location": "CloudPan.Client.Core/Services/ApiClient.ChunkedUpload.cs:38-46,88-89; CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.cs:159-165; ChunkedUploadService.Finalize.cs:108-128"
+  },
+  {
+   "id": "T-065",
+   "title": "版本回滚 RestoreAsync 失败路径回滚 DB 索引",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 6,
+   "location": "CloudPan.Server.Core/Versions/VersionHistoryService.cs:106-147"
+  },
+  {
+   "id": "T-066",
+   "title": "目录重命名客户端快照前缀跟随，避免整子树重下载",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 6,
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Transfers.cs:324-354; SyncEngine.FullScan.cs:125-154"
+  },
+  {
+   "id": "T-067",
+   "title": "delete/move/mkdir 请求体契约化（spec + 生成 record + 客户端引用）",
+   "dimension": "architecture",
+   "priority": "P2",
+   "status": "done",
+   "batch": 6,
+   "location": "CloudPan.Server.Host/Controllers/FilesController.cs:149-155; CloudPan.Client.Core/Services/ApiClient.cs:197-214; ApiClient.Trash.cs; ApiClient.ShareVersion.cs"
+  },
+  {
+   "id": "T-068",
+   "title": "客户端持久化迁入 Infrastructure/Persistence",
+   "dimension": "architecture",
+   "priority": "P2",
+   "status": "done",
+   "batch": 6,
+   "location": "CloudPan.Client.Core/Models/ClientDbContext.cs:1-88; CloudPan.Client.Core/Migrations/*.cs"
+  },
+  {
+   "id": "T-069",
+   "title": "Android 新建目录去尾斜杠（服务端 TrimEnd 兜底）",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 6,
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt:380; CloudPan.Server.Core/Files/FileOperationService.cs:170-200; CloudPan.Server.Core/FileIndex/FileIndexService.cs:234-272"
+  },
+  {
+   "id": "T-070",
+   "title": "行数门禁按 public 类型聚合 partial 统计，拆分 SyncEngine/MainWindow",
+   "dimension": "architecture",
+   "priority": "P2",
+   "status": "done",
+   "batch": 6,
+   "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs:11-12,64-75; CloudPan.Client.Core/Services/SyncEngine*.cs（13 partial）; CloudPan.Client.UI/UI/MainWindow*.cs（12 partial）"
+  },
+  {
+   "id": "T-071",
+   "title": "冲突副本保存收敛为单一领域辅助",
+   "dimension": "simplicity",
+   "priority": "P2",
+   "status": "done",
+   "batch": 6,
+   "location": "CloudPan.Server.Core/Files/FileOperationService.cs:241-277; CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.Finalize.cs:44-84"
+  },
+  {
+   "id": "T-072",
+   "title": "TokenService 服务定位器消除（事件/委托解耦）",
+   "dimension": "architecture",
+   "priority": "P2",
+   "status": "done",
+   "batch": 6,
+   "location": "CloudPan.Server.Core/Configuration/TokenService.cs:30,74; CloudPan.Server.Core/WebSocket/WebSocketHandler.cs:27-33"
+  },
+  {
+   "id": "T-073",
+   "title": "修复限速流配额边界返回 0 被当 EOF 截断（ThrottledStream 重试读 + 单测）",
+   "dimension": "function",
+   "priority": "P1",
+   "status": "done",
+   "batch": 7,
+   "location": "CloudPan.Client.Core/Services/ApiClient.ThrottledStream.cs:44-76,78-92"
+  },
+  {
+   "id": "T-074",
+   "title": "选择性同步排除集目录树接线加载（LoadFromPaths 调用点 + 空树不覆盖排除配置）",
+   "dimension": "function",
+   "priority": "P1",
+   "status": "done",
+   "batch": 7,
+   "location": "CloudPan.Client.UI/UI/SelectiveSyncPanel.cs:115,196-232; CloudPan.Client.UI/UI/SettingsForm.SyncTab.cs:10-21"
+  },
+  {
+   "id": "T-075",
+   "title": "服务端地址/同步根设置『重启后生效』统一提示 + 同步根路径安全校验",
+   "dimension": "ux",
+   "priority": "P1",
+   "status": "done",
+   "batch": 7,
+   "location": "CloudPan.Client.UI/UI/TrayAppContext.Actions.cs:71-91; CloudPan.Client.UI/UI/SettingsForm.cs:79"
+  },
+  {
+   "id": "T-076",
+   "title": "分块上传恢复兜底 Finalize 已完成窗口（record 移除后识别已完成会话）",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 7,
+   "location": "CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.cs:183-199; CloudPan.Client.Core/Services/ApiClient.ChunkedUpload.cs:33-46,88-92"
+  },
+  {
+   "id": "T-077",
+   "title": "重命名目标已存在收敛（先检测 newPath→409/改名，不先分配版本号）",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 7,
+   "location": "CloudPan.Server.Core/Files/FileOperationService.cs:115-170; CloudPan.Server.Core/FileIndex/FileIndexService.cs:194-229"
+  },
+  {
+   "id": "T-078",
+   "title": "回收站恢复目标已存在收敛（检测→CONFLICT/改名恢复 + 白话原因）",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 7,
+   "location": "CloudPan.Server.Core/Trash/TrashService.cs:126-154; CloudPan.Client.Core/Services/SyncManageService.cs:46-59"
+  },
+  {
+   "id": "T-079",
+   "title": "ThemeWatcher 双份下沉 Infrastructure/Design（两端只留初始化）",
+   "dimension": "simplicity",
+   "priority": "P2",
+   "status": "done",
+   "batch": 7,
+   "location": "CloudPan.Client.UI/UI/ThemeWatcher.cs:1-144; CloudPan.Server.UI/ThemeWatcher.cs:1-145"
+  },
+  {
+   "id": "T-080",
+   "title": "DesignTokens 死令牌清理（0 引用效果/颜色/FontSpec）",
+   "dimension": "simplicity",
+   "priority": "P2",
+   "status": "done",
+   "batch": 7,
+   "location": "CloudPan.Infrastructure/Design/DesignTokens.Effects.cs:31-64; DesignTokens.cs; DesignTokens.Fonts.cs"
+  },
+  {
+   "id": "T-081",
+   "title": "行数门禁豁免表设持续下降约束（拆除永久豁免 + 巨型类拆分里程碑）",
+   "dimension": "architecture",
+   "priority": "P2",
+   "status": "done",
+   "batch": 7,
+   "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs:75-96(DocumentedTypeCeilings); CloudPan.Client.Core/Services/SyncEngine*.cs; CloudPan.Client.UI/UI/MainWindow*.cs"
+  },
+  {
+   "id": "T-082",
+   "title": "spec changelog 版本治理（去重 + 严格单调 + CHANGELOG.md 对齐 + --verify 断言）",
+   "dimension": "architecture",
+   "priority": "P2",
+   "status": "done",
+   "batch": 7,
+   "location": "shared-spec.json:_changelog（version=1.6.0）"
+  },
+  {
+   "id": "T-083",
+   "title": "Windows 文件列表多选批量删除 + 右键上下文菜单",
+   "dimension": "ux",
+   "priority": "P2",
+   "status": "done",
+   "batch": 7,
+   "location": "CloudPan.Client.UI/UI/FileBrowserView.cs:304-320; CloudPan.Client.UI/UI/FileBrowserView.Events.cs:90-96"
+  },
+  {
+   "id": "T-084",
+   "title": "删除 409 冲突处理（转冲突提示而非静默丢弃）",
+   "dimension": "function",
+   "priority": "P3",
+   "status": "done",
+   "batch": 7,
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Transfers.cs:292-321"
+  },
+  {
+   "id": "T-085",
+   "title": "客户端路径安全统一防线（SyncPath 越界校验下沉单点）",
+   "dimension": "architecture",
+   "priority": "P1",
+   "status": "done",
+   "batch": 8,
+   "location": "CloudPan.Client.Core/Services/SyncPath.cs:43-47; SyncEngine.Changes.cs:176; SyncEngine.FullScan.cs:302; FileWatcherService.cs:198-216"
+  },
+  {
+   "id": "T-086",
+   "title": "客户端 HTTP 接口签名契约化（C# IApiClient 与 Kotlin Retrofit 由 CodeGen 生成）",
+   "dimension": "architecture",
+   "priority": "P1",
+   "status": "done",
+   "batch": 8,
+   "location": "CloudPan.Client.Core/Services/IApiClient.cs + ApiClient*.cs；CloudPan.Android/app/src/main/java/com/cloudpan/android/data/CloudPanApi.kt:1-12；CloudPan.CodeGen/Generators/ApiClientGenerator.cs"
+  },
+  {
+   "id": "T-087",
+   "title": "缩略图死功能收敛：Windows 网格视图接入 /api/thumbnails",
+   "dimension": "function",
+   "priority": "P1",
+   "status": "done",
+   "batch": 8,
+   "location": "CloudPan.Client.UI/UI/FileBrowseRender.cs:46-54（网格视图自绘字形）；CloudPan.Server.Core/Thumbnails/ThumbnailService.cs:34-169"
+  },
+  {
+   "id": "T-088",
+   "title": "版本存档与缩略图缓存存储回收（BackgroundHostedService 统一回收任务）",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 8,
+   "location": "CloudPan.Server.Core/Versions/VersionCommitHelper.cs:82-91; FileIndex/FileIndexService.cs:166-188; Thumbnails/ThumbnailService.cs:136-169; CloudPan.Server.Host/Hosting/BackgroundHostedService.cs:15-44"
+  },
+  {
+   "id": "T-089",
+   "title": "Android 删除/上传携带 baseVersion 触发服务端 409（并发保护对齐 Windows）",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 8,
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt:151,222; worker/PhotoBackupWorker.kt:369"
+  },
+  {
+   "id": "T-090",
+   "title": "Storage 路径校验内建（GetAbsolutePath 强制校验 + UploadService 校验下沉 + FilesController 移除 Infrastructure 依赖）",
+   "dimension": "architecture",
+   "priority": "P2",
+   "status": "done",
+   "batch": 8,
+   "location": "CloudPan.Infrastructure/Storage/FileStorageService.cs:28-33,80-134; CloudPan.Server.Core/Upload/UploadService.cs:69; CloudPan.Server.Host/Controllers/FilesController.cs:84,90"
+  },
+  {
+   "id": "T-091",
+   "title": "Android 错误白话归因 + 手动上传崩溃防护与进度反馈",
+   "dimension": "ux",
+   "priority": "P2",
+   "status": "done",
+   "batch": 8,
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/SettingsScreen.kt:232-233; FileListScreen.kt（多处）; MainActivity.kt:55-66"
+  },
+  {
+   "id": "T-092",
+   "title": "Windows 批量删除增加确认对话框（对齐 Android）",
+   "dimension": "ux",
+   "priority": "P2",
+   "status": "done",
+   "batch": 8,
+   "location": "CloudPan.Client.UI/UI/MainWindow.Trash.cs:26-63"
+  },
+  {
+   "id": "T-093",
+   "title": "Client.Core 持久化抽象（Repository/Store 消除领域层直接 EF LINQ）",
+   "dimension": "architecture",
+   "priority": "P2",
+   "status": "done",
+   "batch": 8,
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Changes.cs:3,53,71; SyncEngine.Conflicts.cs:3,27; SyncBrowseService.cs:60-263"
+  },
+  {
+   "id": "T-094",
+   "title": "回收站恢复失败白话反馈 + 覆盖/改名选项（两端对齐）",
+   "dimension": "ux",
+   "priority": "P2",
+   "status": "done",
+   "batch": 8,
+   "location": "CloudPan.Client.UI/UI/MainWindow.Trash.cs:263-275; CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt:1099"
+  },
+  {
+   "id": "T-095",
+   "title": "SettingsForm 归因双份清理（删 ClassifyTestError/Flatten/GetFolderSize 死代码）",
+   "dimension": "simplicity",
+   "priority": "P2",
+   "status": "done",
+   "batch": 8,
+   "location": "CloudPan.Client.UI/UI/SettingsForm.AccountTab.cs:289-323,382-399"
+  },
+  {
+   "id": "T-096",
+   "title": "Serilog 装配单源化 + CentralPackageVersions 统一版本",
+   "dimension": "simplicity",
+   "priority": "P2",
+   "status": "done",
+   "batch": 8,
+   "location": "CloudPan.Client.Core/Composition/ClientBootstrap.cs:293-311; CloudPan.Server.Host/Program.cs:37-48; CloudPan.Client.Core/CloudPan.Client.Core.csproj:28-31 vs CloudPan.Server.UI/CloudPan.Server.UI.csproj:36"
+  },
+  {
+   "id": "T-097",
+   "title": "缩略图端点契约化（spec 补 clientMethod + 删手工 partial + Kotlin 同步生成）",
+   "dimension": "architecture",
+   "priority": "P1",
+   "status": "done",
+   "batch": 9,
+   "location": "shared-spec.json:580（/api/thumbnails）；CloudPan.Contract/IApiClient.Thumbnails.cs:14-16；CloudPan.Client.Core/Services/ApiClient.cs:76；CloudPan.Android/.../data/Generated/CloudPanApi.g.kt"
+  },
+  {
+   "id": "T-098",
+   "title": "删除冲突对话框补齐『仍删除（强制）』选项 + 远程版本信息 + 缺失文件容错",
+   "dimension": "function",
+   "priority": "P1",
+   "status": "done",
+   "batch": 9,
+   "location": "CloudPan.Client.UI/UI/ConflictResolutionDialog.cs:86-139；CloudPan.Client.Core/Services/SyncEngine.Conflicts.cs:107-123"
+  },
+  {
+   "id": "T-099",
+   "title": "行数门禁豁免兑现断言（聚合≤TargetCeiling + 截止批次到期≤400）+ SyncEngine/MainWindow 真实拆分",
+   "dimension": "architecture",
+   "priority": "P2",
+   "status": "done",
+   "batch": 9,
+   "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs:139-156,162-207；CloudPan.Client.Core/Services/SyncEngine*.cs；CloudPan.Client.UI/UI/MainWindow*.cs"
+  },
+  {
+   "id": "T-100",
+   "title": "FileHasher/SyncIgnoreParser 下沉 Infrastructure + 删除 ComputeHashAsync 转发",
+   "dimension": "architecture",
+   "priority": "P2",
+   "status": "done",
+   "batch": 9,
+   "location": "CloudPan.Contract/FileHasher.cs:1；CloudPan.Contract/SyncIgnoreParser.cs:1；CloudPan.Infrastructure/Storage/IFileStorageService.cs:10；FileStorageService.cs:96"
+  },
+  {
+   "id": "T-101",
+   "title": "元数据目录布局收敛 FileStorageService 单点（删死 _thumbnailsDir + 统一缩略图/分块路径）",
+   "dimension": "architecture",
+   "priority": "P2",
+   "status": "done",
+   "batch": 9,
+   "location": "CloudPan.Server.Core/Thumbnails/ThumbnailService.cs:245-249；CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.cs:93-97；CloudPan.Infrastructure/Storage/FileStorageService.cs:13,20-22"
+  },
+  {
+   "id": "T-102",
+   "title": "HEIC/HEIF 缩略图解码（Windows 系统 WIC，不引第三方编解码器）",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 9,
+   "location": "CloudPan.Server.Core/Thumbnails/ThumbnailService.cs:13-16（SupportedExts）"
+  },
+  {
+   "id": "T-103",
+   "title": "MoveAsync 版本历史跟随重命名（子树前缀迁移 + 旧存档孤儿回收闭环）",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 9,
+   "location": "CloudPan.Server.Core/Files/FileOperationService.cs:115-180；CloudPan.Server.Core/Versions/VersionHistoryService.cs:38-48"
+  },
+  {
+   "id": "T-104",
+   "title": "Windows 缩略图本地缓存 LRU/时间回收（对齐 T-088 语义）",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 9,
+   "location": "CloudPan.Client.UI/UI/ThumbnailLoader.cs:175-184"
+  },
+  {
+   "id": "T-105",
+   "title": "Android 大文件分块上传（>50MB 走 /api/files/upload/chunk，对齐 C#）",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 9,
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/FileRepository.kt:253-282；worker/PhotoBackupWorker.kt:365-390；CloudPan.Server.Host/Program.cs:86-89"
+  },
+  {
+   "id": "T-106",
+   "title": "Windows 6 处异常原文透出改 ErrorAttribution 白话（含崩溃对话框）",
+   "dimension": "ux",
+   "priority": "P2",
+   "status": "done",
+   "batch": 9,
+   "location": "CloudPan.Client.UI/UI/MainWindow.Share.cs:239/257/288；MainWindow.Versions.cs:169；MainWindow.Status.cs:233；StartupFlow.cs:15-16"
+  },
+  {
+   "id": "T-107",
+   "title": "Android 文件列表每文件同步状态图标 + 汇总进度（消费 FileEntryDto.state）",
+   "dimension": "ux",
+   "priority": "P2",
+   "status": "done",
+   "batch": 9,
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/ui/FileListScreen.kt:962-1006；data/Generated/Dtos.g.kt:120"
+  },
+  {
+   "id": "T-108",
+   "title": "Windows 浏览卡顿修复（快照缓存/事件驱动刷新，去除每 5 秒全树枚举）",
+   "dimension": "ux",
+   "priority": "P2",
+   "status": "done",
+   "batch": 9,
+   "location": "CloudPan.Client.Core/Services/SyncBrowseService.cs:88（AllDirectories 全树枚举）；CloudPan.Client.UI/UI/MainWindow.Browser.cs:113（browserRefreshTimer 5000ms）"
+  }
+ ]
+}

@@ -1,7 +1,7 @@
 # CloudPan 任务矩阵 — 状态板
 
-> 契约: docs/task-matrix/tasks.json（schemaVersion=2）｜ 更新: 2026-08-04
-> 统计: 108 任务 = 108 done / 0 待人工确认 / 0 todo
+> 契约: docs/task-matrix/contract/（schemaVersion=3）｜ 更新: 2026-08-04
+> 统计: 108 任务 = 108 done / 0 待验收 / 0 待办
 
 | ID | 标题 | 维度 | 优先级 | 状态 | 批次 |
 |---|---|---|---|---|---|
@@ -12,7 +12,7 @@
 | T-005 | 服务端删除传播到客户端（墓碑机制） | 功能 | P1 | 已完成 | 1 |
 | T-006 | 上传冲突检测 BaseVersion 接线 | 功能 | P1 | 已完成 | 1 |
 | T-007 | 分享下载端点补过期校验 | 功能 | P2 | 已完成 | 1 |
-| T-008 | EF Migrations 替换 EnsureCreated（服务端+客 | 架构 | P2 | 已完成 | 1 |
+| T-008 | EF Migrations 替换 EnsureCreated（服务端+客户端） | 架构 | P2 | 已完成 | 1 |
 | T-009 | Windows 客户端每文件同步状态图标 | UX | P2 | 已完成 | 1 |
 | T-010 | 无障碍修复：对比度与最小字号（WCAG 2.1 AA） | UX | P2 | 已完成 | 1 |
 | T-011 | 两端 DesignTokens/图标收敛为共享单一实现 | 技术简洁 | P2 | 已完成 | 1 |
@@ -31,8 +31,8 @@
 | T-024 | 回收站元数据文件名路径穿越修复 | 架构 | P2 | 已完成 | 2 |
 | T-025 | Token 验证与设备注册收敛为 Server.Core 单一服务 | 架构 | P1 | 已完成 | 3 |
 | T-026 | 回收站保留期清理下沉 TrashService | 架构 | P1 | 已完成 | 3 |
-| T-027 | ApiClient 路由契约化（CodeGen 增 ApiClientG | 架构 | P1 | 已完成 | 3 |
-| T-028 | 行数门禁修复 + MainWindow/SetupForm 拆 part | 技术简洁 | P1 | 已完成 | 3 |
+| T-027 | ApiClient 路由契约化（CodeGen 增 ApiClientGenerator） | 架构 | P1 | 已完成 | 3 |
+| T-028 | 行数门禁修复 + MainWindow/SetupForm 拆 partial | 技术简洁 | P1 | 已完成 | 3 |
 | T-029 | 客户端组合根下沉 Client.Core | 技术简洁 | P1 | 已完成 | 3 |
 | T-030 | 两端图标收敛为共享单一实现 | 技术简洁 | P1 | 已完成 | 3 |
 | T-031 | 同步错误白话归因与异常解包 | UX | P2 | 已完成 | 3 |
@@ -45,7 +45,7 @@
 | T-038 | 回收站文件名唯一化，移入失败不再物理删除兜底 | 功能 | P1 | 已完成 | 4 |
 | T-039 | Android FileState 枚举对齐 C# 并诚实化契约头标注 | 架构 | P1 | 已完成 | 4 |
 | T-040 | 服务端控制器改用生成响应 DTO（删除匿名对象） | 架构 | P1 | 已完成 | 4 |
-| T-041 | 删除 QueryServerVersion 死代码，客户端 HTTP 单 | 技术简洁 | P1 | 已完成 | 4 |
+| T-041 | 删除 QueryServerVersion 死代码，客户端 HTTP 单一入口 | 技术简洁 | P1 | 已完成 | 4 |
 | T-042 | 行数门禁下调至 400，7 个超大单类拆 partial | 技术简洁 | P1 | 已完成 | 4 |
 | T-043 | 客户端配置三套收敛为单一来源 | 技术简洁 | P2 | 已完成 | 4 |
 | T-044 | Android 照片备份改连续段游标并接线 BackupLog | 功能 | P2 | 已完成 | 4 |
@@ -53,51 +53,63 @@
 | T-046 | 本地目录创建同步为服务端条目 | 功能 | P2 | 已完成 | 4 |
 | T-047 | 选择性同步选择集改排除集语义 | 功能 | P2 | 已完成 | 4 |
 | T-048 | RateLimit 中间件 Timer 泄漏修复 + 豁免清单契约化 | 架构 | P2 | 已完成 | 4 |
-| T-049 | 修复目录删除传播断裂（目录自身墓碑化 + FullScan 目录删除兜底 | 功能 | P1 | 已完成 | 5 |
-| T-050 | Android 删除改走回收站（软删 + 撤销 Snackbar + 回 | UX | P1 | 已完成 | 5 |
-| T-051 | 提交新版本编排收敛为单一领域辅助（Upload/ChunkedUploa | 技术简洁 | P1 | 已完成 | 5 |
+| T-049 | 修复目录删除传播断裂（目录自身墓碑化 + FullScan 目录删除兜底） | 功能 | P1 | 已完成 | 5 |
+| T-050 | Android 删除改走回收站（软删 + 撤销 Snackbar + 回收站入口） | UX | P1 | 已完成 | 5 |
+| T-051 | 提交新版本编排收敛为单一领域辅助（Upload/ChunkedUpload 共用） | 技术简洁 | P1 | 已完成 | 5 |
 | T-052 | 进程执行辅助收敛为单一 ProcessRunner | 技术简洁 | P1 | 已完成 | 5 |
-| T-053 | SettingsForm 测试连接回炉：改走 IApiClient +  | 技术简洁 | P2 | 已完成 | 5 |
+| T-053 | SettingsForm 测试连接回炉：改走 IApiClient + 白话反馈（T-041 残留） | 技术简洁 | P2 | 已完成 | 5 |
 | T-054 | 排除集语义闭环：覆盖上传方向 + 重新勾选恢复（T-047 补全） | 功能 | P2 | 已完成 | 5 |
-| T-055 | ServerWindow 改经 IServerStatusService | 架构 | P2 | 已完成 | 5 |
+| T-055 | ServerWindow 改经 IServerStatusService（消除直连 DbContext 与服务定位器） | 架构 | P2 | 已完成 | 5 |
 | T-056 | FilesController.Upload 冲突检测下沉 Core | 架构 | P2 | 已完成 | 5 |
-| T-057 | WebSocket 心跳迁移 IHostedService（间隔读 Sp | 架构 | P2 | 已完成 | 5 |
+| T-057 | WebSocket 心跳迁移 IHostedService（间隔读 SpecConfig） | 架构 | P2 | 已完成 | 5 |
 | T-058 | 服务端路由字面量契约化 + /ws 路径生成 | 技术简洁 | P2 | 已完成 | 5 |
 | T-059 | Android 文件列表分页（nextCursor 增量加载） | 功能 | P2 | 已完成 | 5 |
 | T-060 | 照片备份队头阻塞修复（失败重试上限 + 游标越过） | 功能 | P2 | 已完成 | 5 |
-| T-061 | Android 契约基线更新至 spec v1.3.0 并补 Kotli | 架构 | P1 | 已完成 | 6 |
-| T-062 | 客户端 EF 实体改由 spec entities 生成（含 Remot | 架构 | P1 | 已完成 | 6 |
+| T-061 | Android 契约基线更新至 spec v1.3.0 并补 Kotlin 生成器纳入 --verify | 架构 | P1 | 已完成 | 6 |
+| T-062 | 客户端 EF 实体改由 spec entities 生成（含 RemoteSnapshot 字段回流） | 架构 | P1 | 已完成 | 6 |
 | T-063 | 设置改动即时生效：排除集热更新 + 限速运行时下发 | 功能 | P2 | 已完成 | 6 |
 | T-064 | 分块上传恢复路径返回真实版本号并兜底 isComplete 未落盘会话 | 功能 | P2 | 已完成 | 6 |
 | T-065 | 版本回滚 RestoreAsync 失败路径回滚 DB 索引 | 功能 | P2 | 已完成 | 6 |
 | T-066 | 目录重命名客户端快照前缀跟随，避免整子树重下载 | 功能 | P2 | 已完成 | 6 |
-| T-067 | delete/move/mkdir 请求体契约化（spec + 生成 r | 架构 | P2 | 已完成 | 6 |
+| T-067 | delete/move/mkdir 请求体契约化（spec + 生成 record + 客户端引用） | 架构 | P2 | 已完成 | 6 |
 | T-068 | 客户端持久化迁入 Infrastructure/Persistence | 架构 | P2 | 已完成 | 6 |
 | T-069 | Android 新建目录去尾斜杠（服务端 TrimEnd 兜底） | 功能 | P2 | 已完成 | 6 |
-| T-070 | 行数门禁按 public 类型聚合 partial 统计，拆分 Sync | 架构 | P2 | 已完成 | 6 |
+| T-070 | 行数门禁按 public 类型聚合 partial 统计，拆分 SyncEngine/MainWindow | 架构 | P2 | 已完成 | 6 |
 | T-071 | 冲突副本保存收敛为单一领域辅助 | 技术简洁 | P2 | 已完成 | 6 |
 | T-072 | TokenService 服务定位器消除（事件/委托解耦） | 架构 | P2 | 已完成 | 6 |
-| T-073 | 修复限速流配额边界返回 0 被当 EOF 截断（ThrottledStr | 功能 | P1 | 已完成 | 7 |
-| T-074 | 选择性同步排除集目录树接线加载（LoadFromPaths 调用点 +  | 功能 | P1 | 已完成 | 7 |
+| T-073 | 修复限速流配额边界返回 0 被当 EOF 截断（ThrottledStream 重试读 + 单测） | 功能 | P1 | 已完成 | 7 |
+| T-074 | 选择性同步排除集目录树接线加载（LoadFromPaths 调用点 + 空树不覆盖排除配置） | 功能 | P1 | 已完成 | 7 |
 | T-075 | 服务端地址/同步根设置『重启后生效』统一提示 + 同步根路径安全校验 | UX | P1 | 已完成 | 7 |
-| T-076 | 分块上传恢复兜底 Finalize 已完成窗口（record 移除后识别 | 功能 | P2 | 已完成 | 7 |
-| T-077 | 重命名目标已存在收敛（先检测 newPath→409/改名，不先分配版本 | 功能 | P2 | 已完成 | 7 |
-| T-078 | 回收站恢复目标已存在收敛（检测→CONFLICT/改名恢复 + 白话原因 | 功能 | P2 | 已完成 | 7 |
-| T-079 | ThemeWatcher 双份下沉 Infrastructure/Des | 技术简洁 | P2 | 已完成 | 7 |
-| T-080 | DesignTokens 死令牌清理（0 引用效果/颜色/FontSpe | 技术简洁 | P2 | 已完成 | 7 |
+| T-076 | 分块上传恢复兜底 Finalize 已完成窗口（record 移除后识别已完成会话） | 功能 | P2 | 已完成 | 7 |
+| T-077 | 重命名目标已存在收敛（先检测 newPath→409/改名，不先分配版本号） | 功能 | P2 | 已完成 | 7 |
+| T-078 | 回收站恢复目标已存在收敛（检测→CONFLICT/改名恢复 + 白话原因） | 功能 | P2 | 已完成 | 7 |
+| T-079 | ThemeWatcher 双份下沉 Infrastructure/Design（两端只留初始化） | 技术简洁 | P2 | 已完成 | 7 |
+| T-080 | DesignTokens 死令牌清理（0 引用效果/颜色/FontSpec） | 技术简洁 | P2 | 已完成 | 7 |
 | T-081 | 行数门禁豁免表设持续下降约束（拆除永久豁免 + 巨型类拆分里程碑） | 架构 | P2 | 已完成 | 7 |
-| T-082 | spec changelog 版本治理（去重 + 严格单调 + CHAN | 架构 | P2 | 已完成 | 7 |
+| T-082 | spec changelog 版本治理（去重 + 严格单调 + CHANGELOG.md 对齐 + --verify 断言） | 架构 | P2 | 已完成 | 7 |
 | T-083 | Windows 文件列表多选批量删除 + 右键上下文菜单 | UX | P2 | 已完成 | 7 |
 | T-084 | 删除 409 冲突处理（转冲突提示而非静默丢弃） | 功能 | P3 | 已完成 | 7 |
 | T-085 | 客户端路径安全统一防线（SyncPath 越界校验下沉单点） | 架构 | P1 | 已完成 | 8 |
-| T-086 | 客户端 HTTP 接口签名契约化（C# IApiClient 与 Kot | 架构 | P1 | 已完成 | 8 |
-| T-087 | 缩略图死功能收敛：Windows 网格视图接入 /api/thumbna | 功能 | P1 | 已完成 | 8 |
-| T-088 | 版本存档与缩略图缓存存储回收（BackgroundHostedServi | 功能 | P2 | 已完成 | 8 |
-| T-089 | Android 删除/上传携带 baseVersion 触发服务端 40 | 功能 | P2 | 已完成 | 8 |
-| T-090 | Storage 路径校验内建（GetAbsolutePath 强制校验  | 架构 | P2 | 已完成 | 8 |
+| T-086 | 客户端 HTTP 接口签名契约化（C# IApiClient 与 Kotlin Retrofit 由 CodeGen 生成） | 架构 | P1 | 已完成 | 8 |
+| T-087 | 缩略图死功能收敛：Windows 网格视图接入 /api/thumbnails | 功能 | P1 | 已完成 | 8 |
+| T-088 | 版本存档与缩略图缓存存储回收（BackgroundHostedService 统一回收任务） | 功能 | P2 | 已完成 | 8 |
+| T-089 | Android 删除/上传携带 baseVersion 触发服务端 409（并发保护对齐 Windows） | 功能 | P2 | 已完成 | 8 |
+| T-090 | Storage 路径校验内建（GetAbsolutePath 强制校验 + UploadService 校验下沉 + FilesController 移除 Infrastructure 依赖） | 架构 | P2 | 已完成 | 8 |
 | T-091 | Android 错误白话归因 + 手动上传崩溃防护与进度反馈 | UX | P2 | 已完成 | 8 |
 | T-092 | Windows 批量删除增加确认对话框（对齐 Android） | UX | P2 | 已完成 | 8 |
-| T-093 | Client.Core 持久化抽象（Repository/Store 消 | 架构 | P2 | 已完成 | 8 |
+| T-093 | Client.Core 持久化抽象（Repository/Store 消除领域层直接 EF LINQ） | 架构 | P2 | 已完成 | 8 |
 | T-094 | 回收站恢复失败白话反馈 + 覆盖/改名选项（两端对齐） | UX | P2 | 已完成 | 8 |
-| T-095 | SettingsForm 归因双份清理（删 ClassifyTestEr | 技术简洁 | P2 | 已完成 | 8 |
-| T-096 | Serilog 装配单源化 + CentralPackageVersio | 技术简洁 | P2 | 已完成 | 8 |
+| T-095 | SettingsForm 归因双份清理（删 ClassifyTestError/Flatten/GetFolderSize 死代码） | 技术简洁 | P2 | 已完成 | 8 |
+| T-096 | Serilog 装配单源化 + CentralPackageVersions 统一版本 | 技术简洁 | P2 | 已完成 | 8 |
+| T-097 | 缩略图端点契约化（spec 补 clientMethod + 删手工 partial + Kotlin 同步生成） | 架构 | P1 | 已完成 | 9 |
+| T-098 | 删除冲突对话框补齐『仍删除（强制）』选项 + 远程版本信息 + 缺失文件容错 | 功能 | P1 | 已完成 | 9 |
+| T-099 | 行数门禁豁免兑现断言（聚合≤TargetCeiling + 截止批次到期≤400）+ SyncEngine/MainWindow 真实拆分 | 架构 | P2 | 已完成 | 9 |
+| T-100 | FileHasher/SyncIgnoreParser 下沉 Infrastructure + 删除 ComputeHashAsync 转发 | 架构 | P2 | 已完成 | 9 |
+| T-101 | 元数据目录布局收敛 FileStorageService 单点（删死 _thumbnailsDir + 统一缩略图/分块路径） | 架构 | P2 | 已完成 | 9 |
+| T-102 | HEIC/HEIF 缩略图解码（Windows 系统 WIC，不引第三方编解码器） | 功能 | P2 | 已完成 | 9 |
+| T-103 | MoveAsync 版本历史跟随重命名（子树前缀迁移 + 旧存档孤儿回收闭环） | 功能 | P2 | 已完成 | 9 |
+| T-104 | Windows 缩略图本地缓存 LRU/时间回收（对齐 T-088 语义） | 功能 | P2 | 已完成 | 9 |
+| T-105 | Android 大文件分块上传（>50MB 走 /api/files/upload/chunk，对齐 C#） | 功能 | P2 | 已完成 | 9 |
+| T-106 | Windows 6 处异常原文透出改 ErrorAttribution 白话（含崩溃对话框） | UX | P2 | 已完成 | 9 |
+| T-107 | Android 文件列表每文件同步状态图标 + 汇总进度（消费 FileEntryDto.state） | UX | P2 | 已完成 | 9 |
+| T-108 | Windows 浏览卡顿修复（快照缓存/事件驱动刷新，去除每 5 秒全树枚举） | UX | P2 | 已完成 | 9 |

@@ -1,0 +1,399 @@
+{
+ "batch": 1,
+ "date": "2026-08-02",
+ "conclusion": "v1.0.0 四维审查：数据完整性（版本存档顺序）与双向同步（删除/冲突）存在 P0/P1 核心缺陷，契约驱动断链（手抄 DTO、config 未接线），UI 层为日志中心非网盘形态。",
+ "dimensionSummary": {
+  "architecture": "P0×2 P1×4 P2×6 P3×3",
+  "function": "P1×3 P2×9 P3×3",
+  "ux": "P1×6 P2×8 P3×1",
+  "simplicity": "P0×2 P1×5 P2×4 P3×3"
+ },
+ "tasks": [
+  {
+   "id": "T-001",
+   "title": "修复普通上传版本存档顺序（先存档后覆盖）",
+   "dimension": "architecture",
+   "priority": "P0",
+   "status": "done",
+   "batch": 1,
+   "findingId": "F-01",
+   "dependsOn": [],
+   "location": "CloudPan.Server.Host/Controllers/FilesController.cs:105-132",
+   "scope": "FilesController.Upload + FileStorageService.StoreVersionAsync",
+   "requirements": [
+    "在 Server.Core 建立上传编排服务，封装『先存档旧版本→再原子覆盖目标→后更新索引』的不变量",
+    "FilesController.Upload 改为调用该服务，不再手写顺序",
+    "补集成测试：普通上传后版本历史回滚内容与旧版本一致"
+   ],
+   "goal": "普通上传路径的版本历史正确：回滚任意历史版本得到该版本真实内容，不再是最新内容",
+   "acceptanceCriteria": [
+    {
+     "text": "集成测试覆盖普通上传→版本回滚，内容为旧版本",
+     "verification": "自动",
+     "command": "dotnet test --filter Version"
+    },
+    {
+     "text": "dotnet build 全绿",
+     "verification": "自动",
+     "command": "dotnet build CloudPan.sln -c Release"
+    }
+   ],
+   "attempts": 0,
+   "statusReason": null,
+   "note": "在 Server.Core 新增 UploadService 封装『先存档旧版本→再原子覆盖目标→后更新索引』不变量，FilesController.Upload 改为调用，不再手写顺序。改动文件：新增 CloudPan.Server.Core/Upload/IUploadService.cs、CloudPan.Server.Core/Upload/UploadService.cs；修改 CloudPan.Server.Host/Controllers/FilesController.cs（Upload 调用服务）、CloudPan.Server.Host/Program.cs（DI 注册 IUploadService）；补集成测试 CloudPan.Tests/Server/Controllers/FilesControllerIntegrationTests.cs。验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Version 5/5 通过（含新增 Upload_普通上传_版本历史回滚_内容为旧Version，回滚后内容为旧版本）；全量 dotnet test CloudPan.Tests -c Release 110/110 通过。\n【验收结论 2026-08-02】task-verifier 独立裁决：通过。验收标准①『dotnet test --filter Version』实测 5/5 通过，其中关键测试 Upload_普通上传_版本历史回滚_内容为旧Version 断言版本历史 v1 记录 size==旧内容长度（证明存档旧内容而非最新内容）且回滚后下载内容==version1Content（旧版本真实内容），单独精确运行亦通过——直接覆盖『先存档后覆盖』不变量；验收标准②『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error。两条自动标准全过，无手动项。",
+   "updatedAt": "2026-08-02"
+  },
+  {
+   "id": "T-002",
+   "title": "文件类 Controller 领域逻辑下沉 Server.Core",
+   "dimension": "architecture",
+   "priority": "P0",
+   "status": "done",
+   "batch": 1,
+   "findingId": "F-02",
+   "dependsOn": [
+    "T-001"
+   ],
+   "location": "CloudPan.Server.Host/Controllers/{Share,Trash,Versions,Thumbnails,Files}.cs",
+   "scope": "Server.Host/Controllers + Server.Core 新增领域服务",
+   "requirements": [
+    "建 ISharingService/ITrashService/IVersionService 等，把事务收敛进 Server.Core",
+    "Controller 退化为参数绑定与状态码适配，不再直接操作 DbContext/File/拼路径",
+    "路径转换统一经 ValidatePath",
+    "补 Server.Core 单测（脱离 ASP.NET）"
+   ],
+   "goal": "文件类 Controller 只做 HTTP 适配；领域逻辑在 Core 可单测；DB+FS 一致性由领域服务保证",
+   "acceptanceCriteria": [
+    {
+     "text": "架构测试全绿",
+     "verification": "自动",
+     "command": "dotnet test --filter Architecture"
+    },
+    {
+     "text": "grep Controller 无直接 _db./IOFile./Path.Combine 操作",
+     "verification": "自动",
+     "command": "grep -rn 'IDbContextFactory\\|IOFile' CloudPan.Server.Host/Controllers/ 无匹配"
+    }
+   ],
+   "attempts": 0,
+   "statusReason": null,
+   "note": "在 Server.Core 新增领域服务，收敛文件类 Controller 的 DB 事务与文件操作（F-02 下沉）：ISharingService/ITrashService/IVersionHistoryService/IThumbnailService/IFileOperationService/IChunkedUploadService/IServerStatusService，Controller 退化为参数绑定与状态码适配，不再直接操作 DbContext/File/拼路径；路径转换统一经 _storage.ValidatePath（领域服务内部防线）。\n改动文件：\n新增 CloudPan.Server.Core/{Sharing,Trash,Versions,Thumbnails,Files,ChunkedUpload,Status,Domain}/（7 个领域服务 + DomainError 结果记录）；修改 CloudPan.Server.Core.csproj（加 SkiaSharp 4.150.1 供 ThumbnailService）；\n重写 CloudPan.Server.Host/Controllers/{Share,Trash,Versions,Thumbnails,Files,Files.FileOps,Files.ChunkedUpload} 为纯 HTTP 适配；顺带下沉 Admin/Devices/Health 只读 DbContext 查询至 IServerStatusService（满足验收 grep 全 Controllers 目录无 IDbContextFactory/IOFile，原亦违反 R-A3）；Program.cs 注册 7 个新服务；\n补 CloudPan.Tests/Server/Services/ 7 个单测文件（40 用例，脱离 ASP.NET 直注领域服务）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Architecture 9/9 通过；新增领域服务单测 40/40 通过；全量 dotnet test CloudPan.Tests -c Release 150/150 通过；验收 grep -rn 'IDbContextFactory|IOFile' CloudPan.Server.Host/Controllers/ 无匹配。\n备注：ISharingService 过期校验修复了原 ShareController 的 DateTime.TryParse 本地时区偏移缺陷（O 格式 Z 后缀被解析为 Local 导致 expired 误判），改经 InvariantCulture+AdjustToUniversal。\n【验收结论 2026-08-02】task-verifier 独立裁决：通过。验收标准①『dotnet test --filter Architecture』实测 9/9 通过（Failed 0 / Passed 9 / Skipped 0）；验收标准②『grep -rn ''IDbContextFactory|IOFile'' CloudPan.Server.Host/Controllers/ 无匹配』实测无匹配（exit 1）。补充独立核查：Controllers/ 下 10 个文件无 _db. 字段操作、无 DbContext/Microsoft.EntityFrameworkCore/System.IO.File 直接引用；HealthController.cs:86 一处 Path.Combine 仅用于构造配对页面展示用 token 文件路径字符串（实际读取经 Infrastructure SecretStore.ReadToken），非 DB/文件操作，不违反『Controller 只做 HTTP 适配』goal。两条自动标准全过，无手动项。",
+   "updatedAt": "2026-08-02"
+  },
+  {
+   "id": "T-003",
+   "title": "客户端 API 响应 DTO 改用 Generated 类型",
+   "dimension": "simplicity",
+   "priority": "P0",
+   "status": "done",
+   "batch": 1,
+   "findingId": "F-03",
+   "dependsOn": [],
+   "location": "CloudPan.Client.Core/Services/ApiClient.cs:455-529",
+   "scope": "ApiClient.cs + 契约生成物",
+   "requirements": [
+    "删除 ApiClient.cs 尾部 7 个手工 DTO",
+    "改引用 CloudPan.Contract/Generated/ApiResponses.g.cs",
+    "契约形状不足处先补 shared-spec.json api.responses 再重跑 CodeGen"
+   ],
+   "goal": "客户端不再手工翻译契约类型；改 spec 一处生效",
+   "acceptanceCriteria": [
+    {
+     "text": "CodeGen --verify 一致",
+     "verification": "自动",
+     "command": "dotnet run --project CloudPan.CodeGen -- --verify"
+    },
+    {
+     "text": "grep 无 FileTreeApiResponse 等手工类型",
+     "verification": "自动",
+     "command": "grep -rn 'FileTreeApiResponse' CloudPan.Client.Core/ 无匹配"
+    }
+   ],
+   "attempts": 0,
+   "statusReason": null,
+   "note": "契约补全 + 客户端改用 Generated 类型。shared-spec.json api.responses 补齐分块契约（新增 UploadData/ChunkUploadData/ChunkStatusData，修正 ChunkUploadResponse 为嵌套 data 形状对齐服务端实际返回，UploadResponse 去除不存在的 ok 字段）；重写 ApiResponseGenerator 从 spec.fields 解析生成 record（PascalCase 属性名 + camelCase JSON 名）。\n改动文件：shared-spec.json（api.responses 段）；CloudPan.CodeGen/Generators/ApiResponseGenerator.cs；CloudPan.Contract/Generated/ApiResponses.g.cs（重新生成）；CloudPan.Client.Core/Services/ApiClient.cs（删 7 个手工 DTO FileTreeApiResponse/UploadApiResponse/UploadDataDto/ChunkApiResponse/ChunkApiData/ChunkStatusResponse/ChunkStatusData + 中间类 ChunkApiStatusResponse，改引用 Generated 类型）；CloudPan.Client.Core/Services/IApiClient.cs；CloudPan.Client.Core/Services/SyncEngine.Scan.cs（FileTreeResponse.Data 数组 .Count→.Length）；CloudPan.Client.Core/Services/SyncEngine.Transfers.cs；CloudPan.Tests/Client/Services/MockApiClient.cs。\n验证：dotnet run --project CloudPan.CodeGen -- --verify 7 项全部一致；dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 150/150 通过；grep -rn 'FileTreeApiResponse' CloudPan.Client.Core/ 无匹配。\n【验收结论 2026-08-02】task-verifier 独立裁决：通过。验收标准①『dotnet run --project CloudPan.CodeGen -- --verify』实测 7 项全部一致（枚举/DTO/实体/清单/错误响应/API响应/设置），『校验通过』；验收标准②『grep -rn ''FileTreeApiResponse'' CloudPan.Client.Core/ 无匹配』实测无匹配（exit 1）。独立复核：CloudPan.Contract/Generated/ApiResponses.g.cs 存在且由 spec 生成（头部 AUTO-GENERATED 标注），ApiClient.cs 不再定义手工响应 DTO。附加标准『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error。两条自动标准全过，无手动项。",
+   "updatedAt": "2026-08-02"
+  },
+  {
+   "id": "T-004",
+   "title": "spec config 键生成并接线，消除硬编码重复",
+   "dimension": "simplicity",
+   "priority": "P0",
+   "status": "done",
+   "batch": 1,
+   "findingId": "F-04",
+   "dependsOn": [],
+   "location": "shared-spec.json config 段 + ContractManifest.g.cs SpecConfig",
+   "scope": "ManifestGenerator + ApiClient/SyncEngine/FilesController",
+   "requirements": [
+    "扩展 ManifestGenerator 为有消费者的 config 键生成常量（chunkSize/chunkedUploadThreshold/queuePriorityThreshold/conflictSuffixPattern/chunkedUploadTimeoutMinutes/maxRetryCount/retryBackoffMs）",
+    "ApiClient/SyncEngine/FilesController 改为引用 SpecConfig 常量",
+    "零消费者键（tokenEntropy/maxVersionsDefault/scanIntervalMinutes）从 spec 删除或先接线"
+   ],
+   "goal": "改 spec 值传导到代码；同一常量单源",
+   "acceptanceCriteria": [
+    {
+     "text": "CodeGen --verify 一致",
+     "verification": "自动",
+     "command": "dotnet run --project CloudPan.CodeGen -- --verify"
+    },
+    {
+     "text": "grep 无硬编码 10_485_760/4_194_304 字面量",
+     "verification": "自动",
+     "command": "grep -rn '10_485_760\\|4_194_304' CloudPan.Client.Core/ CloudPan.Server.Host/ 无匹配"
+    }
+   ],
+   "attempts": 0,
+   "statusReason": null,
+   "note": "扩展 ManifestGenerator.GenerateSpecConfig，为有消费者的 config 键生成 10 个常量（ChunkSize/ChunkedUploadThreshold/QueuePriorityThreshold/ConflictSuffixPattern/ChunkedUploadTimeoutMinutes/MaxRetryCount/RetryBackoffMs/ScanIntervalMinutes/MaxVersionsDefault/TokenEntropy），并接线消除硬编码。\n改动文件：CloudPan.CodeGen/Generators/ManifestGenerator.cs；CloudPan.Contract/Generated/ContractManifest.g.cs（重新生成）；CloudPan.Client.Core/Services/ApiClient.cs（删 ChunkedUploadThreshold=10_485_760/ChunkSizeBytes=4_194_304 私有常量，改引 SpecConfig.ChunkedUploadThreshold/SpecConfig.ChunkSize）；CloudPan.Client.Core/Services/SyncEngine.cs（QueuePriorityThreshold/MaxRetryCount 改引 SpecConfig，注意 MaxRetryCount 由原 20 对齐 spec 值 10；FullScanInterval 改引 SpecConfig.ScanIntervalMinutes）；CloudPan.Client.Core/Services/SyncEngine.Queue.cs（GetBackoffDelay 改引 SpecConfig.RetryBackoffMs 数组，原指数+抖动方案替换为 spec 序列）；CloudPan.Client.Core/Services/FileWatcherService.cs（兜底全量扫描定时器间隔改引 SpecConfig.ScanIntervalMinutes）；CloudPan.Server.Core/Files/FileOperationService.cs + CloudPan.Server.Core/ChunkedUpload/ChunkedUploadService.cs（冲突副本后缀改引 SpecConfig.ConflictSuffixPattern，超时常量改引 SpecConfig.ChunkedUploadTimeoutMinutes，版本裁剪 .Skip(5) 改引 SpecConfig.MaxVersionsDefault）；CloudPan.Server.Core/Upload/UploadService.cs（版本裁剪 .Skip(5) 改引 SpecConfig.MaxVersionsDefault）；CloudPan.Infrastructure/Security/TokenGenerator.cs（生成字节数改引 SpecConfig.TokenEntropy/8）。\n零消费者键处理：tokenEntropy/maxVersionsDefault/scanIntervalMinutes 经核查均有间接消费者（TokenGenerator 字节数 / 两端版本裁剪 / FileWatcherService+SyncEngine 兜底间隔），选择『先接线』而非从 spec 删除，shared-spec.json 未改动。FilesController 经 T-002 重构后为纯 HTTP 适配，无硬编码配置字面量，无需改动。\n验证：dotnet run --project CloudPan.CodeGen 生成清单；dotnet run --project CloudPan.CodeGen -- --verify 7 项全部一致；dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 150/150 通过；验收 grep -rn '10_485_760|4_194_304' CloudPan.Client.Core/ CloudPan.Server.Host/ 无匹配（仅剩生成物 ContractManifest.g.cs 与生成器默认值 ManifestGenerator.cs 中，均非消费端）。\n【验收结论 2026-08-02】task-verifier 独立裁决：通过。验收标准①『dotnet run --project CloudPan.CodeGen -- --verify』实测 7 项全部一致（枚举/DTO/实体/清单/错误响应/API响应/设置），『✅ 校验通过』；验收标准②『grep -rn ''10_485_760|4_194_304'' CloudPan.Client.Core/ CloudPan.Server.Host/ 无匹配』实测无匹配（exit 1）。附加标准『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error。独立复核：ContractManifest.g.cs 头部 AUTO-GENERATED from shared-spec.json v1.1.0 标注，SpecConfig 含全部 10 个常量（ChunkSize=4194304/ChunkedUploadThreshold=10485760/QueuePriorityThreshold/ConflictSuffixPattern/ChunkedUploadTimeoutMinutes=1440/MaxRetryCount=10/RetryBackoffMs 10 元素序列/ScanIntervalMinutes=5/MaxVersionsDefault=5/TokenEntropy=256）；消费端接线真实：ApiClient.cs×4、SyncEngine.cs×3、SyncEngine.Queue.cs×2、FileWatcherService.cs×1、ChunkedUploadService.cs×3、FileOperationService.cs×1、UploadService.cs×1、TokenGenerator.cs×1 均改引 SpecConfig。行为变更说明（不属验收范围）：MaxRetryCount 由原 20 对齐 spec 值 10；重试退避由原指数+抖动替换为 spec 序列；零消费者键 tokenEntropy/maxVersionsDefault/scanIntervalMinutes 选择『先接线』而非删除，独立核查证实其确有间接消费者（TokenGenerator 字节数/两端版本裁剪/兜底扫描间隔）。两条自动标准全过，无手动项。",
+   "updatedAt": "2026-08-02"
+  },
+  {
+   "id": "T-005",
+   "title": "服务端删除传播到客户端（墓碑机制）",
+   "dimension": "function",
+   "priority": "P1",
+   "status": "done",
+   "batch": 1,
+   "findingId": "F-05",
+   "dependsOn": [],
+   "location": "CloudPan.Server.Core/FileIndex/FileIndexService.cs:121-171 + SyncEngine.Scan.cs",
+   "scope": "FileIndexService + SyncEngine + WS 事件处理",
+   "requirements": [
+    "服务端删除改软删除（FileState.Deleting 墓碑，保留窗口后物理清理）",
+    "树查询返回 Deleting 项，客户端据其删除本地副本",
+    "WS file_deleted 按 path 精确处理（不再忽略）"
+   ],
+   "goal": "服务端删除后客户端同步删本地，双向同步闭环",
+   "acceptanceCriteria": [
+    {
+     "text": "E2E：服务端删除文件→客户端同步后本地文件消失",
+     "verification": "自动",
+     "command": "bash e2e-test.sh（FS-12 类场景）"
+    },
+    {
+     "text": "dotnet build 全绿",
+     "verification": "自动",
+     "command": "dotnet build CloudPan.sln -c Release"
+    }
+   ],
+   "attempts": 0,
+   "statusReason": null,
+   "note": "服务端删除改软删除墓碑机制（F-05）：FileIndexService.DeleteAsync（物理 RemoveRange）改为 SoftDeleteAsync（标记 FileState.Deleting + 提升版本号 + 更新 LastModified，FileEntry 行保留），新增 PurgeExpiredTombstonesAsync 物理清理过期墓碑；FileOperationService.DeleteAsync 先分配新版本号再软删（墓碑据此经增量树传播），仍移入回收站；BackgroundHostedService 新增墓碑 30 天保留窗口定时清理（与回收站对齐）；树查询返回 Deleting 项，客户端 SyncEngine.ApplyRemoteChangesAsync 据墓碑删除本地副本并取消该路径待处理队列；客户端 OnWsFileDeleted 按 path 精确处理——新增 DeleteLocalCopyAsync 直接删本地副本+清快照+取消未决传输（不再仅触发增量同步），最后兜底增量同步；SearchAsync/分享创建/版本回滚加墓碑防护（已删文件不出现、不可分享、不可回滚）。\\n改动文件：CloudPan.Server.Core/FileIndex/{IFileIndexService,FileIndexService}.cs；CloudPan.Server.Core/Files/FileOperationService.cs；CloudPan.Server.Core/{Trash,Sharing,Versions}/{TrashService,SharingService,VersionHistoryService}.cs；CloudPan.Server.Host/Hosting/BackgroundHostedService.cs；CloudPan.Client.Core/Services/{SyncEngine.Changes,SyncEngine.Scan}.cs；CloudPan.Tests/Server/Services/{FileIndexServiceTests,FileOperationServiceTests}.cs；CloudPan.Tests/Server/Controllers/FilesControllerIntegrationTests.cs；CloudPan.Tests/Client/Services/SyncEngineTests.cs；e2e-test.sh（新增 FS-14 服务端删除→客户端本地副本消失场景，置入阶段 2 主流程）。\\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 158/158 通过（原 150，新增 8 个删除传播用例：SoftDelete_文件/文件夹墓碑、PurgeExpired 到期/未到期、GetFileTree 增量返回墓碑、Search 排除墓碑、Delete_文件_增量树返回墓碑、WsFileDeleted 删除本地副本、ApplyRemoteChanges 墓碑删除本地文件）；dotnet test --filter Architecture 9/9 通过。E2E FS-14 需真实发布产物+客户端 GUI 运行，未在本机执行（见验收标准①，由验收者运行 e2e-test.sh 验证）。\n【验收结论 2026-08-02】task-verifier 独立裁决：通过。验收标准①『bash e2e-test.sh（FS-14 服务端删除→客户端本地文件消失）』：完整套件需重发布自包含单文件（IN-01，联网耗时）+Windows 服务安装+GUI 客户端进程，且连带 20+ 个与 T-005 无关场景，未在本环境原样执行；改以更强证据裁决——最小化 FS-14 实测（真实 CloudPan.Server.exe headless + 真实 CloudPan.Client.exe 参数模式进程，两端同步根分离）：①服务端上传 tombstone-prop.txt → 客户端约 6s 全量同步下载本地副本（39 字节，内容与服务端一致，WS 认证成功）；②服务端 POST /api/files/delete 返回 deletedVersion=2、物理文件移入回收站；③客户端约 3s 内本地副本消失，客户端日志完整链路『WS 推送: 文件删除 /tombstone-prop.txt → WS 删除已处理，本地副本已删 → 同步删除』；④服务端增量树(since=0)返回 state=2(Deleting) 墓碑条目供客户端增量同步删除。佐证：删除传播单元/集成测试 58/58 通过（覆盖 SoftDelete 文件/文件夹墓碑、PurgeExpired 到期/未到期、GetFileTree 增量返回墓碑、Search 排除墓碑、Delete 增量树返回墓碑、WsFileDeleted 删除本地副本并清快照/队列、ApplyRemoteChanges 墓碑删除本地文件、集成测试删除后树返回 Deleting）。验收标准②『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error。独立核对覆盖：服务端 SoftDeleteAsync 标记 Deleting+提升版本号+保留行、DeleteAsync 先分配版本号再软删并移入回收站、PurgeExpiredTombstonesAsync+BackgroundHostedService 30 天窗口清理（Timer 回调 Task.Run+全量异常捕获，符合 CLAUDE.md 7.2）、树查询返回 Deleting 条目（含 State）、WS BroadcastFileDeletedAsync 广播 file_deleted（排除发起设备）、Search 排除墓碑；客户端 OnWsFileDeleted 按 path 精确处理（Task.Run+try/catch/finally，非 fire-and-forget）、DeleteLocalCopyAsync 取消待处理队列+删本地副本+清快照、ApplyRemoteChangesAsync 处理 Deleting 墓碑、WebSocketClient file_deleted 事件解析。FileState.Deleting=2 由 shared-spec 契约生成（Enums.g.cs）。两条自动标准全过，无手动项。",
+   "updatedAt": "2026-08-02"
+  },
+  {
+   "id": "T-006",
+   "title": "上传冲突检测 BaseVersion 接线",
+   "dimension": "function",
+   "priority": "P1",
+   "status": "done",
+   "batch": 1,
+   "findingId": "F-06",
+   "dependsOn": [],
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Changes.cs:142-148",
+   "scope": "SyncEngine.Queue + Transfers",
+   "requirements": [
+    "上传入队时记录 BaseVersion = snapshot.Version（本地上一次已同步版本）",
+    "ProcessUploadAsync 携带该值，复用服务端 409 流程",
+    "补集成测试：双设备并发编辑→第二次上传 409→冲突提示"
+   ],
+   "goal": "双设备并发编辑触发冲突检测与提示，不再静默覆盖",
+   "acceptanceCriteria": [
+    {
+     "text": "集成测试覆盖并发编辑 409 冲突路径",
+     "verification": "自动",
+     "command": "dotnet test --filter Conflict"
+    },
+    {
+     "text": "dotnet build 全绿",
+     "verification": "自动",
+     "command": "dotnet build CloudPan.sln -c Release"
+    }
+   ],
+   "attempts": 0,
+   "statusReason": null,
+   "note": "上传入队记录 BaseVersion = snapshot.Version（本地上一次已同步版本），ProcessUploadAsync 携带给服务端复用既有 409 冲突流程（直传 FilesController.Upload / 分块 ChunkedUploadService.FinalizeAsync，baseVersion>0 且服务端版本更高即返回 409；HandleUploadConflictAsync 保存冲突副本）。改动文件：CloudPan.Client.Core/Services/SyncEngine.Changes.cs（EnqueueLocalChangeAsync 上传入队赋值 BaseVersion = snapshot?.Version）；CloudPan.Tests/Client/Services/MockApiClient.cs（UploadAsync 模拟服务端冲突检测——baseVersion>0 且当前版本更高抛 HttpRequestException(Conflict)，对齐 Controller/ChunkedUploadService 语义）；CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 3 用例：EnqueueLocalChange_上传_记录BaseVersion为快照版本、EnqueueLocalChange_新文件上传_BaseVersion为空、ProcessUpload_双设备并发编辑_第二次上传409_Conflict冲突提示——覆盖双设备并发编辑→第二次上传 409→ConflictDetected 冲突提示→队列项保留等待用户决策；Dispose 退订事件处理器满足 CP300）。验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Conflict 3/3 通过（含新增客户端 409 用例）；全量 dotnet test CloudPan.Tests -c Release 161/161 通过（原 158 + 新增 3）。\n【验收结论 2026-08-02】task-verifier 独立裁决：通过。验收标准①『dotnet test --filter Conflict』实测 3/3 通过（Failed 0 / Passed 3 / Skipped 0）；验收标准②『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error。独立核查改动真实性：SyncEngine.Changes.cs:157-167 上传入队赋值 baseVersion = snapshot?.Version（F-06 注释标注）、:198 存入 SyncQueueItem.BaseVersion；SyncEngine.Transfers.cs:32 UploadChunkedAsync 携带 item.BaseVersion ?? 0 给服务端、:34-68 catch HttpRequestException(Conflict) 构建 ConflictInfo 加入 _pendingConflicts 并触发 ConflictDetected（冲突提示）且返回 false 保留队列项等待用户决策——409 冲突处理闭环真实存在；MockApiClient.cs:55-63 按 baseVersion>0 且当前版本更高抛 409，语义对齐服务端；SyncEngineTests.cs 3 用例断言 BaseVersion==快照版本 / 新文件上传为空 / 冲突事件触发，其中 ProcessUpload_双设备并发编辑_第二次上传409_Conflict冲突提示 完整覆盖『并发编辑→第二次上传 409→冲突提示』验收场景。两条自动标准全过，无手动项。",
+   "updatedAt": "2026-08-02"
+  },
+  {
+   "id": "T-007",
+   "title": "分享下载端点补过期校验",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 1,
+   "findingId": "F-07",
+   "dependsOn": [],
+   "location": "CloudPan.Server.Host/Controllers/ShareController.cs:177-220",
+   "scope": "ShareController.ShareDownload",
+   "requirements": [
+    "ShareDownload 先查 ExpiresAt，过期返回错误（与 SharePage 一致）"
+   ],
+   "goal": "过期分享链接无法再下载，安全边界生效",
+   "acceptanceCriteria": [
+    {
+     "text": "单元测试：过期分享下载返回错误",
+     "verification": "自动",
+     "command": "dotnet test --filter Share"
+    }
+   ],
+   "attempts": 0,
+   "statusReason": null,
+   "note": "过期校验补在领域服务（F-02 下沉载体）：SharingService.PrepareDownloadAsync 在密码校验前新增过期校验——复用与 GetShareInfoAsync（SharePage 同一来源）一致的解析逻辑（CultureInfo.InvariantCulture + DateTimeStyles.AdjustToUniversal，ISO 8601 'Z' 后缀解析为 Utc 避免时区偏移误判），过期返回 HttpErrorCode.BAD_REQUEST/「分享链接已过期」（与 SharePage 一致），且过期分享不再放行下载、不递增下载计数。Controller（ShareController.ShareDownload）本就只做适配，未改动。\n改动文件：CloudPan.Server.Core/Sharing/SharingService.cs（PrepareDownloadAsync 加过期校验）；CloudPan.Tests/Server/Services/SharingServiceTests.cs（新增 ShareDownload_过期分享_返回错误、ShareDownload_未过期分享_正常下载 两用例——方法名用 ShareDownload 前缀，使 FQN 含 'Share' 子串可被验收命令 --filter Share 命中，类名 SharingServiceTests 拼写为 Sharing 不含子串 Share）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Share 10/10 通过（含新增 ShareDownload_过期分享_返回错误：断言 !Success、Content 为 null、错误码 BAD_REQUEST、消息『分享链接已过期』；以及未过期分享正常下载对照用例）；全量 dotnet test CloudPan.Tests -c Release 163/163 通过（原 161 + 新增 2）。\n【验收结论 2026-08-02】task-verifier 独立裁决：通过。验收标准『dotnet test --filter Share』实测 10/10 通过（Failed 0 / Passed 10 / Skipped 0），其中关键用例 ShareDownload_过期分享_返回错误 断言过期分享（ExpiresAt 设为 -1h）下载返回 !Success、Content null、HttpErrorCode.BAD_REQUEST、消息『分享链接已过期』——直接覆盖『过期分享下载返回错误』验收场景；对照用例 ShareDownload_未过期分享_正常下载（ExpiresAt +1h）返回 Success 且内容为 'hello'，证明过期校验不误伤正常分享。独立核查代码路径：SharingService.PrepareDownloadAsync 在密码校验之前新增过期校验，解析逻辑与 GetShareInfoAsync（SharePage 同一来源）一致（CultureInfo.InvariantCulture + DateTimeStyles.AdjustToUniversal，ISO 8601 'Z' 解析为 Utc），过期即返回 DomainError(BAD_REQUEST,『分享链接已过期』)，且早于下载计数递增逻辑——过期分享不放行下载、不递增计数，满足 requirements『ShareDownload 先查 ExpiresAt，过期返回错误（与 SharePage 一致）』。单条自动标准通过，无手动项。",
+   "updatedAt": "2026-08-02"
+  },
+  {
+   "id": "T-008",
+   "title": "EF Migrations 替换 EnsureCreated（服务端+客户端）",
+   "dimension": "architecture",
+   "priority": "P2",
+   "status": "done",
+   "batch": 1,
+   "findingId": "F-08",
+   "dependsOn": [],
+   "location": "DatabaseInitializer.cs + CloudPanDbContext.cs + ClientDbContext.cs",
+   "scope": "Infrastructure + Server.Host + Client.Core",
+   "requirements": [
+    "补 dotnet ef migrations add 初始迁移（Server+Client 各一套）",
+    "DatabaseInitializer 改为 Migrate()，删除手写建表兼容层",
+    "旧库升级路径：迁移含已有表兼容"
+   ],
+   "goal": "数据库 schema 可演进，升级不再运行时崩溃",
+   "acceptanceCriteria": [
+    {
+     "text": "全新库初始化通过 Migrate 建表",
+     "verification": "自动",
+     "command": "dotnet ef migrations list 两项目均有初始迁移"
+    },
+    {
+     "text": "dotnet test 全绿",
+     "verification": "自动",
+     "command": "dotnet test CloudPan.Tests -c Release"
+    }
+   ],
+   "attempts": 0,
+   "statusReason": null,
+   "note": "EF Migrations 替换 EnsureCreated（F-08）：服务端与客户端各生成初始迁移，DatabaseInitializer 与客户端初始化改为 Migrate()，删除服务端手写建表兼容层。迁移 Up() 改造为 IF NOT EXISTS 幂等——全新库建全表；旧库（EnsureCreated 时代，无 __EFMigrationsHistory）已有表/索引跳过（数据保留）、缺失的表补建，替代原手写兼容层。\n改动文件：\n新增 CloudPan.Infrastructure/Migrations/{20260802155716_InitialCreate.cs（幂等 Up）, .Designer.cs, CloudPanDbContextModelSnapshot.cs}、CloudPan.Infrastructure/Persistence/CloudPanDbContextFactory.cs（dotnet ef 设计时工厂）；CloudPan.Infrastructure.csproj 加 Microsoft.EntityFrameworkCore.Design 8.0.22（PrivateAssets=all）；\n新增 CloudPan.Client.Core/Migrations/{20260802155743_InitialCreate.cs（幂等 Up）, .Designer.cs, ClientDbContextModelSnapshot.cs}、CloudPan.Client.Core/Models/ClientDbContextFactory.cs；CloudPan.Client.Core.csproj 加 Design 包；\n修改 CloudPan.Server.Host/Hosting/DatabaseInitializer.cs（EnsureCreated→Migrate()，删除 CREATE TABLE IF NOT EXISTS Device 兼容层）；\n修改 CloudPan.Client.UI/Program.cs（EnsureDbCreated 与损坏重建路径 EnsureCreated→Migrate()，新增 EnsureSyncQueueTargetPathColumn 旧库列兼容）；\n修改两端 DbContext 注释（EnsureCreated→Migrations）；\n新增 CloudPan.Tests/Infrastructure/MigrationsTests.cs（4 用例：服务端/客户端全新库 Migrate 建全表、服务端旧库升级数据保留且缺失表补建、客户端旧库 SyncQueue 缺 TargetPath 升级补列数据保留）。\n验证：dotnet ef migrations list 两项目均有初始迁移（20260802155716_InitialCreate / 20260802155743_InitialCreate，且 has-pending-model-changes 无差异）；dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 167/167 通过（原 163 + 新增 4）。真实旧库复制品实测（dotnet ef database update）：CloudPanSync/.cloudpan/server.db、~/CloudPan/.cloudpan/server.db、CloudPan_Client/.cloudpan/client.db 全部升级成功——表与 Device 数据保留（1/2 行）、__EFMigrationsHistory 记录迁移、客户端 SyncQueue 经运行时 PRAGMA+ALTER 补 TargetPath 列。\n旧库数据保护说明：幂等迁移保留 EnsureCreated 时代库的全部数据（Device 种子、版本记录等）；~/CloudPan 旧库遗留的误建 Devices 空表保留不删（无害）；客户端旧库 SyncQueue 缺 TargetPath 列（重命名操作字段）由运行时 EnsureSyncQueueTargetPathColumn 先 PRAGMA 判断后 ALTER 补列——SQLite ALTER ADD COLUMN 无 IF NOT EXISTS，无法在迁移内条件化，故列级兼容置于运行时（迁移负责表级幂等）。\n【验收结论 2026-08-03】task-verifier 独立裁决：通过。验收标准①『dotnet ef migrations list 两项目均有初始迁移』实测：服务端（--project CloudPan.Infrastructure）列表显示 20260802155716_InitialCreate (Pending)；客户端（--project CloudPan.Client.Core）列表显示 20260802155743_InitialCreate (Pending)——两项目均有初始迁移，(Pending) 表示未连接实库未应用，属正常。验收标准②『dotnet test CloudPan.Tests -c Release』实测 167/167 通过（Failed 0 / Passed 167 / Skipped 0），其中 MigrationsTests 4 用例全过：服务端/客户端全新库 Migrate 建全表（含 __EFMigrationsHistory 与全部表）、服务端旧库（EnsureCreated 时代）升级后种子数据保留且缺失表补建、客户端旧库 SyncQueue 缺 TargetPath 列升级补列数据保留。独立核查改动真实性：DatabaseInitializer.cs:43 db.Database.Migrate()（取代 EnsureCreated 与手写建表兼容层，注释 ADR-5/T-008）；客户端 Program.cs EnsureDbCreated(:493) 与损坏重建路径(:292) 均走 Migrate()，EnsureSyncQueueTargetPathColumn 以 PRAGMA 判断+ALTER 幂等补列；两端迁移 Up() 均为 CREATE TABLE/INDEX IF NOT EXISTS 幂等建表（服务端 7 表+11 索引，客户端 3 表+1 索引）；两端 IDesignTimeDbContextFactory 设计时工厂存在（CloudPanDesignTimeDbContextFactory/ClientDesignTimeDbContextFactory）。requirements 全部落实：①服务端+客户端各补初始迁移 ②DatabaseInitializer 改 Migrate() 删除手写建表兼容层 ③旧库升级路径（幂等迁移保留数据+运行时补列）。两条自动标准全过，无手动项。",
+   "updatedAt": "2026-08-03"
+  },
+  {
+   "id": "T-009",
+   "title": "Windows 客户端每文件同步状态图标",
+   "dimension": "ux",
+   "priority": "P2",
+   "status": "done",
+   "batch": 1,
+   "findingId": "F-09",
+   "dependsOn": [],
+   "location": "CloudPan.Client.UI/UI/MainWindow.cs:129-155",
+   "scope": "MainWindow 状态区",
+   "requirements": [
+    "在文件/同步视图为每个文件渲染状态图标（✓↻!✗☁，图标+颜色双通道）",
+    "状态取自现有 FileState 枚举"
+   ],
+   "goal": "用户能逐文件确认同步状态，无需猜",
+   "acceptanceCriteria": [
+    {
+     "text": "手动：同步目录文件显示对应状态图标",
+     "verification": "手动"
+    }
+   ],
+   "attempts": 0,
+   "statusReason": null,
+   "note": "判定：当前 MainWindow 为状态+日志形态，无 T-013 的完整文件浏览视图，但每文件状态列表可在现有界面独立落地（不预占 T-013 面包屑/网格/搜索形态），故选择实现而非阻塞。\n实现：MainWindow 新增「同步状态」页签（ListView 状态图标+文件名，图标/颜色双通道），欢迎面板移入「最近活动」页签内避免遮住页签栏；每文件状态由 Client.Core SyncEngine.GetFileSyncStatusesAsync 查询（快照 FileState + 待处理队列瞬态 + 本地存在性），冲突(!)/错误(✗)由 UI 本地列表叠加覆盖，其余按 FileState 枚举映射 ✓(Synced)/↻(Uploading·Downloading·Modified·Deleting)/☁(CloudOnly)/!(Conflict)。\n改动文件：新增 CloudPan.Client.Core/Services/SyncEngine.Status.cs（FileSyncStatusItem + GetFileSyncStatusesAsync）；修改 CloudPan.Client.UI/UI/MainWindow.cs（内容区改页签容器 + 状态列表 + 5s 定时刷新，Shown 启动/隐藏托盘停止，async void 顶层 try-catch 防异常丢失）；CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 4 用例：Synced/CloudOnly/Uploading/本地新文件 Modified）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 171/171 通过（原 167 + 新增 4）；架构测试 9/9 通过。验收标准为手动（同步目录文件显示对应状态图标），由验收者实机验证。\n【验收结论 2026-08-03】task-verifier 独立裁决：本任务验收标准仅 1 条手动项（同步目录文件显示对应状态图标），无自动项；子 Agent 无法执行 UI 实机检查，按流程 Step 3' 保持 status=acceptance 待人工确认（不置 done、不放行）。代码路径/逻辑存在性核查通过：①状态映射——MainWindow.cs:1220-1243 ResolveDisplayState 将 FileState 枚举映射为（图标,颜色）双通道，覆盖需求五态：Synced→✓绿、Uploading/Downloading/Modified→↻蓝、Deleting→↻灰、CloudOnly→☁灰、Conflict→!橙；UI 本地错误/冲突列表叠加覆盖为 ✗红/!橙（优先级最高，瞬时状态优先可见）；状态取自 FileState 枚举（Enums.g.cs 契约生成：Synced=0/Modified=1/Deleting=2/CloudOnly=3/Downloading=4/Uploading=5/Conflict=7，引用值全部有效，且枚举值 6 保留位未用不冲突）。②双通道渲染——MainWindow.cs:1197-1217 ApplyFileStatuses 以 ListViewItem(icon)+lvi.ForeColor=color 实现图标列+前景色双通道。③定时刷新——MainWindow.cs:107 _statusRefreshTimer Interval=5000；:1154-1158 OnShown 启动并立即刷新一次；:1714 隐藏托盘停止刷新（Shown 时重启）；StatusRefreshTimer_Tick 为 async void+顶层 try-catch+_statusRefreshBusy 防重入，符合 CLAUDE.md 7.2。④数据来源——新增 SyncEngine.Status.cs GetFileSyncStatusesAsync 读 RemoteSnapshots 快照 FileState+SyncQueue 待处理队列瞬态（Upload/Download/Delete→Uploading/Downloading/Deleting）+本地文件系统存在性（忽略 .cloudpan 与忽略规则），partial 类可访问 SyncEngine.Scan.cs:379/388/404 私有辅助方法（ToRelativePath/ShouldIgnoreScan/NormalizePath）。⑤独立运行新增 4 测试用例 4/4 通过（已同步Synced本地存在/CloudOnly无本地副本/待上传队列Uploading/本地新文件Modified）。⑥CloudPan.Client.UI.csproj -c Release 编译 Build succeeded 0 Warning 0 Error。待人工确认清单：同步目录文件显示对应状态图标（实机运行 Windows 客户端，将文件放入同步目录/触发上传/构造冲突与错误场景，观察 ✓↻!✗☁ 图标与颜色是否正确呈现、5s 定时刷新是否生效、页签切换与欢迎面板不遮挡）。 【人工确认 2026-08-03】用户实机验收通过，置 done。",
+   "updatedAt": "2026-08-03"
+  },
+  {
+   "id": "T-010",
+   "title": "无障碍修复：对比度与最小字号（WCAG 2.1 AA）",
+   "dimension": "ux",
+   "priority": "P2",
+   "status": "done",
+   "batch": 1,
+   "findingId": "F-10",
+   "dependsOn": [],
+   "location": "CloudPan.Client.UI/UI/DesignTokens.cs:34,201",
+   "scope": "DesignTokens + 使用处",
+   "requirements": [
+    "TextMuted 加深至对比度 ≥4.5:1（如 #757575）",
+    "SizeCaption 提至 10pt，正文统一 ≥14px",
+    "建立正文最小字号约束"
+   ],
+   "goal": "老人/弱视用户文字可读，达标 WCAG 1.4.3",
+   "acceptanceCriteria": [
+    {
+     "text": "计算 TextMuted 对比度 ≥4.5:1",
+     "verification": "自动",
+     "command": "grep 'TextMuted' CloudPan.Client.UI/UI/DesignTokens.cs 数值符合对比度"
+    }
+   ],
+   "attempts": 0,
+   "statusReason": null,
+   "note": "无障碍修复（F-10）：两端 DesignTokens 同步修改（逐字节一致，T-011 收敛前两端同步改）。TextMuted 由 150,150,150 加深至 117,117,117（#757575），白底对比度 2.96:1→4.61:1，≥WCAG 2.1 AA 4.5:1；SizeCaption 8.5f→10f（≥10pt）；SizeBody 12f→14f，并新增 SizeBodyMin=14f 正文最小字号约束常量（SizeBody 引用之），BodySmall/Mono 为辅助小字号保持 10f。改动文件：CloudPan.Client.UI/UI/DesignTokens.cs、CloudPan.Server.UI/DesignTokens.cs（各 3 处改动）。验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 171/171 通过；验收命令 grep 'TextMuted' CloudPan.Client.UI/UI/DesignTokens.cs 数值为 117,117,117 符合对比度 ≥4.5:1。\n【验收结论 2026-08-03】task-verifier 独立裁决：通过。验收标准『grep ''TextMuted'' CloudPan.Client.UI/UI/DesignTokens.cs 数值符合对比度』实测 TextMuted = Color.FromArgb(117,117,117)（#757575）。独立核算 WCAG 1.4.3 白底对比度（sRGB 非线性→线性化：L(117)=0.17794，L(white)=1.0，对比度=(1.0+0.05)/(0.17794+0.05)=4.608:1 ≥ 4.5:1）达标 AA；白底为最亮背景，是深色文字对比度下限，任何更暗浅色背景对比度更高，故核算对该色所有使用场景成立。使用处核查：TextMuted 全部为浅色背景前景文字（MainWindow.cs:159/289/405/504/1238/1239、SettingsForm.cs、SetupForm.cs 含 :509 SolidBrush 绘制、ServerWindow.cs、SettingsPage.cs 均作 ForeColor），无深色背景，白底核算有效。附 requirements 落实核查：SizeCaption 8.5f→10f（≥10pt）；SizeBody 12f→14f；新增 SizeBodyMin=14f 且 SizeBody=SizeBodyMin 引用之（正文最小字号约束已建立）；CloudPan.Server.UI/DesignTokens.cs 同步一致（TextMuted=117,117,117 / SizeCaption=10f / SizeBodyMin=14f），两端无漂移。单条自动标准通过，无手动项。",
+   "updatedAt": "2026-08-03"
+  },
+  {
+   "id": "T-011",
+   "title": "两端 DesignTokens/图标收敛为共享单一实现",
+   "dimension": "simplicity",
+   "priority": "P2",
+   "status": "done",
+   "batch": 1,
+   "findingId": "F-11",
+   "dependsOn": [],
+   "location": "CloudPan.Server.UI/DesignTokens.cs + CloudPan.Client.UI/UI/DesignTokens.cs",
+   "scope": "共享项目（Contract 或 Infrastructure）+ 两端",
+   "requirements": [
+    "DesignTokens 移入两端共同引用且无 UI 依赖的项目（仅依赖 System.Drawing）",
+    "删除一端副本，两端引用同一类型",
+    "修正虚假契约注释（如实标注手工定义，或迁入 spec 生成）"
+   ],
+   "goal": "设计令牌单一来源，改一处两端生效",
+   "acceptanceCriteria": [
+    {
+     "text": "grep 全仓仅一份 DesignTokens 类型定义",
+     "verification": "自动",
+     "command": "grep -rln 'class DesignTokens' --include=*.cs | wc -l == 1"
+    },
+    {
+     "text": "dotnet build 全绿",
+     "verification": "自动",
+     "command": "dotnet build CloudPan.sln -c Release"
+    }
+   ],
+   "attempts": 0,
+   "statusReason": null,
+   "note": "两端 DesignTokens 收敛为共享单一实现（F-11）：新建 CloudPan.Infrastructure/Design/DesignTokens.cs 作为唯一来源（保留 T-010 修正值 TextMuted=117,117,117 / SizeCaption=10f / SizeBodyMin=SizeBody=14f），删除两端副本 CloudPan.Client.UI/UI/DesignTokens.cs 与 CloudPan.Server.UI/DesignTokens.cs；命名空间保持 CloudPan.Shared（两端 7 个消费者文件均已有 using CloudPan.Shared，零消费者改动）；Infrastructure.csproj 加 System.Drawing.Common 8.0.0 包引用（net8.0-windows 非 WinForms 项目需显式引用才可得 System.Drawing）；修正 CloudPanColors/CloudPanSpacing 两处虚假注释——『所有值从 shared-spec.json designTokens 契约生成』伪称改为如实标注『手工维护（shared-spec.json 不含 designTokens 节），两端共享唯一来源』。图标收敛（CloudPanIcon.cs 蓝色无徽章 vs ServerIcons.cs 绿色+S 徽章，311 行同源重复）涉及自绘 ICO 逻辑合并与两处 UI 调用点（MainWindow/SetupForm/TrayAppContext + ServerTrayApp/ServerWindow），未并入本任务，留后续任务处理。命名空间对齐（CloudPan.Shared→目标层）归 T-016，注意 DesignTokens 依赖 System.Drawing 无法随 CloudPan.Shared 迁入纯 net8.0 的 Contract，应由 T-016 映射为 CloudPan.Infrastructure.*。验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test CloudPan.Tests -c Release 171/171 通过；验收命令字面 grep -rln 'class DesignTokens' --include=*.cs 匹配 0（类名实为 CloudPanColors/CloudPanSpacing/CloudPanEffects/CloudPanFonts，非 DesignTokens），按意图验证：全仓 DesignTokens.cs 文件数 1（CloudPan.Infrastructure/Design/DesignTokens.cs）、四令牌类各仅 1 处定义。\n【验收结论 2026-08-03】task-verifier 独立裁决：通过。验收标准①『grep 全仓仅一份 DesignTokens 类型定义』：验收命令字面匹配 'class DesignTokens' 为 0（类名实为 CloudPanColors/CloudPanSpacing/CloudPanEffects/CloudPanFonts，文件名为 DesignTokens.cs，字面命令不可命中），按意图独立核验——全仓 DesignTokens.cs 文件仅 1 份（Glob 仅返回 CloudPan.Infrastructure/Design/DesignTokens.cs；两端副本 CloudPan.Client.UI/UI/DesignTokens.cs 与 CloudPan.Server.UI/DesignTokens.cs 均已删除）；四令牌类各仅定义 1 次（CloudPanColors:10 / CloudPanSpacing:65 / CloudPanEffects:103 / CloudPanFonts:190，均在该唯一文件内）；两端引用同一类型（Client.UI 的 SetupForm/SettingsForm/SelectiveSyncPanel/MainWindow/Program 与 Server.UI 的 ServerInstaller/ServerTrayApp/TrayAppRunner/ServerWindow/SettingsPage 均 using CloudPan.Shared 引用之，两端 csproj 均 ProjectReference CloudPan.Infrastructure，编译可解析）。验收标准②『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error（Time Elapsed 12.68s）。requirements 落实核查：①唯一来源位于 CloudPan.Infrastructure/Design/DesignTokens.cs，仅 using System.Drawing、无 UI 依赖（Infrastructure.csproj net8.0-windows 显式加 System.Drawing.Common 8.0.0，注释说明非 WinForms 项目不自动带 WindowsDesktop 框架）②两端副本已删、引用同一类型③虚假契约注释已修正——CloudPanColors:7 / CloudPanSpacing:62 改为如实标注『手工维护（shared-spec.json 不含 designTokens 节，此前\"从契约生成\"注释为伪称）』，CloudPanEffects/CloudPanFonts 本无伪注释。附加核查：T-010 修正值在收敛后唯一文件中完整保留（TextMuted=117,117,117 / SizeCaption=10f / SizeBodyMin=SizeBody=14f），未因收敛回退。两条自动标准全过，无手动项。",
+   "updatedAt": "2026-08-03"
+  },
+  {
+   "id": "T-012",
+   "title": "缩略图缓存 key 加入版本 + 受限生成队列",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 1,
+   "findingId": "F-12",
+   "dependsOn": [],
+   "location": "CloudPan.Server.Host/Controllers/ThumbnailsController.cs:56-115",
+   "scope": "ThumbnailsController",
+   "requirements": [
+    "缓存 key 加入文件 version/hash，文件更新后旧图失效",
+    "缩略图生成走受限并发队列并限制并发数"
+   ],
+   "goal": "相册网格旧图不误导，大图解码不拉满 CPU",
+   "acceptanceCriteria": [
+    {
+     "text": "单元测试：文件更新后缩略图 key 变化",
+     "verification": "自动",
+     "command": "dotnet test --filter Thumbnail"
+    }
+   ],
+   "attempts": 0,
+   "statusReason": null,
+   "note": "缓存 key 加入文件版本/哈希 + 缩略图并发生成限流（F-12）。改动落在 T-002 下沉后的领域服务 CloudPan.Server.Core/Thumbnails/ThumbnailService.cs（Controller 只做适配，未改动）。\\n①缓存 key：由原 SHA-256(path|w) 扩展为 SHA-256(path|w|索引version|索引hash|磁盘长度|最后写入刻度) 前 16 hex——文件更新（索引版本提升/哈希变化，或未入索引文件磁盘内容变化）后 key 变化，旧缩略图自动失效。注入 IFileIndexService 取索引 version/hash（每请求一次 PK 查询），未入索引时兜底磁盘元数据指纹（FileInfo 长度+最后写入刻度）。\\n②受限并发队列：未命中缓存的生成（SkiaSharp 解码/缩放为 CPU 密集）经 SemaphoreSlim(MaxConcurrentGenerations=3) 门限流，避免相册并发解码拉满 CPU；门内双检避免等待期间已生成而重复解码；缓存写盘改原子写（先写 .tmp 再 File.Move overwrite），防并发生成同一缩略图时 File.Create 互踩（原实现无门限并发下同图并发必抛 IOException→500）。\\n改动文件：CloudPan.Server.Core/Thumbnails/ThumbnailService.cs（重写，ctor 增加可选 IFileIndexService 参数，DI 可解析，旧测试单参构造不变）；CloudPan.Tests/Server/Services/ThumbnailServiceTests.cs（新增 4 用例）。\\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Thumbnail 8/8 通过（含验收用例 GetThumbnail_文件更新后_缓存key变化：v1→v2 版本+hash 变化且磁盘文件未变，断言两次 CachePath 不同——隔离出 version/hash 为唯一差异）；全量 dotnet test CloudPan.Tests -c Release 175/175 通过（原 171 + 新增 4：文件更新 key 变化/未入索引重写 key 变化/同图并发共享同一缓存/多图并发全部生成成功）。\n【验收结论 2026-08-03】task-verifier 独立裁决：通过。验收标准『dotnet test --filter Thumbnail』实测 8/8 通过（Failed 0 / Passed 8 / Skipped 0），关键用例 GetThumbnail_文件更新后_缓存key变化：注入真实 FileIndexService，v1(version=1/hash-v1) 生成缩略图成功，磁盘文件未变仅索引 version→2 且 hash→hash-v2，断言两次 CachePath 不同（Assert.NotEqual）——隔离出 version/hash 为唯一差异，直接覆盖『文件更新后缩略图 key 变化』；配套用例未入索引重写 key 变化（磁盘指纹兜底）、同图并发共享同一缓存（门内双检）、多图并发 20 张全部生成成功（受限队列）。附加标准『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error。独立核查代码路径：ThumbnailService.GetThumbCachePathAsync 缓存 key=SHA-256(path|w|索引version|索引hash|磁盘长度|最后写入刻度) 前 16 hex，文件更新后 key 变化旧图失效（满足 requirement①缓存 key 加入文件 version/hash）；GetThumbnailAsync 未命中缓存经 SemaphoreSlim(MaxConcurrentGenerations=3) 门限流、门内双检避免重复解码、finally Release 配对（满足 requirement②受限并发队列并限制并发数），缓存写盘原子写 .tmp→File.Move overwrite。单条自动标准通过，无手动项。",
+   "updatedAt": "2026-08-03"
+  }
+ ]
+}

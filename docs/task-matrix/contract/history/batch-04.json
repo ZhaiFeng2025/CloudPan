@@ -1,0 +1,479 @@
+{
+ "batch": 4,
+ "date": "2026-08-03",
+ "conclusion": "v1.1.2 四维审查（批次 4）：0 P0 / 7 P1。数据丢失优先排入：全量扫描把『快照存在但本地无文件』一律入队 Delete，不检查未决下载项——远端新文件首次下载窗口内被判定本地删除→远端唯一副本移入回收站（30 天后清空）；回收站文件名只到秒，同秒同名文件碰撞→File.Move 抛 IOException→物理删除兜底永久丢数据。契约驱动次之：Android FileState 枚举漂移（Conflict 序数 4 vs C# 7 + 缺失 Downloading/Uploading）且假 AUTO-GENERATED v1.3.0 头、服务端 25 处匿名对象响应未用生成 DTO、QueryServerVersion 死代码（T-029 搬家未删除，手建 HttpClient + 魔数 /api/version）、行数门禁停在 1000 以放宽替代拆分。P2 覆盖：客户端配置三套收敛（T-029 note 已规划）、Android 照片备份游标跳过失败 + BackupLog 未接线（照片丢失/同名覆盖）、冲突项恒占队列前 5 槽位致非冲突传输饥饿（T-036 聚合未解除死锁）、本地目录不产生服务端条目（空目录多设备不可见）、选择性同步选择集含 '/' 恒全选、RateLimit static Timer 泄漏 + 豁免清单魔数。任务依赖：T-042 依赖 T-041（QueryServerVersion 删除使 ClientBootstrap 420→≤400，可免拆分该文件）。截断说明：任务 ≤12 且 P0+P1 ≤6 配额满——UX P1『Android 删除进回收站』（服务端 /api/trash 三端点已就绪，纯客户端缺口，最刺痛家庭用户）未纳入进批次 5；Android Kotlin 生成器、死令牌、二维码配对、设置即时生效、分享页模板化、ServerWindow 直连 Core、WebSocket 心跳 Timer、ClientDbContext 落位、Upload 冲突策略下沉、FileHasher 双入口、UI 桥、HttpClient 装配三处、提交新版本编排三处重复、进程执行辅助三处、重连退避序列、Android 列表翻页、Windows 多选等 P2/P3 进批次 5。冲突取舍：①T-039 Android 枚举对齐（立即修数据一致性）vs Kotlin 生成器（批次 5 落地持久契约守护）——本批先修枚举显式数值并诚实化头标注，生成器下批补防再漂移；②T-041 删除版本检查 vs 保留『仅 Log』——v1.0 无自动更新，ServerVersion 无消费者，选删除（YAGNI），后续确需版本日志再经 IApiClient + SpecRoutes.Version 加回；③T-037/T-045/T-046/T-047 同改 SyncEngine.Scan/Changes/Queue，执行端应顺序处理避免并行合并冲突（先 T-037 扫描防线，再 T-045 队列消费、T-046 目录、T-047 选择集）。",
+ "dimensionSummary": {
+  "architecture": "P1×2 P2×1",
+  "function": "P1×2 P2×4",
+  "ux": "未纳入 P0/P1（UX P1×1 截断进批次 5）",
+  "simplicity": "P1×2 P2×1"
+ },
+ "tasks": [
+  {
+   "id": "T-037",
+   "title": "修复全量扫描误删下载中文件（远端新文件首次下载保护）",
+   "dimension": "function",
+   "priority": "P1",
+   "status": "done",
+   "batch": 4,
+   "findingId": "F-37",
+   "dependsOn": [],
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Scan.cs:217-223,319-331; SyncEngine.Changes.cs:137-144; SyncEngine.Queue.cs:99-121",
+   "scope": "SyncEngine.Scan/Changes/Queue + 快照模型",
+   "requirements": [
+    "快照新增『本地是否曾落盘/下载完成』标记（State 用 Downloading，或单独布尔 IsDownloaded）：下载开始前创建的快照不得标记为已同步落盘",
+    "全量扫描的删除判定只对『曾落盘且当前本地缺失』的文件入队 Delete；未完成首次下载的快照不触发删除传播",
+    "扫描入队 Delete 前检查 SyncQueue 该路径是否存在未决下载项，存在则跳过（待下载完成后再判定）",
+    "补单测：下载中/下载未完成时 5 分钟兜底扫描不误删；下载完成且本地删除后正常传播删除"
+   ],
+   "goal": "远端新文件首次下载窗口内不再被全量扫描误判为本地删除，双设备同步最日常路径的数据丢失闭环闭合",
+   "acceptanceCriteria": [
+    {
+     "text": "单测覆盖『下载未完成→扫描不误删』与『下载完成→删除传播』两路径",
+     "verification": "自动",
+     "command": "dotnet test --filter SyncEngine"
+    },
+    {
+     "text": "全量测试全绿",
+     "verification": "自动",
+     "command": "dotnet test CloudPan.Tests -c Release"
+    },
+    {
+     "text": "dotnet build 全绿",
+     "verification": "自动",
+     "command": "dotnet build CloudPan.sln -c Release"
+    }
+   ],
+   "attempts": 0,
+   "statusReason": null,
+   "note": "修复全量扫描误删下载中文件（F-37）：RemoteSnapshot 新增 IsDownloaded 布尔标记「本地是否已落盘」——下载开始前创建的快照保持 false（远端新文件首次下载窗口），下载完成/上传成功/重命名目标置 true；FullScanCoreAsync 删除判定只对『曾落盘且本地缺失』的文件入队 Delete，且入队前检查 SyncQueue 该路径是否存在未决下载项（存在则跳过，待下载完成后再判定）。\n改动文件：CloudPan.Client.Core/Models/ClientDbContext.cs（RemoteSnapshot.IsDownloaded）；CloudPan.Client.Core/Services/SyncEngine.Scan.cs（MakeSnapshot 增 isDownloaded 参数：目录 true/CloudOnly 与首次下载快照 false；FullScanCore 删除判定 IsDownloaded+未决下载检查）；CloudPan.Client.Core/Services/SyncEngine.Transfers.cs（ProcessUpload/ProcessDownload/ProcessRename 成功路径置 IsDownloaded=true）；新增 EF 迁移 20260803024436_AddRemoteSnapshotIsDownloaded（dotnet ef 8.0.22 生成，存量库默认值 true 保持删除传播不回退）+ Designer + ModelSnapshot 更新；CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 FullScan_下载未完成快照_本地缺失_不误删、FullScan_存在未决下载项_已落盘快照本地缺失_不误删、ApplyRemoteChanges_新远端文件_快照未标记已落盘 三用例；FullScan_本地删除_入队删除 置 IsDownloaded=true 表征『曾落盘后被删』；DownloadPathAsync_处理队列 断言下载完成 IsDownloaded=true）；CloudPan.Tests/Infrastructure/MigrationsTests.cs（新增 IsDownloaded 列与迁移存在断言，覆盖全新库与旧库升级两路径）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter SyncEngine 48/48 通过（含新增下载窗口保护两路径）；全量 dotnet test CloudPan.Tests -c Release 251/251 通过。\n【验收结论 2026-08-03】task-verifier 独立裁决：通过。验收标准①『dotnet test --filter SyncEngine』实测 48/48 通过（Failed 0 / Passed 48 / Skipped 0）；验收标准②『dotnet test CloudPan.Tests -c Release』实测 251/251 通过（Failed 0 / Passed 251 / Skipped 0）；验收标准③『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error。独立代码核查（不依赖执行者 note）：RemoteSnapshot.IsDownloaded（ClientDbContext.cs:95）真实存在；SyncEngine.Scan.cs:329-348 删除判定双重保护真实落位——本地缺失时仅『Type==File && IsDownloaded』入队 Delete，且入队前经 SyncQueue.AnyAsync(FilePath==path && Operation==Download) 检查未决下载项存在则跳过；MakeSnapshot 默认 isDownloaded=false（远端新文件首次下载窗口保护）；Transfers.cs 上传/下载/重命名成功路径均置 IsDownloaded=true（:106/:119/:240/:254/:342）；EF 迁移 20260803024436_AddRemoteSnapshotIsDownloaded 存在且存量库默认值 true 保持删除传播不回退。验收标准①要求的两路径用例均存在且通过：FullScan_下载未完成快照_本地缺失_不误删（下载未完成→扫描不误删）、FullScan_本地删除_入队删除（下载完成→删除传播）、FullScan_存在未决下载项_已落盘快照本地缺失_不误删（未决下载检查独立路径）、ApplyRemoteChanges_新远端文件_快照未标记已落盘、DownloadPathAsync_处理队列_下载到本地并转Synced。三条自动标准全过，无手动项。",
+   "updatedAt": "2026-08-03"
+  },
+  {
+   "id": "T-038",
+   "title": "回收站文件名唯一化，移入失败不再物理删除兜底",
+   "dimension": "function",
+   "priority": "P1",
+   "status": "done",
+   "batch": 4,
+   "findingId": "F-38",
+   "dependsOn": [],
+   "location": "CloudPan.Server.Core/Trash/TrashService.cs:233-257; CloudPan.Server.Core/Files/FileOperationService.cs:75-89",
+   "scope": "TrashService + FileOperationService.DeleteAsync",
+   "requirements": [
+    "回收站文件名加 GUID/随机后缀（如 {yyyyMMddHHmmss}_{GUID}_{fileName}）保证唯一，meta 文件名同步唯一化",
+    "FileOperationService.DeleteAsync 移入回收站失败时不再 _storage.Delete 物理删除兜底：保留原文件并返回错误，由调用方提示用户重试",
+    "补单测：同秒删除两个目录同名文件均进回收站且可分别恢复；移入失败保留原文件"
+   ],
+   "goal": "同秒同名文件删除均进回收站可恢复，回收站唯一兜底路径不再静默丢数据",
+   "acceptanceCriteria": [
+    {
+     "text": "单测覆盖同名碰撞与移入失败保留原文件",
+     "verification": "自动",
+     "command": "dotnet test --filter Trash"
+    },
+    {
+     "text": "FileOperationService.DeleteAsync 失败路径无物理删除兜底",
+     "verification": "自动",
+     "command": "grep -n '_storage.Delete' CloudPan.Server.Core/Files/FileOperationService.cs 无兜底调用"
+    },
+    {
+     "text": "全量测试全绿",
+     "verification": "自动",
+     "command": "dotnet test CloudPan.Tests -c Release"
+    }
+   ],
+   "attempts": 0,
+   "statusReason": null,
+   "note": "【T-038 执行 2026-08-03】回收站文件名唯一化，移入失败不再物理删除兜底（F-38）。\n唯一化：TrashService.MoveToTrashAsync 回收站实体名由 {yyyyMMddHHmmss}_{fileName} 改为 {yyyyMMddHHmmss}_{GUID}_{fileName}（GUID N 格式，32 位十六进制），meta 名 = 实体名 + '.json' 同步唯一化——保持客户端 SyncEngine.RestoreTrashAsync『meta 文件名 = TrashFileName + \".json\"』命名不变量；MoveToTrashAsync 返回 meta 文件名（供软删失败回滚恢复）。\n删除顺序（DB+FS 一致）：FileOperationService.DeleteAsync 由『先软删索引→再移入回收站（失败物理删除兜底）』改为『先移入回收站（失败保留原文件返回错误）→再软删索引（失败经 _trash.RestoreAsync 回滚恢复原位）』——移入失败时索引未动、不向客户端传播假删除、可直接重试；删除原 _storage.Delete/_storage.DeleteDirectory 物理删除兜底（回收站唯一兜底路径不再静默丢数据）。\n改动文件：CloudPan.Server.Core/Trash/ITrashService.cs（MoveToTrashAsync 返回 Task<string> meta 文件名）、CloudPan.Server.Core/Trash/TrashService.cs（实体名加 GUID + meta 名同步唯一化）、CloudPan.Server.Core/Files/IFileOperationService.cs（DeleteAsync 注释更新）、CloudPan.Server.Core/Files/FileOperationService.cs（DeleteAsync 调整顺序+去兜底）、CloudPan.Tests/Server/Services/TrashServiceTests.cs（新增 MoveToTrash_同秒删除两个目录同名文件_均进回收站且可分别恢复，含 meta 命名不变量断言）、CloudPan.Tests/Server/Services/FileOperationServiceTests.cs（新增 ThrowingTrashService 桩 + Delete_MoveToTrash失败_保留原文件不物理删除，方法名含 Trash 子串可被验收 --filter Trash 命中）。\n验证：dotnet build CloudPan.sln -c Release 0 警告 0 错误；dotnet test --filter Trash 23/23 通过（含新增同名碰撞与移入失败两用例）；全量 dotnet test CloudPan.Tests -c Release 253/253 通过（原 251 + 新增 2）；验收 grep -n '_storage.Delete' CloudPan.Server.Core/Files/FileOperationService.cs 无匹配（exit 1）。\n【验收结论 2026-08-03】task-verifier 独立裁决：通过。验收标准①『dotnet test --filter Trash』实测 23/23 通过（Failed 0 / Passed 23 / Skipped 0），含关键用例 MoveToTrash_同秒删除两个目录同名文件_均进回收站且可分别恢复（断言两文件均进回收站、实体文件名互不相同唯一化、meta 名 = TrashFileName + \".json\" 命名不变量、均可分别恢复回原位）与 Delete_MoveToTrash失败_保留原文件不物理删除（ThrowingTrashService 桩模拟 File.Move 抛 IOException，断言原文件保留、索引保持 Synced 未软删、回收站无残留）；验收标准②『grep -n ''_storage.Delete'' CloudPan.Server.Core/Files/FileOperationService.cs 无匹配』实测无匹配（exit 1），并彻底核查全文件无 .Delete/.DeleteDirectory/File.Delete/Directory.Delete 物理删除调用（仅命中审计日志枚举 SyncOperation.Delete，非物理删除）；验收标准③『dotnet test CloudPan.Tests -c Release』实测 253/253 通过（Failed 0 / Passed 253 / Skipped 0）。附加『dotnet build CloudPan.sln -c Release』实测 Build succeeded，0 Warning 0 Error。独立代码核查：TrashService.MoveToTrashAsync（TrashService.cs:239-240）实体名 = {yyyyMMddHHmmss}_{GUID}_{fileName} 唯一化、meta 名 = 实体名 + \".json\" 同步唯一化并返回 meta 文件名供软删失败回滚（:261-264）；FileOperationService.DeleteAsync（FileOperationService.cs:66-109）先移入回收站（失败 catch 返回 INTERNAL_ERROR 保留原文件、不向客户端传播假删除）→成功才软删索引→软删失败经 _trash.RestoreAsync(metaFileName) 回滚恢复原位，DB+FS 一致性闭环真实存在。三条自动标准全过，无手动项。",
+   "updatedAt": "2026-08-03"
+  },
+  {
+   "id": "T-039",
+   "title": "Android FileState 枚举对齐 C# 并诚实化契约头标注",
+   "dimension": "architecture",
+   "priority": "P1",
+   "status": "done",
+   "batch": 4,
+   "findingId": "F-39",
+   "dependsOn": [],
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/data/Dtos.kt:1,70; CloudPan.Android/app/src/main/java/com/cloudpan/android/data/CloudPanApi.kt:1",
+   "scope": "Android Dtos.kt/CloudPanApi.kt FileState",
+   "requirements": [
+    "FileState 枚举项显式数值对齐 C# Enums.g.cs：Synced=0/Modified=1/Deleting=2/CloudOnly=3/Downloading=4/Uploading=5/Conflict=7（补 Downloading/Uploading，Conflict 由序数 4 改显式 7）",
+    "Dtos.kt/CloudPanApi.kt 头部 AUTO-GENERATED from shared-spec.json v1.3.0 改为 Hand-maintained 并注明对齐 shared-spec v1.1.0（无 Kotlin 生成器的真实基线）",
+    "给枚举加序列化数值校验（单测/注释断言显式值），防再漂移"
+   ],
+   "goal": "同一 FileState 两端序列化为相同整数，Android 状态写盘/传输不再被服务端误解析",
+   "acceptanceCriteria": [
+    {
+     "text": "Android FileState.Conflict 显式值为 7",
+     "verification": "自动",
+     "command": "grep -n 'Conflict' CloudPan.Android/app/src/main/java/com/cloudpan/android/data/Dtos.kt 含 Conflict=7"
+    },
+    {
+     "text": "Android 无虚假 v1.3.0 生成头",
+     "verification": "自动",
+     "command": "grep -rn 'AUTO-GENERATED from shared-spec.json v1.3.0' CloudPan.Android/ 无匹配"
+    },
+    {
+     "text": "手动：Android 项目 gradle compileDebugKotlin 编译通过且枚举数值对齐",
+     "verification": "手动"
+    }
+   ],
+   "attempts": 0,
+   "statusReason": null,
+   "note": "FileState 枚举改为显式数值对齐 C# Enums.g.cs（Synced=0/Modified=1/Deleting=2/CloudOnly=3/Downloading=4/Uploading=5，值 6 保留，Conflict=7），补 Downloading/Uploading，Conflict 由序数 4 改显式 7；Dtos.kt/CloudPanApi.kt 头部 AUTO-GENERATED from shared-spec.json v1.3.0 改为 Hand-maintained 并注明对齐基线 shared-spec v1.1.0（CloudPan.CodeGen 无 Kotlin 生成器的真实基线，不声称由标准管线生成）；枚举加 KDoc 断言数值来源 Enums.g.cs、禁止依赖 Kotlin 序数，防再漂移（Android 无 test 目录，以注释断言实现序列化数值校验）。经 Grep 全仓确认 Android 端无 FileState 枚举消费者、无 .state 数值解析处，故无其他按枚举值对齐的解析点需改动。\n改动文件：CloudPan.Android/app/src/main/java/com/cloudpan/android/data/Dtos.kt、CloudPan.Android/app/src/main/java/com/cloudpan/android/data/CloudPanApi.kt、docs/task-matrix/tasks.json（仅 T-039 状态字段）。\n验证：①grep -n 'Conflict' Dtos.kt → 第 84 行 Conflict(7) 显式值存在；②grep -rn 'AUTO-GENERATED from shared-spec.json v1.3.0' CloudPan.Android/ 无匹配；③dotnet build CloudPan.sln -c Release 0 警告 0 错误（C# 端不受影响）；④Android :app:compileDebugKotlin：本机 SDK 仅 cmdline-tools 无 platform，已用 sdkmanager 接受全部 license 并让 AGP 自动下载 Android SDK Platform 34 + Build-Tools 34.0.0，任务可运行；编译输出中 Dtos.kt/CloudPanApi.kt 无任何错误（Kotlin 编译器全文件类型检查通过本任务改动），但项目整体编译失败于预存在的 FileRepository.kt/FileListScreen.kt 既有错误（FileRepository.kt:40/45/138 Result<Response<>> 与 Result<FileTreeResponse> 类型不匹配、:103 ensureActive 未解析；FileListScreen.kt:153 loadFiles 未解析、:305/381 LinearProgressIndicator 参数不匹配）——该两文件与 HEAD 一致、未在本任务改动范围，属 v1.0 Android 基础框架原型既有问题，故验收标准③（手动 gradle 编译）需验收者按手动方式核对枚举数值对齐。\n【验收结论 2026-08-03】task-verifier 独立裁决：自动标准全过、含手动项，留 acceptance 待人工确认（Step 3'）。验收标准①『grep -n Conflict Dtos.kt 含 Conflict=7』实测 Dtos.kt:84 Conflict(7) 显式值存在（:73 KDoc 断言数值列表）；验收标准②『grep -rn AUTO-GENERATED from shared-spec.json v1.3.0 CloudPan.Android/ 无匹配』实测无匹配（exit 1）；附加自动标准『dotnet build CloudPan.sln -c Release』实测 Build succeeded 0 Warning 0 Error。手动项代码路径核查：①FileState 显式数值与 CloudPan.Contract/Generated/Enums.g.cs 逐项对齐——Android Synced(0)/Modified(1)/Deleting(2)/CloudOnly(3)/Downloading(4)/Uploading(5)/Conflict(7) vs C# Synced=0/Modified=1/Deleting=2/CloudOnly=3/Downloading=4/Uploading=5/Conflict=7，两侧值 6 均保留；②头标注诚实化——Dtos.kt:1-3 与 CloudPanApi.kt:1-3 均改为『Hand-maintained（v1.0 Android 原型，非生成产物）+ 对齐基线 shared-spec.json v1.1.0 + 不声称由标准管线生成』；③无其他消费点需对齐——Grep 全仓 FileState 仅 Dtos.kt:77 定义一处，FileEntryDto.state 为原始 Int 未被映射为 FileState、无任何 .state 数值比较/解析点；④防再漂移——KDoc(71-76) 注释断言显式值、标注值 6 保留并警告勿依赖 Kotlin 序数（原序数 4 曾被 Conflict 占用），Android 无 test 目录（Glob CloudPan.Android/**/test/**/*.kt 无文件）故以注释断言实现序列化校验，符合需求『单测/注释断言』二选一。需人工确认：{Android gradle compileDebugKotlin 编译——执行者报告项目整体编译失败于预存在的 FileRepository.kt/FileListScreen.kt 既有错误（与本任务改动范围无关，Dtos.kt/CloudPanApi.kt 自身 Kotlin 类型检查通过），需人工在具备完整 Android SDK 环境复核}。 【人工确认 2026-08-03】用户确认通过，置 done。",
+   "updatedAt": "2026-08-03"
+  },
+  {
+   "id": "T-040",
+   "title": "服务端控制器改用生成响应 DTO（删除匿名对象）",
+   "dimension": "architecture",
+   "priority": "P1",
+   "status": "done",
+   "batch": 4,
+   "findingId": "F-40",
+   "dependsOn": [],
+   "location": "CloudPan.Server.Host/Controllers/{Files,Files.FileOps,Files.ChunkedUpload,Health,Admin}.cs",
+   "scope": "Server.Host/Controllers + CodeGen 响应形状校验",
+   "requirements": [
+    "控制器 25 处 return Ok(new {...}) 匿名对象改用 ApiResponses.g.cs 生成强类型（UploadResponse/FileTreeResponse/TrashListResponse/ShareCreateResponse/ChunkUploadResponse 等），删除匿名对象",
+    "CodeGen 增 ContractSourceScan（或 --verify 检查）扫描 return Ok(new {...}) 违例，纳入校验管线",
+    "补集成测试：响应 JSON 形状与生成 DTO 一致，客户端反序列化可解析"
+   ],
+   "goal": "服务端响应体单一事实来源为生成 DTO，spec 改响应形状一处生效且 --verify 可检出漂移",
+   "acceptanceCriteria": [
+    {
+     "text": "Controllers 无匿名对象响应",
+     "verification": "自动",
+     "command": "grep -rn 'return Ok(new {' CloudPan.Server.Host/Controllers/ 无匹配"
+    },
+    {
+     "text": "CodeGen --verify 一致",
+     "verification": "自动",
+     "command": "dotnet run --project CloudPan.CodeGen -- --verify"
+    },
+    {
+     "text": "全量测试全绿",
+     "verification": "自动",
+     "command": "dotnet test CloudPan.Tests -c Release"
+    }
+   ],
+   "attempts": 0,
+   "statusReason": null,
+   "note": "T-040 服务端控制器改用生成响应 DTO（删除匿名对象）。\n\n改动文件：\n- shared-spec.json：版本 1.1.0→1.2.0，api.responses 补全 AdminFile/AdminDevice/AdminLog/AdminStats/Devices/Health/Version/CertFingerprint/Delete/Move/Mkdir/Search/TrashRestore/TrashEmpty 共 22 个响应 DTO\n- CloudPan.CodeGen 重跑：ApiResponses.g.cs 新增 DTO，其余 Generated/*.g.cs 仅版本头 1.1.0→1.2.0 更新\n- CloudPan.Server.Core：删除与生成 DTO 重复的响应记录（TrashItem/VersionRecordInfo/FileEntryInfo/DeviceInfo/SyncLogInfo/ServerStats），ITrashService/IVersionHistoryService/IServerStatusService 及实现改为返回契约类型（规则 0 单一事实来源）\n- CloudPan.Server.Host/Controllers 9 文件：25 处 return Ok(new {...}) 匿名对象全部改为生成 DTO（上传/删除/移动/建目录/搜索/分块进度/完成/状态/Admin×4/Devices/Health/Version/CertFingerprint/Share 创建撤销/Trash 列表恢复清空/Versions 列表回滚）\n- CloudPan.Server.UI/SettingsPage.Guide.cs：DeviceInfo→AdminDeviceItem（GetDevicesAsync 返回类型变更的适配）\n- CloudPan.Tests：ContractSourceScanTests 新增『Controllers 无匿名对象响应』扫描（requirement 2）；FileOperationServiceTests 模拟 ITrashService 改用 Contract.TrashItem；新增 ResponseShapeIntegrationTests（15 条，requirement 3：响应 JSON 反序列化为生成 DTO 断言关键字段）\n\n验证（全部通过）：\n- ① grep -rn 'return Ok(new {' CloudPan.Server.Host/Controllers/ 无匹配（exit 1）\n- ② dotnet run --project CloudPan.CodeGen（生成）+ -- --verify（8 类生成物一致）\n- ③ dotnet build CloudPan.sln -c Release：0 警告 0 错误（TreatWarningsAsErrors 生效）\n- ④ dotnet test CloudPan.Tests -c Release：269 全绿（含新增 15 条 ResponseShapeIntegrationTests）\n\n备注：管理面板端点（/admin/api/*）为 localhost 认证，WebApplicationFactory 测试服务器 RemoteIpAddress 为空无法走 HTTP，故 Admin 响应 DTO 用 JSON 序列化形状断言覆盖（AdminStats_JSON形状与DTO一致 等 3 条）。\n【验收结论 2026-08-03】task-verifier 独立裁决：3 条自动验收标准全部通过，无手动项，status → done。①『Controllers 无匿名对象响应』grep -rn 'return Ok(new {' CloudPan.Server.Host/Controllers/ 实测无匹配（exit 1），25 处匿名对象已消除；②『CodeGen --verify 一致』实测 8 类生成物全部一致（枚举/DTO/实体/清单/错误响应/API响应/设置/路由常量，契约版本 1.2.0，'--verify 校验通过'）；③『全量测试全绿』实测 dotnet test CloudPan.Tests -c Release：Passed 269 / Failed 0 / Skipped 0；附加 dotnet build CloudPan.sln -c Release：Build succeeded，0 Warning 0 Error（TreatWarningsAsErrors 生效）。requirement 2/3 佐证：CloudPan.Tests/Architecture/ContractSourceScanTests.cs 与 CloudPan.Tests/Server/Controllers/ResponseShapeIntegrationTests.cs 均存在（含新增 15 条响应形状集成测试）。",
+   "updatedAt": "2026-08-03"
+  },
+  {
+   "id": "T-041",
+   "title": "删除 QueryServerVersion 死代码，客户端 HTTP 单一入口",
+   "dimension": "simplicity",
+   "priority": "P1",
+   "status": "done",
+   "batch": 4,
+   "findingId": "F-41",
+   "dependsOn": [],
+   "location": "CloudPan.Client.Core/Composition/ClientBootstrap.cs:393-419",
+   "scope": "ClientBootstrap + IApiClient",
+   "requirements": [
+    "删除 ClientBootstrap.QueryServerVersion 与 ConnectionResult.ServerVersion（无消费者，v1.0 未启用自动更新，纯 YAGNI）",
+    "健康检查保留连接探测（IApiClient.HealthCheckAsync），不再做版本比对；若后续确需『版本差异 Log』，经 IApiClient 增 GetServerVersionAsync() 内部引用 SpecRoutes.Version，禁止再手建 HttpClient 与魔数 /api/version",
+    "补验证：客户端无 /api/version 魔数直写、无冗余 HttpClient 实例"
+   ],
+   "goal": "版本检查死代码删除，客户端 HTTP 传输单一入口（IApiClient），契约路由不再被魔数重新撕开",
+   "acceptanceCriteria": [
+    {
+     "text": "ClientBootstrap 无 QueryServerVersion/ServerVersion",
+     "verification": "自动",
+     "command": "grep -n 'QueryServerVersion\\|ServerVersion' CloudPan.Client.Core/Composition/ClientBootstrap.cs 无匹配"
+    },
+    {
+     "text": "Client.Core 无 /api/version 字面量",
+     "verification": "自动",
+     "command": "grep -rn '\"/api/version\"' CloudPan.Client.Core/ 无匹配"
+    },
+    {
+     "text": "dotnet build 全绿",
+     "verification": "自动",
+     "command": "dotnet build CloudPan.sln -c Release"
+    }
+   ],
+   "attempts": 0,
+   "statusReason": null,
+   "note": "改动：ClientBootstrap.cs 删除 QueryServerVersion（手建 HttpClient+魔数 /api/version+手写 JSON）与 ConnectionResult.ServerVersion（全库零消费者），HealthCheck 保留 IApiClient.HealthCheckAsync 连接探测、不再版本比对，删除随之失效的 using System.Text.Json；文件 420→388 行（落 ≤400 线，T-042 拆分无需该文件）。SpecRoutes.Version 保留：契约生成常量，/api/version 端点服务端 HealthController 仍在且 spec 注册（AuthMode.Public），非客户端魔数；后续 GetServerVersionAsync 内部引用它。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过（269/269）；grep 'QueryServerVersion\\|ServerVersion' ClientBootstrap.cs 与 grep '\"/api/version\"' Client.Core 均无匹配；new HttpClient 仅存于 ApiClient（IApiClient 单一实现），客户端 HTTP 收敛为单一入口。\n【验收结论 2026-08-03】task-verifier 独立裁决：3 条自动验收标准全部通过，无手动项，status → done。①『ClientBootstrap 无 QueryServerVersion/ServerVersion』实测 grep -n 于 CloudPan.Client.Core/Composition/ClientBootstrap.cs 无匹配（exit 1）；②『Client.Core 无 /api/version 字面量』实测 grep -rn 于 CloudPan.Client.Core/ 无匹配（exit 1），ApiClient 经 SpecRoutes 契约路由访问，无魔数直写；③『dotnet build 全绿』实测 dotnet build CloudPan.sln -c Release：Build succeeded，0 Warning 0 Error。佐证（requirement 1/3）：排除 bin/obj 后 Client.Core 源码 .cs 无 ServerVersion/QueryServerVersion 残留；grep 到的二进制匹配来自 CloudPan.Infrastructure/Generated/Entities.g.cs:285 契约实体常量 ServerVersion=server_version（数据库键名，合法非死代码）；new HttpClient 仅存于 ApiClient.cs（IApiClient 单一实现），客户端 HTTP 收敛单一入口。",
+   "updatedAt": "2026-08-03"
+  },
+  {
+   "id": "T-042",
+   "title": "行数门禁下调至 400，7 个超大单类拆 partial",
+   "dimension": "simplicity",
+   "priority": "P1",
+   "status": "done",
+   "batch": 4,
+   "findingId": "F-42",
+   "dependsOn": [
+    "T-041"
+   ],
+   "location": "CloudPan.Tests/Architecture/CodeQualityTests.cs; CloudPan.Server.UI/ServerInstaller.cs(935); CloudPan.Client.UI/UI/FileBrowserView.cs(830); CloudPan.Client.UI/UI/SettingsForm.cs(628); CloudPan.Server.UI/ServerWindow.cs(513); CloudPan.Client.UI/UI/TrayAppContext.cs(494); CloudPan.Server.UI/SettingsPage.cs(483); CloudPan.Client.Core/Composition/ClientBootstrap.cs(420)",
+   "scope": "CodeQualityTests + 7 个超大单类 partial 拆分",
+   "requirements": [
+    "CodeQualityTests 阈值从 1000 下调回 400（对齐 CLAUDE.md ≤400 判据），删除白名单放宽/豁免残留",
+    "ServerInstaller(935) 按 InstallAsync/RunExe+RunCmd/UI 布局、FileBrowserView(830) 拆列表/面包屑/工具栏、SettingsForm(628) 拆 Tab 页、ServerWindow(513)/TrayAppContext(494)/SettingsPage(483)/ClientBootstrap(420) 沿用 partial 先例拆分，每文件 ≤400，行为不变",
+    "补验证：门禁测试全绿且无 >400 行单类文件"
+   ],
+   "goal": "行数判据对全部代码真实生效（≤400），超大单类拆分完成，审阅与改版成本随体量下降",
+   "acceptanceCriteria": [
+    {
+     "text": "门禁测试全绿",
+     "verification": "自动",
+     "command": "dotnet test --filter CodeQuality"
+    },
+    {
+     "text": "CodeQualityTests 单类阈值统一为 400（无 1000 放宽残留）",
+     "verification": "自动",
+     "command": "grep -n '1000\\|isExcluded' CloudPan.Tests/Architecture/CodeQualityTests.cs 无匹配"
+    },
+    {
+     "text": "dotnet build 全绿",
+     "verification": "自动",
+     "command": "dotnet build CloudPan.sln -c Release"
+    }
+   ],
+   "attempts": 0,
+   "statusReason": null,
+   "note": "冲突取舍：T-042 依赖 T-041——QueryServerVersion 删除使 ClientBootstrap 420→≤400，若该文件落线则无需拆分，避免『先拆后删』双重返工。\n执行 2026-08-03：①CodeQualityTests 阈值 1000/500→统一 400（删除 serviceControllerFiles 白名单与分层放宽，MaxLines=400，grep '1000|isExcluded' 无匹配）。②门禁口径扫描出 12 个 >400 行文件（ClientBootstrap 经 T-041 388 行无需拆），全部拆为 partial/多文件、行为不变：ServerInstaller(935)→cs360+Steps162+Install306+Process127；FileBrowserView(830)→cs367+List221+Events186+Breadcrumb80；SettingsForm(628)→cs149+AccountTab348+BandwidthTab128+SyncTab22；ServerWindow(513)→cs268+Events166+Data93；ApiClient(507)→cs209+Trash37+ShareVersion56+ChunkedUpload116+ThrottledStream114+DownloadResult8；TrayAppContext(494)→cs125+Events196+Menu88+Actions103；DesignTokens(484)→cs280+Spacing41+Effects87+Fonts81（5 个独立静态类按类分文件，无需 partial）；SettingsPage(483)→cs298+Events192（Guide60 不变）；SyncEngine.Scan(476)→Scan243+FullScan243；ChunkedUploadService(451)→cs180+Finalize269；WebSocketHandler(442)→cs240+Broadcast65+Lifecycle133；MainWindow.Conflicts(441)→Conflicts164+ConflictDialog262。③验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过 269/269（含 CodeQuality 门禁 2/2）；门禁口径扫描（含 Migrations，排除 Generated/obj/bin/Analyzer）无 >400 行文件。改动文件 37 个（12 改 + 25 新增）。\n【验收结论 2026-08-03】task-verifier 独立裁决：3 条自动验收标准全部通过，无手动项，status → done。①『门禁测试全绿』实测 dotnet test --filter CodeQuality：Passed 2/2，Failed 0（『所有非生成文件_小于行数上限』+『所有public类型_有XML文档注释』均过）；②『CodeQualityTests 单类阈值统一 400，无 1000 放宽残留』实测 grep '1000|isExcluded'（按验收标准原文大小写）于 CloudPan.Tests/Architecture/CodeQualityTests.cs 无匹配，MaxLines=400 常量生效（对齐 CLAUDE.md 规则 8 单类 ≤400），文件内 IsExcluded 仅排除 Generated/obj/bin/Analyzer（生成代码与构建产物，合理口径，非放宽残留）；③『dotnet build 全绿』实测 dotnet build CloudPan.sln -c Release：Build succeeded，0 Warning 0 Error。佐证 requirement 2（超大单类拆分真实落地）：抽查拆分后关键文件行数均 ≤400——ServerInstaller 360、FileBrowserView 367、SettingsForm 149、ServerWindow 269、TrayAppContext 125、SettingsPage 298、ClientBootstrap 388；partial 拆分文件均在位（FileBrowserView.List/Events/Breadcrumb、SettingsForm.AccountTab/BandwidthTab/SyncTab、TrayAppContext.Actions/Events/Menu、ServerWindow.Events/Data 等），门禁扫描口径下无 >400 行文件。",
+   "updatedAt": "2026-08-03"
+  },
+  {
+   "id": "T-043",
+   "title": "客户端配置三套收敛为单一来源",
+   "dimension": "simplicity",
+   "priority": "P2",
+   "status": "done",
+   "batch": 4,
+   "findingId": "F-43",
+   "dependsOn": [],
+   "location": "CloudPan.Client.Core/Models/ClientConfig.cs:1-78; CloudPan.Client.Core/Services/SettingsStore.cs:1-75; CloudPan.Client.Core/Models/SyncConfig.cs:1-30; CloudPan.Client.Core/Composition/ClientBootstrap.cs:81,317; CloudPan.Client.UI/UI/TrayAppContext.cs:456,473",
+   "scope": "ClientConfig/SettingsStore/SyncConfig 合并 + 调用点",
+   "requirements": [
+    "TrayCloseAcknowledged 并入 ClientConfig（config 新增字段），删除 ClientSettings/SettingsStore 静态注入机制（含静态 _syncRoot + SetSyncRoot 后置注入）",
+    "消除 ClientConfig.Load 重复调用（ClientBootstrap 已持 _configPath，BuildContainer 复用 ResolveStartup 结果），读盘收敛为 1 次",
+    "SyncConfig 保留为 DI record，说明与 ClientConfig 边界（进程内同步运行参数 vs 持久化配置）",
+    "补验证：SettingsStore 静态类删除、Load 调用 ≤1 处"
+   ],
+   "goal": "客户端配置单一入口（ClientConfig 持久化 + SyncConfig DI 运行参数），无静态可变全局状态，读盘一次",
+   "acceptanceCriteria": [
+    {
+     "text": "SettingsStore 静态注入机制已删除",
+     "verification": "自动",
+     "command": "grep -rn 'class SettingsStore\\|SetSyncRoot' CloudPan.Client.Core/ 无匹配"
+    },
+    {
+     "text": "ClientConfig.Load 调用收敛 ≤1 处",
+     "verification": "自动",
+     "command": "grep -rn 'ClientConfig.Load' CloudPan.Client.Core/ CloudPan.Client.UI/ 匹配 ≤1 处"
+    },
+    {
+     "text": "dotnet build 全绿",
+     "verification": "自动",
+     "command": "dotnet build CloudPan.sln -c Release"
+    }
+   ],
+   "attempts": 0,
+   "statusReason": null,
+   "note": "执行 2026-08-03：①ClientConfig 新增 TrayCloseAcknowledged 字段（原 ClientSettings.TrayCloseAcknowledged 并入），整文件删除 SettingsStore.cs（含 ClientSettings + 静态 _syncRoot/SetSyncRoot 后置注入机制）。②ClientStartupResult 新增 Config 属性携带 ResolveStartup 已读盘配置，ClientBootstrap 构造改为接收 ClientConfig（含 _configPath 字段删除），BuildContainer 直接复用 _config 并注册 AddSingleton(cfg)，读盘收敛为 1 次（唯一调用点 ClientBootstrap.ResolveStartup:80）。③Program.cs 从 bootstrap.Provider 取 ClientConfig 传入 TrayAppContext，TrayAppContext 传 MainWindow；MainWindow.OnFormClosing 与 TrayAppContext.Actions.OpenSettings 改用同一 DI 实例读写（Save 经 ClientBootstrap.GetConfigPath()），OpenSettings 不再独立读盘。④SyncConfig 保留为 DI record，注释补充与 ClientConfig 边界（进程内同步运行参数快照 vs 持久化配置源）。⑤验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过 269/269。验收1 grep 'class SettingsStore|SetSyncRoot' CloudPan.Client.Core/ 无匹配（清理 Debug 残留后）。验收2 grep 'ClientConfig.Load' 命中 2 行：ClientBootstrap.cs:80 为唯一调用点，ClientConfig.cs:25 为方法定义 'public static ClientConfig Load(string path)'——系 grep 正则 '.' 通配空格把 'ClientConfig Load' 误命中所致，非第二处调用，验收者请按『调用点 ≤1』判定。改动文件 8 个（7 改 + 1 删）。验收 2026-08-03：①验收1 grep 'class SettingsStore|SetSyncRoot' CloudPan.Client.Core/ 无匹配（exit=1），交叉验证全库无 SettingsStore 类/SetSyncRoot 代码残留，仅 ClientConfig.cs:19 注释提及历史字段名，非代码引用。②验收2 grep 'ClientConfig.Load' CloudPan.Client.Core/ CloudPan.Client.UI/ 命中 2 行：ClientBootstrap.cs:80 为唯一调用点；ClientConfig.cs:25 为方法定义 'public static ClientConfig Load(string path)' 非调用点，实际调用点 =1 ≤1，通过。③验收3 dotnet build CloudPan.sln -c Release 全绿（0 Warning 0 Error）。三条自动验收全过、无手动项，独立裁决置 done。",
+   "updatedAt": "2026-08-03"
+  },
+  {
+   "id": "T-044",
+   "title": "Android 照片备份改连续段游标并接线 BackupLog",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 4,
+   "findingId": "F-44",
+   "dependsOn": [],
+   "location": "CloudPan.Android/app/src/main/java/com/cloudpan/android/worker/PhotoBackupWorker.kt:118-148",
+   "scope": "PhotoBackupWorker + BackupLog 契约实体接线",
+   "requirements": [
+    "备份游标只推进到『连续成功段』末尾（遇失败即停），失败照片保留在待传集合，下次运行重试",
+    "照片备份接线契约 BackupLog 实体：按 Uri+FileHash 去重、远程路径含去重哈希或冲突重命名避免同名覆盖、BackupStatus 状态机驱动重试",
+    "补验证：同名照片不再静默覆盖；单张失败后可重试"
+   ],
+   "goal": "家庭相册照片备份无静默丢失、无同名覆盖，失败可恢复（与契约 BackupLog 状态机一致）",
+   "acceptanceCriteria": [
+    {
+     "text": "PhotoBackupWorker 游标遇失败即停（连续成功段语义）",
+     "verification": "自动",
+     "command": "grep -n 'LAST_BACKUP\\|maxDate\\|DATE_ADDED' CloudPan.Android/app/src/main/java/com/cloudpan/android/worker/PhotoBackupWorker.kt 有连续段推进逻辑"
+    },
+    {
+     "text": "Android 引用契约 BackupLog 实体",
+     "verification": "自动",
+     "command": "grep -rn 'BackupLog' CloudPan.Android/app/src/main/java/ 有匹配"
+    },
+    {
+     "text": "手动：单张失败后下次运行重试该照片，同名照片不覆盖",
+     "verification": "手动"
+    }
+   ],
+   "attempts": 0,
+   "statusReason": null,
+   "note": "执行者记录（T-044）：改动文件：worker/PhotoBackupWorker.kt（连续段游标 KEY_LAST_BACKUP 只推进到连续成功段末尾、遇失败即停、失败及后续下次重试；DATE_ADDED 用 >= 防同秒失败照片被永久排除；接线 BackupLog：Uri+FileHash 去重、内容级哈希去重、远程路径含 8 位哈希短码避免同名覆盖、状态机 Pending→Uploading→Done/Failed）+ data/BackupLogEntity.kt（新增，对齐 spec entities.BackupLog）+ data/BackupLogDao.kt（新增）+ data/BackupStatus.kt（新增，对齐 spec enums.BackupStatus）+ data/AppDatabase.kt（版本 1→2 + MIGRATION_1_2）。验证：dotnet build CloudPan.sln -c Release 成功（0 警告 0 错误，C# 端不受影响）；gradle :app:compileDebugKotlin 因仓库路径含非 ASCII（云盘）被 AGP 拒绝，复制到 ASCII 临时目录（C:/Users/Administrator/AppData/Local/Temp/cloudpan-android-verify）验证：本任务 5 个文件零编译错误，但模块整体编译失败——8 个错误全部位于未改动预存文件 FileRepository.kt（safeCall 返回 Result<Response<X>> 类型不匹配、ensureActive 未导入）与 FileListScreen.kt（loadFiles 未解析、LinearProgressIndicator 签名），经 git 确认 HEAD 即存在、非本任务引入。验收 grep 1/2 通过。手动验收项：1. 设备授予照片读取权限（App 未实现运行时权限请求，需系统设置授权）后首次备份，服务端 /Photos/yyyy-MM/ 文件名含哈希短码，同名不同内容照片不互相覆盖；2. 备份中临时断开服务端，通知提示备份暂停，游标停在失败照片前，恢复后下次运行重试该照片及后续，不丢照片；3. 同内容照片不重复上传（BackupLog 去重），失败照片记录为 Failed、成功后转 Done。 验收结论（T-044，task-verifier）：自动标准 2/2 通过——① grep 'LAST_BACKUP|maxDate|DATE_ADDED' PhotoBackupWorker.kt 有连续段推进逻辑（L90 KEY_LAST_BACKUP 读取、L105 DATE_ADDED >= 防同秒失败排除、L111 DATE_ADDED ASC、L174 遇失败 break@photo 即停游标停在失败前、L181 仅推进 segmentEnd 到连续成功段末尾）；② grep -rn 'BackupLog' CloudPan.Android 有匹配（4 文件：PhotoBackupWorker/BackupLogDao/AppDatabase/BackupLogEntity）。附加 dotnet build CloudPan.sln -c Release 成功（0 警告 0 错误）。手动标准代码路径核对存在：单张失败 catch→break 游标不越过失败照片、下次从 lastBackupEpoch 重扫重试；远程路径 buildRemoteName 含 8 位哈希短码避免同名覆盖；Uri+FileHash 去重 + 内容级去重；BackupStatus 状态机 Pending→Uploading→Done/Failed 对齐 spec enums.BackupStatus，BackupLogEntity 字段对齐 spec entities.BackupLog，AppDatabase v2+MIGRATION_1_2。需人工确认：真机授予照片权限后首次备份上传 /Photos/yyyy-MM/ 且文件名含哈希短码；备份中断开服务端游标停在失败前、恢复后重试不丢照片；同内容不重复上传、失败记 Failed。 【人工确认 2026-08-03】用户确认通过，置 done。",
+   "updatedAt": "2026-08-03"
+  },
+  {
+   "id": "T-045",
+   "title": "冲突项不阻塞队列其他传输（解除队列饥饿）",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 4,
+   "findingId": "F-45",
+   "dependsOn": [],
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Queue.cs:18-22,55-60",
+   "scope": "SyncEngine.Queue.ProcessQueueAsync",
+   "requirements": [
+    "ProcessQueueAsync 跳过冲突项时不占『已处理』名额，或每轮从候选中剔除冲突项后取有效项（冲突项保留在 DB 供解决时清除）",
+    "待解决冲突 ≥5 个时非冲突传输（新文件上传下载/删除/重命名）不被饥饿",
+    "补单测：5 冲突 + 1 上传 → 上传仍被处理"
+   ],
+   "goal": "冲突只阻塞自身路径不阻塞其他传输，批量冲突下同步不静默停滞",
+   "acceptanceCriteria": [
+    {
+     "text": "单测覆盖『冲突不阻塞其他传输』",
+     "verification": "自动",
+     "command": "dotnet test --filter SyncEngine"
+    },
+    {
+     "text": "全量测试全绿",
+     "verification": "自动",
+     "command": "dotnet test CloudPan.Tests -c Release"
+    },
+    {
+     "text": "dotnet build 全绿",
+     "verification": "自动",
+     "command": "dotnet build CloudPan.sln -c Release"
+    }
+   ],
+   "attempts": 0,
+   "statusReason": null,
+   "note": "修复：ProcessQueueAsync 查询时从候选中剔除 _pendingConflicts 中的冲突路径（冲突项保留 DB，由 OnConflictResolved 解决时清除），冲突项不再占用前 5 槽位，其余传输不被饥饿；循环内冲突检查保留作同路径多操作时防御。改动文件：CloudPan.Client.Core/Services/SyncEngine.Queue.cs、CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增单测 ProcessQueue_待解决冲突5个_上传不被饥饿：5 冲突 + 1 上传 → 上传仍被处理且冲突项保留）。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过（270/270，含 SyncEngine 49/49）。【验收 2026-08-03】独立复核通过：① dotnet test --filter SyncEngine → 49/49 全绿（含 ProcessQueue_待解决冲突5个_上传不被饥饿：5 冲突 + 1 上传 → 上传仍被处理）；② dotnet test CloudPan.Tests -c Release → 270/270 全绿；③ dotnet build CloudPan.sln -c Release → Build succeeded，0 警告 0 错误。三条自动验收标准全部通过，无手动项，裁决 done。",
+   "updatedAt": "2026-08-03"
+  },
+  {
+   "id": "T-046",
+   "title": "本地目录创建同步为服务端条目",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 4,
+   "updatedAt": "2026-08-03",
+   "findingId": "F-46",
+   "dependsOn": [],
+   "location": "CloudPan.Client.Core/Services/SyncEngine.Changes.cs:160-164; SyncEngine.Scan.cs:287-289",
+   "scope": "SyncEngine.Changes/Scan + FileIndexService",
+   "requirements": [
+    "Watcher/扫描为目录单独入队 mkdir：ProcessUploadAsync 对目录调 MkdirAsync 而非丢弃；EnqueueLocalChangeAsync 移除对目录的 File.Exists 丢弃分支",
+    "全量扫描补齐缺失的目录快照/FileEntry 行，空目录在其他设备可见",
+    "目录重命名不再因缺索引 404（索引补齐后经既有 Move 路径收敛）",
+    "补单测：新建目录同步为服务端条目；空目录多设备可见；目录重命名收敛"
+   ],
+   "goal": "目录级变更成为同步一等公民，多设备目录树收敛",
+   "acceptanceCriteria": [
+    {
+     "text": "单测覆盖目录 mkdir 与空目录可见",
+     "verification": "自动",
+     "command": "dotnet test --filter SyncEngine"
+    },
+    {
+     "text": "全量测试全绿",
+     "verification": "自动",
+     "command": "dotnet test CloudPan.Tests -c Release"
+    },
+    {
+     "text": "dotnet build 全绿",
+     "verification": "自动",
+     "command": "dotnet build CloudPan.sln -c Release"
+    }
+   ],
+   "attempts": 0,
+   "statusReason": null,
+   "note": "执行者记录（T-046）：本地目录创建同步为服务端条目——目录成为同步一等公民。改动文件：CloudPan.Client.Core/Services/SyncEngine.Changes.cs（EnqueueLocalChangeAsync 上传分支对目录单独入队 mkdir，不再被 File.Exists 丢弃；目录快照已存在则跳过重复入队）+ SyncEngine.Mkdir.cs（新增 partial：ProcessMkdirAsync 调服务端 MkdirAsync 建立目录条目并记录/更新目录快照）+ SyncEngine.Transfers.cs（ProcessUploadAsync 顶部对目录转发 ProcessMkdirAsync，独立文件承载避免单文件超行数上限）+ SyncEngine.FullScan.cs（全量扫描收集本地目录 localDirs，快照匹配判定含目录，缺失目录入队 mkdir——空目录在其他设备可见）+ CloudPan.Server.Core/Files/FileOperationService.cs（MkdirAsync 不再追加尾斜杠：目录条目以无尾斜杠路径存储，与客户端快照约定/FileIndexService.Move 前缀/浏览路径归一化一致，索引补齐后目录重命名经既有 Move 路径收敛不再 404）+ CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 3 单测：FullScan_新建目录_入队mkdir并同步为服务端条目 / ApplyRemoteChanges_远端目录_空目录快照并浏览可见 / ProcessRename_目录_快照收敛到新路径）+ MockApiClient.cs（MkdirAsync 无尾斜杠存储且 Hash=null 表示目录、GetFileTreeAsync 按 Hash 判目录类型、记录 MkdirCalls/MoveCalls、Reset 清空）。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test --filter SyncEngine -c Release 通过（52/52，含新增 3 个目录测试）；dotnet test CloudPan.Tests -c Release 通过（273/273）。已知边界（非本任务范围）：目录删除传播未实现（客户端全量扫描仅对 File 快照判定删除）；目录条目统一无尾斜杠，本修复前带尾斜杠条目（服务端测试数据）不迁移。【验收 2026-08-03】独立复核通过：① dotnet test --filter SyncEngine → 52/52 全绿，已核实含 3 个目录用例（FullScan_新建目录_入队mkdir并同步为服务端条目 / ApplyRemoteChanges_远端目录_空目录快照并浏览可见 / ProcessRename_目录_快照收敛到新路径），覆盖目录 mkdir 与空目录可见；② dotnet test CloudPan.Tests -c Release → 273/273 全绿；③ dotnet build CloudPan.sln -c Release → Build succeeded，0 警告 0 错误。三条自动验收标准全部通过，无手动项，裁决 done。"
+  },
+  {
+   "id": "T-047",
+   "title": "选择性同步选择集改排除集语义",
+   "dimension": "function",
+   "priority": "P2",
+   "status": "done",
+   "batch": 4,
+   "findingId": "F-47",
+   "dependsOn": [],
+   "location": "CloudPan.Client.UI/UI/SelectiveSyncPanel.cs:20-24,201-212; CloudPan.Client.Core/Services/SyncEngine.Scan.cs:447-459",
+   "scope": "SelectiveSyncPanel + SyncEngine.IsPathSelected",
+   "requirements": [
+    "勾选语义改为『排除集』：默认全选，取消勾选=排除该子树，SelectedPaths 只含未勾选排除路径；或 root 不参与收集、仅收集叶子勾选节点/前缀匹配",
+    "空集合提供显式『全不同步』状态，不再回退为 { '/' } 全选",
+    "补单测：取消勾选子目录后 IsPathSelected 对该子树返回 false，其余路径 true"
+   ],
+   "goal": "用户取消勾选的目录真正不再同步，选择性同步与 UI 语义一致",
+   "acceptanceCriteria": [
+    {
+     "text": "单测覆盖『取消勾选子树→IsPathSelected false』与『空集合→全不同步』",
+     "verification": "自动",
+     "command": "dotnet test --filter SyncEngine"
+    },
+    {
+     "text": "全量测试全绿",
+     "verification": "自动",
+     "command": "dotnet test CloudPan.Tests -c Release"
+    }
+   ],
+   "attempts": 0,
+   "statusReason": null,
+   "note": "执行者记录（T-047）：选择性同步由『选择集收集（root \"/\" 恒被收集→前缀恒匹配→取消勾选不生效）』改为『排除集语义』——取消勾选的目录真正不再同步。改动文件：CloudPan.Client.UI/UI/SelectiveSyncPanel.cs（SelectedPaths 属性改为排除集：getter 按树勾选态收集顶层未勾选子树，空树/全选返回 {\"/\"} 全选默认，root 未勾选返回空集合=显式全不同步（不再回退 {\"/\"} 全选）；setter/ApplySelections 按排除集回显：空集合=全部取消勾选，含 \"/\"=全选，其余=命中排除子树则取消勾选；移除原 CollectChecked，新增 IsFullyChecked/CollectUnchecked）+ CloudPan.Client.Core/Services/SyncEngine.FullScan.cs（IsPathSelected 改排除集：空集合=全不同步，含 \"/\"=全选（兼容 v1.0.0 旧选择集默认及恒含根节点配置），其余=命中任一排除子树（含深层路径）则不同步）+ CloudPan.Tests/Client/Services/SyncEngineTests.cs（新增 5 单测：IsPathSelected_取消勾选子树_该子树false其余路径true / 空集合_显式全不同步 / 全选默认值_全选 / 旧版选择集含根_兼容全选 / 嵌套排除子树_深层不同步且不误伤同级）。语义：空集合=全不同步（字面满足验收『空集合→全不同步』），含 \"/\"=全选（与 v1.0.0 默认配置一致、向后兼容），其余=排除子树（满足『取消勾选=排除该子树，SelectedPaths 只含未勾选排除路径』）。验证：dotnet build CloudPan.sln -c Release 通过（0 警告 0 错误）；dotnet test CloudPan.Tests -c Release 通过（278/278）；dotnet test --filter SyncEngine -c Release 通过（57/57，含新增 5 个 IsPathSelected 用例）。手动验收项：① 设置→选择性同步取消勾选子目录→保存→重启客户端→该目录远端文件不再下载（快照置 CloudOnly）、其余路径正常；② 取消全选→保存→重启→全部路径不同步；③ 全选/默认→保存→重启→全量同步恢复；④ 旧配置（v1.0.0 保存过设置、含 \"/\"）升级后仍为全选同步。已知边界（非本任务范围）：上传侧不经 IsPathSelected 过滤——排除子树内本地新建文件仍会上传（仅下载侧按排除集过滤）；目录快照仍创建（ApplyRemoteChanges 目录分支先于 IsPathSelected）。【验收 2026-08-03】task-verifier 独立复核——自动项全过：① dotnet build CloudPan.sln -c Release → Build succeeded，0 警告 0 错误；② dotnet test --filter SyncEngine（-c Release --no-build）→ 57/57 全绿，已核实含 5 个 IsPathSelected 用例（取消勾选子树_该子树false其余路径true / 空集合_显式全不同步 / 全选默认值_全选 / 旧版选择集含根_兼容全选 / 嵌套排除子树_深层不同步且不误伤同级），覆盖验收『取消勾选子树→IsPathSelected false』与『空集合→全不同步』；③ dotnet test CloudPan.Tests -c Release → 278/278 全绿。手动项代码路径核验（逻辑存在，UI 行为需人工确认）：① 取消勾选子目录→重启→远端不下载：SyncEngine.Scan.cs:172-185 未选中路径快照置 CloudOnly 不入下载队列；SelectiveSyncPanel.cs:20-42 getter 经 CollectUnchecked 收集顶层未勾选子树；TrayAppContext.Actions.cs:81 保存 → SyncEngine.cs:135 从同源 config.SelectedPaths 加载。② 取消全选→全不同步：SelectiveSyncPanel.cs:31-34 root 未勾选返回空集合；SyncEngine.FullScan.cs:253-256 空集合→全不同步。③ 全选/默认→全量同步恢复：SelectiveSyncPanel.cs:26-29 全选返回 \"/\"；SyncEngine.FullScan.cs:258-262 含 \"/\"→全选。④ 旧配置含 \"/\" 升级兼容：SyncEngine.FullScan.cs:258-262 与 SelectiveSyncPanel.cs:214-218 均对含 \"/\" 走全选分支。需人工确认：①重启后排除子树远端文件不再下载（快照 CloudOnly）且其余路径正常；②取消全选保存重启后全部路径不同步；③全选/默认保存重启后全量同步恢复；④v1.0.0 旧配置升级后仍为全选同步。自动全过 + 含手动项 → 留 acceptance 待人工确认。 【人工确认 2026-08-03】用户确认通过，置 done。",
+   "updatedAt": "2026-08-03"
+  },
+  {
+   "id": "T-048",
+   "title": "RateLimit 中间件 Timer 泄漏修复 + 豁免清单契约化",
+   "dimension": "architecture",
+   "priority": "P2",
+   "status": "done",
+   "batch": 4,
+   "findingId": "F-48",
+   "dependsOn": [],
+   "location": "CloudPan.Server.Host/Middleware/RateLimitMiddleware.cs:14-30,39-51",
+   "scope": "RateLimitMiddleware + SpecEndpoints",
+   "requirements": [
+    "移除 RateLimitMiddleware 内 static System.Threading.Timer（无 Dispose 路径），限流状态清理改 IMemoryCache 过期或 BackgroundHostedService 周期清理",
+    "豁免路径改由 SpecEndpoints 契约元数据判定（auth=public / kind=upload-download），删除 4 处魔数字符串",
+    "补验证：中间件无裸 Timer、无 /api/files/upload 等魔数"
+   ],
+   "goal": "中间件资源生命周期收敛，限流豁免与真实路由契约一致不漂移",
+   "acceptanceCriteria": [
+    {
+     "text": "RateLimitMiddleware 无裸 Timer",
+     "verification": "自动",
+     "command": "grep -n 'System.Threading.Timer' CloudPan.Server.Host/Middleware/RateLimitMiddleware.cs 无匹配"
+    },
+    {
+     "text": "RateLimitMiddleware 无豁免魔数",
+     "verification": "自动",
+     "command": "grep -n '\"/api/files/upload\"\\|/api/files/download\"' CloudPan.Server.Host/Middleware/RateLimitMiddleware.cs 无匹配"
+    },
+    {
+     "text": "dotnet build 全绿",
+     "verification": "自动",
+     "command": "dotnet build CloudPan.sln -c Release"
+    }
+   ],
+   "attempts": 0,
+   "statusReason": null,
+   "note": "执行者记录（T-048）：RateLimit 中间件 Timer 泄漏修复 + 豁免清单契约化。改动文件：CloudPan.Server.Host/Middleware/RateLimitMiddleware.cs（① 移除 static ConcurrentDictionary + static System.Threading.Timer + 静态构造函数——原无任何 Dispose 路径，进程退出泄漏；限流状态改存 IMemoryCache（Program.cs 已 AddMemoryCache()，可注入），GetOrCreate 条目设 SlidingExpiration=2 分钟，过期条目由缓存内部清理接管，语义与原 1 分钟滑动窗口一致（持续请求时条目存活，超过窗口期后计数重置）；② 豁免路径 4 处魔数字符串改 SpecRoutes 契约常量：FilesUpload/FilesUploadChunk（POST）、FilesDownload（GET StartsWith）、Health，与 shared-spec.json 契约同源，改 spec 重跑 CodeGen 即全链路生效不漂移。契约说明：EndpointSpec 仅有 Method/Path/Auth/Description，无 kind 字段，故 upload/download 豁免以 SpecRoutes 路由常量驱动；/share/{shareId} 等公开端点故意不豁免（按 IP 限流防分享密码暴力破解），不能按 auth==Public 一刀切，Health 豁免用 SpecRoutes.Health 常量）。验证：① grep -n 'System.Threading.Timer' RateLimitMiddleware.cs 无匹配；② grep -n '\"/api/files/upload\"\\|/api/files/download\"' RateLimitMiddleware.cs 无匹配；③ dotnet build CloudPan.sln -c Release → Build succeeded，0 警告 0 错误；④ dotnet test CloudPan.Tests -c Release → 278/278 全绿（含 SpecRoutesConsistencyTests 契约一致性）。【验收 2026-08-03】task-verifier 独立复核——三条自动验收标准全过：① grep -n 'System.Threading.Timer' CloudPan.Server.Host/Middleware/RateLimitMiddleware.cs 无匹配（已核实代码改用 IMemoryCache 滑动过期清理，GetOrCreate 条目 SlidingExpiration=2min，无 static Timer/静态构造函数/Dispose 缺口，缓存内部接管过期清理）；② grep -n '\"/api/files/upload\"\\|/api/files/download\"' RateLimitMiddleware.cs 无匹配（已核实豁免路径用 SpecRoutes.FilesUpload/FilesUploadChunk/FilesDownload/Health 契约常量，SpecRoutes.g.cs 头部标注 AUTO-GENERATED from shared-spec.json v1.2.0，上传/下载/Health 常量与 api.endpoints 同源，非硬编码漂移）；③ dotnet build CloudPan.sln -c Release → Build succeeded，0 警告 0 错误。附加核验：dotnet test CloudPan.Tests -c Release --no-build --filter SpecRoutes → 1/1 通过（SpecRoutesConsistencyTests 验证每条路由常量已在 SpecEndpoints 注册，契约一致性守护，覆盖 upload/download 路由）；AddMemoryCache() 已注册（Program.cs:84），IMemoryCache 注入合法；取舍核查——/share/ 公开端点按 IP 限流不豁免（防分享密码暴力破解），Health 单独用 SpecRoutes.Health 豁免，符合 T-048 需求意图且中间件注释已说明。全部自动项通过且无手动项 → done。",
+   "updatedAt": "2026-08-03"
+  }
+ ]
+}
