@@ -4894,7 +4894,7 @@
       "title": "缩略图端点契约化（spec 补 clientMethod + 删手工 partial + Kotlin 同步生成）",
       "dimension": "architecture",
       "priority": "P1",
-      "status": "in-progress",
+      "status": "acceptance",
       "batch": 9,
       "findingId": "F-139",
       "dependsOn": [],
@@ -4931,7 +4931,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "依赖 T-086 生成管线（已 done）：本任务只需把缩略图端点补进 spec clientMethod，其余由 CodeGen 全自动覆盖。",
+      "note": "执行（T-097）：改动文件清单——shared-spec.json（/api/thumbnails 补 clientMethod：kind=binary，path/width 查询参数，returns=byte[] 二进制响应，kotlinReturns=Response<okhttp3.ResponseBody>；版本 1.8.0→1.9.0 + changelog）；CloudPan.CodeGen/Generators/ClientApiRenderer.cs（新增 binary kind 方法体：URL 构造同 query，非 200/异常返回 null 保留 ThumbnailLoader 依赖语义）；ApiClientGenerator.cs（生成骨架头部补 using Microsoft.Extensions.Logging）；SpecModels.cs（kind 注释补 binary）；删除 CloudPan.Contract/IApiClient.Thumbnails.cs 手工 partial 与 CloudPan.Client.Core/Services/ApiClient.cs 手写 GetThumbnailAsync，改由 CodeGen 生成 C# 接口/骨架签名；KotlinApiGenerator 经 spec clientMethod 同步生成 getThumbnail（@Query path/width → Response<okhttp3.ResponseBody>，与 C# 参数一致）。调用点 ThumbnailLoader.Fetcher（Func<string,int,CancellationToken,Task<byte[]?>>）/MainWindow 签名不变，双端行为不变。验证：dotnet run --project CloudPan.CodeGen -- --verify 通过（15 项全一致 + 版本治理 10 条）；grep 确认 CloudPan.Contract/Generated/ClientApi.g.cs:73 含 GetThumbnailAsync 且 IApiClient.Thumbnails.cs 不存在、CloudPanApi.g.kt 含 getThumbnail；dotnet build CloudPan.sln -c Release 0 错误 0 警告；dotnet test CloudPan.Tests -c Release 343/343 通过。commit 698a8d8",
       "updatedAt": "2026-08-04"
     },
     {
