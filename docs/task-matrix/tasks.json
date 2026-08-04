@@ -5180,7 +5180,7 @@
       "title": "Windows 缩略图本地缓存 LRU/时间回收（对齐 T-088 语义）",
       "dimension": "function",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 9,
       "findingId": "F-146",
       "dependsOn": [],
@@ -5211,7 +5211,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "服务端 .thumbnails 回收由 T-088 落地，本任务补齐客户端 %LocalAppData% 缓存维度。| 执行（task-executor 2026-08-04）：改动文件 = CloudPan.Client.UI/UI/ThumbnailLoader.cs（新增 ReclaimExpiredThumbnails 删除 LastWriteTimeUtc<cutoff 的 *.jpg，LRU 语义写入后不再改动；ScheduleCacheReclaim 以 Task.Run+try-catch 后台回收，保留期读 SpecConfig.ThumbnailCacheRetentionDays=30 对齐 T-088；GetThumbCachePath 提取 GetCacheDir；首次网格渲染经 ScheduleCacheReclaimOnce 调度一次；缓存 key 含版本（v={item.Version} 既有），文件更新后旧缓存孤儿化可回收）、CloudPan.Tests/Client/UI/ThumbnailLoaderTests.cs（新增 5 条单测：过期删除新保留 / cutoff 边界保留 / 目录不存在返回 0 / 非 jpg 不误删 / 调度后台删除过期）、tasks.json。验证：AC1 grep -n 'Reclaim|Retention|LRU|清理' ThumbnailLoader.cs 有匹配；dotnet test --filter 'FullyQualifiedName~ThumbnailLoader' 5/5 通过；dotnet test CloudPan.Tests -c Release 362/362 通过（含新增 5 条）；dotnet build CloudPan.sln -c Release 0 错误 0 警告。7.4：缓存目录在 UI 线程捕获后交后台任务，后台仅文件删除不访问 UI 成员（_cacheReclaimStarted 仅 UI 线程读写）；7.2：Task.Run 包裹完整 try-catch，异常不回冒不丢失。",
+      "note": "服务端 .thumbnails 回收由 T-088 落地，本任务补齐客户端 %LocalAppData% 缓存维度。| 执行（task-executor 2026-08-04）：改动文件 = CloudPan.Client.UI/UI/ThumbnailLoader.cs（新增 ReclaimExpiredThumbnails 删除 LastWriteTimeUtc<cutoff 的 *.jpg，LRU 语义写入后不再改动；ScheduleCacheReclaim 以 Task.Run+try-catch 后台回收，保留期读 SpecConfig.ThumbnailCacheRetentionDays=30 对齐 T-088；GetThumbCachePath 提取 GetCacheDir；首次网格渲染经 ScheduleCacheReclaimOnce 调度一次；缓存 key 含版本（v={item.Version} 既有），文件更新后旧缓存孤儿化可回收）、CloudPan.Tests/Client/UI/ThumbnailLoaderTests.cs（新增 5 条单测：过期删除新保留 / cutoff 边界保留 / 目录不存在返回 0 / 非 jpg 不误删 / 调度后台删除过期）、tasks.json。验证：AC1 grep -n 'Reclaim|Retention|LRU|清理' ThumbnailLoader.cs 有匹配；dotnet test --filter 'FullyQualifiedName~ThumbnailLoader' 5/5 通过；dotnet test CloudPan.Tests -c Release 362/362 通过（含新增 5 条）；dotnet build CloudPan.sln -c Release 0 错误 0 警告。7.4：缓存目录在 UI 线程捕获后交后台任务，后台仅文件删除不访问 UI 成员（_cacheReclaimStarted 仅 UI 线程读写）；7.2：Task.Run 包裹完整 try-catch，异常不回冒不丢失。| 验收（task-verifier 2026-08-04）：AC1 grep -n 'Reclaim|Retention|LRU|清理' ThumbnailLoader.cs 有匹配（:28/198/210/215/238/252）；AC2 dotnet test --filter ThumbnailLoader 5/5 通过（含 STA 调度回收）；AC3 dotnet test CloudPan.Tests -c Release 362/362 通过 + dotnet build CloudPan.sln -c Release 0 错误 0 警告。独立核对：LRU 语义（LastWriteTimeUtc<cutoff 删除 *.jpg，写入后不再改动即最后使用时间）与 T-088 服务端 ThumbnailService.ReclaimExpiredThumbnailsAsync 逐行对齐；保留期读 SpecConfig.ThumbnailCacheRetentionDays=30（shared-spec.json 同源，服务端 BackgroundHostedService.cs:34 同源消费）；7.2 Task.Run+完整 try-catch 异常不丢失；7.4 后台任务仅捕获 cutoff/dir 后调用静态纯文件 I/O，不访问 UI 成员（_cacheReclaimStarted 仅 UI 线程读写）；缓存 key 含 v={item.Version}（:184），文件更新后旧缓存孤儿化可回收。裁决：done。",
       "updatedAt": "2026-08-04"
     },
     {
