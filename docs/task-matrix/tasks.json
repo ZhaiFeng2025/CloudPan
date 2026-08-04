@@ -4711,7 +4711,7 @@
       "title": "SettingsForm 归因双份清理（删 ClassifyTestError/Flatten/GetFolderSize 死代码）",
       "dimension": "simplicity",
       "priority": "P2",
-      "status": "acceptance",
+      "status": "done",
       "batch": 8,
       "findingId": "F-137",
       "dependsOn": [],
@@ -4741,7 +4741,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "执行：ErrorAttribution 新增 ErrorAttributionScenario（Sync 默认/TestConnection），FromException/Classify 增加场景参数，测试连接场景复用连接类文案（NotFound→服务端地址不正确、无状态码→无法连接到服务端、超时→连接超时、兜底→连接失败）；AccountTab 删除 ClassifyTestError/Flatten/[Obsolete]GetFolderSize 及冗余 using System.Net，catch 改调 ErrorAttribution.FromException(ex, ErrorAttributionScenario.TestConnection)。\n验证：AC1 grep 无匹配、AC2 grep 命中 AccountTab.cs:274、dotnet test 343/343 通过、dotnet build -c Release 0警告0错误。",
+      "note": "执行：ErrorAttribution 新增 ErrorAttributionScenario（Sync 默认/TestConnection），FromException/Classify 增加场景参数，测试连接场景复用连接类文案（NotFound→服务端地址不正确、无状态码→无法连接到服务端、超时→连接超时、兜底→连接失败）；AccountTab 删除 ClassifyTestError/Flatten/[Obsolete]GetFolderSize 及冗余 using System.Net，catch 改调 ErrorAttribution.FromException(ex, ErrorAttributionScenario.TestConnection)。\n验证：AC1 grep 无匹配、AC2 grep 命中 AccountTab.cs:274、dotnet test 343/343 通过、dotnet build -c Release 0警告0错误。\n[验收] 独立裁决通过（无手动项）：AC1 实测 grep CloudPan.Client.UI/*.cs 无 ClassifyTestError/同步 GetFolderSize 匹配；AC2 实测 AccountTab.cs:274 调 ErrorAttribution.FromException(ex, ErrorAttributionScenario.TestConnection)；AC3 实测 dotnet test 343/343 通过 + dotnet build -c Release 0警告0错误。独立核对：GetFolderSizeAsync 保留（292 定义/332 调用）仅删 [Obsolete] 同步版；TestConnection 四类文案与原 ClassifyTestError 逐字一致（NotFound/无状态码/超时/兜底，且取最高优先级语义优于原取首个）；全库 *.cs 无 ClassifyTestError/同步 GetFolderSize 残留引用；Sync 默认分支文案未变、FromException 新增默认参数字段兼容，SyncEngine.Queue.cs:86 无参调用仍走 Sync 行为不变。",
       "updatedAt": "2026-08-04"
     },
     {
