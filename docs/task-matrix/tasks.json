@@ -5022,7 +5022,7 @@
       "title": "FileHasher/SyncIgnoreParser 下沉 Infrastructure + 删除 ComputeHashAsync 转发",
       "dimension": "architecture",
       "priority": "P2",
-      "status": "in-progress",
+      "status": "acceptance",
       "batch": 9,
       "findingId": "F-142",
       "dependsOn": [],
@@ -5054,7 +5054,7 @@
       ],
       "attempts": 0,
       "statusReason": null,
-      "note": "与 T-099 不冲突：T-099 拆分 SyncEngine/MainWindow，本任务仅移动工具类位置与删转发，改动面独立。",
+      "note": "执行（T-100）：改动文件清单——①FileHasher/SyncIgnoreParser 自 CloudPan.Contract 迁至 CloudPan.Infrastructure/Storage/（命名空间 CloudPan.Infrastructure.Storage，内容行为不变，git 识别为 rename），删除契约层两副本；②IFileStorageService 删除 ComputeHashAsync 声明，FileStorageService 删除 ComputeHashAsync 转发实现（内部 AtomicWriteAsync 改直连 FileHasher.ComputeSha256Async，移除不再使用的 using CloudPan.Contract）；③服务端 7 处 _storage.ComputeHashAsync → FileHasher.ComputeSha256Async（TrashService×2、VersionHistoryService、UploadService、ConflictBackupHelper、ChunkedUploadService.Finalize×2，均已有 using CloudPan.Infrastructure.Storage）；④客户端调用文件补 using CloudPan.Infrastructure.Storage（SyncEngine.Transfers/Changes/FullScan、ApiClient、ApiClient.ChunkedUpload、SyncPathSelector、SyncEngine、SyncPath、FileWatcherService）；⑤测试更新（FileStorageServiceTests、VersionHistoryServiceTests、MockApiClient、SyncEngineTests、PathValidationBenchmarks、HashBenchmarks，HashBenchmarks 补回 _storage! 空值容忍）。\n验证：grep AC1（class FileHasher/class SyncIgnoreParser Infrastructure 有匹配、Contract 无匹配）通过；grep AC2（IFileStorageService 无 ComputeHashAsync）通过；dotnet test --filter Architecture 15/15 通过；dotnet test CloudPan.Tests -c Release 347/347 通过；dotnet build CloudPan.sln -c Release 0 警告 0 错误。Contract 层剩余非 Generated 文件仅 DownloadResult.cs/IApiClient.Config.cs（传输抽象，按需求保留）。",
       "updatedAt": "2026-08-04"
     },
     {
