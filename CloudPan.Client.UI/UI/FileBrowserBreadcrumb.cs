@@ -2,26 +2,29 @@ using CloudPan.Infrastructure.Design;
 
 namespace CloudPan.Client.UI;
 
-/// <summary>FileBrowserView 部分类：面包屑导航栏重建、路径段链接与分隔符。</summary>
-public partial class FileBrowserView
+/// <summary>文件浏览面包屑协作类（T-109）：按当前路径重建导航段、路径段链接与分隔符。</summary>
+internal sealed class FileBrowserBreadcrumb
 {
-    // ================================================================
-    // 面包屑
-    // ================================================================
+    private readonly FileBrowserView _view;
+
+    public FileBrowserBreadcrumb(FileBrowserView view)
+    {
+        _view = view;
+    }
 
     /// <summary>重建面包屑导航：仅保留「上一级」按钮，按当前路径生成可点击的路径段。</summary>
-    private void RebuildBreadcrumb(string path)
+    public void Rebuild(string path)
     {
-        _breadcrumbBar.SuspendLayout();
+        _view._breadcrumbBar.SuspendLayout();
         // 移除并释放「上一级」之外的全部动态面包屑控件（索引 ≥1）
-        for (int i = _breadcrumbBar.Controls.Count - 1; i >= 1; i--)
+        for (int i = _view._breadcrumbBar.Controls.Count - 1; i >= 1; i--)
         {
-            Control c = _breadcrumbBar.Controls[i];
-            _breadcrumbBar.Controls.RemoveAt(i);
+            Control c = _view._breadcrumbBar.Controls[i];
+            _view._breadcrumbBar.Controls.RemoveAt(i);
             c.Dispose();
         }
 
-        _breadcrumbBar.Controls.Add(_upButton);
+        _view._breadcrumbBar.Controls.Add(_view._upButton);
 
         AddBreadcrumbLink("主目录", "/");
         string p = path.Trim('/');
@@ -31,12 +34,12 @@ public partial class FileBrowserView
             foreach (string seg in p.Split('/'))
             {
                 acc += "/" + seg;
-                _breadcrumbBar.Controls.Add(CreateBreadcrumbSeparator());
+                _view._breadcrumbBar.Controls.Add(CreateBreadcrumbSeparator());
                 AddBreadcrumbLink(seg, acc);
             }
         }
 
-        _breadcrumbBar.ResumeLayout();
+        _view._breadcrumbBar.ResumeLayout();
     }
 
     /// <summary>添加一个可点击的面包屑段（Tag 存目标路径）。</summary>
@@ -52,7 +55,7 @@ public partial class FileBrowserView
         };
         link.FlatAppearance.BorderColor = CloudPanColors.BorderLight;
         link.Click += BreadcrumbButton_Click;
-        _breadcrumbBar.Controls.Add(link);
+        _view._breadcrumbBar.Controls.Add(link);
     }
 
     /// <summary>创建面包屑段之间的分隔符。</summary>
@@ -74,7 +77,7 @@ public partial class FileBrowserView
     {
         if (sender is Button btn && btn.Tag is string path)
         {
-            DirectoryActivated?.Invoke(path);
+            _view.RaiseDirectoryActivated(path);
         }
     }
 }

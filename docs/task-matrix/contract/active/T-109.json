@@ -1,0 +1,46 @@
+{
+ "id": "T-109",
+ "title": "Client.UI 巨型窗体真实拆分（SetupForm/FileBrowserView/SettingsForm/TrayAppContext 聚合 ≤400 + 删豁免登记）",
+ "dimension": "architecture",
+ "priority": "P0",
+ "status": "acceptance",
+ "batch": 10,
+ "findingId": "F-151",
+ "dependsOn": [],
+ "location": "CloudPan.Client.UI/UI/{SetupForm,FileBrowserView,SettingsForm,TrayAppContext}*.cs（聚合 1091/847/684/522）；CloudPan.Tests/Architecture/CodeQualityTests.cs:104-140（豁免表）",
+ "scope": "CloudPan.Client.UI 4 个 public 类型 + CodeQualityTests 豁免表登记",
+ "requirements": [
+  "按职责把 SetupForm（聚合 1091 行）拆为协作类至聚合 ≤400（引导步骤/校验/发现逻辑外提，禁止仅新增空壳 partial 搬文件）",
+  "拆分 FileBrowserView（聚合 847）至 ≤400（渲染/列表操作/事件分派外提）",
+  "拆分 SettingsForm（聚合 684）至 ≤400（各 Tab 逻辑外提）",
+  "拆分 TrayAppContext（聚合 522）至 ≤400（菜单/动作/状态外提）",
+  "CodeQualityTests 豁免表删除这 4 项 Deadline 登记，到期断言强制 ≤400"
+ ],
+ "goal": "4 个 public 类型聚合行数 ≤400，豁免表无残留登记，CodeQualityTests 到期断言由红转绿，CI 架构门禁恢复全绿",
+ "acceptanceCriteria": [
+  {
+   "text": "CodeQualityTests 到期断言对 SetupForm/FileBrowserView/SettingsForm/TrayAppContext 全部通过（聚合≤400 且豁免表删除登记）",
+   "verification": "自动",
+   "command": "dotnet test --filter CodeQualityTests"
+  },
+  {
+   "text": "行为断言：拆分后 4 类聚合行数独立核对 ≤400（wc 聚合各 partial 文件）",
+   "verification": "自动",
+   "command": "wc -l CloudPan.Client.UI/UI/SetupForm*.cs CloudPan.Client.UI/UI/FileBrowserView*.cs CloudPan.Client.UI/UI/SettingsForm*.cs CloudPan.Client.UI/UI/TrayAppContext*.cs"
+  },
+  {
+   "text": "全量测试全绿 + dotnet build 全绿",
+   "verification": "自动",
+   "command": "dotnet test CloudPan.Tests -c Release && dotnet build CloudPan.sln -c Release"
+  },
+  {
+   "text": "行为断言（手动回归）：主窗文件浏览、设置各 Tab、托盘菜单三项核心操作功能不回归",
+   "verification": "手动",
+   "command": null
+  }
+ ],
+ "attempts": 0,
+ "statusReason": null,
+ "note": "拆分 4 个 Client.UI 巨型类型聚合至 ≤400，CodeQualityTests 豁免表删除 4 项登记。SetupForm 1091→273（外提 SetupWizardLayout/SetupWizardValidation/SetupWizardDiscovery）；FileBrowserView 847→267（外提 FileBrowserLayoutBuilder/FileBrowserEvents/FileBrowserListRenderer/FileBrowserBreadcrumb/FileBrowserContextMenu，保留反射成员 _list/_deleteButton/_shareButton/_versionButton/_downloadButton/_listMenu/_menu*/ListMenu_Opening 与 ValidateFolderSafety）；SettingsForm 684→176（外提 SettingsAccountTab/SettingsBandwidthTab/SettingsSyncTab）；TrayAppContext 522→140（外提 TrayActions/TrayEventHandlers/TrayMenu）。公开 API（事件/属性/构造函数/TrayIcon）不变，逻辑等价搬运。验证：dotnet build CloudPan.sln -c Release 全绿（0 警告 0 错误）；dotnet test --filter CodeQualityTests 4/5 通过，唯一失败为 Server 侧 ServerInstaller/SettingsPage/ServerWindow/WebSocketHandler 到期断言（batch9 done 但 >400，属平行任务 T-110/T-111 范围）；全量 dotnet test CloudPan.Tests -c Release 365/366 通过，唯一失败同上；FileBrowserViewTests 8/8 通过。改动文件：CloudPan.Client.UI/UI/{SetupForm,FileBrowserView,SettingsForm,TrayAppContext}.cs + 14 个新增 internal 协作类 + 删除 10 个旧 partial + CloudPan.Tests/Architecture/CodeQualityTests.cs（豁免表删 4 项）。",
+ "updatedAt": "2026-08-04"
+}

@@ -2,14 +2,21 @@ using CloudPan.Infrastructure.Design;
 
 namespace CloudPan.Client.UI;
 
-/// <summary>SettingsForm 部分类：带宽限制 Tab 页（上下行限速输入 + 预设按钮 + 数字输入过滤）。</summary>
-public partial class SettingsForm
+/// <summary>设置窗口带宽限制 Tab 协作类（T-109）：上下行限速输入 + 预设按钮 + 数字输入过滤。</summary>
+internal sealed class SettingsBandwidthTab
 {
+    private readonly SettingsForm _form;
+
+    public SettingsBandwidthTab(SettingsForm form)
+    {
+        _form = form;
+    }
+
     // ──────────────────────────────────────────────
     // Tab 2: 带宽限制（含预设按钮）
     // ──────────────────────────────────────────────
 
-    private void BuildBandwidthTab(long uploadSpeedBps, long downloadSpeedBps)
+    public void BuildBandwidthTab(long uploadSpeedBps, long downloadSpeedBps)
     {
         TabPage bwTab = new TabPage("带宽限制");
         FlowLayoutPanel bwPanel = new FlowLayoutPanel
@@ -26,13 +33,13 @@ public partial class SettingsForm
             AutoSize = true,
             Margin = new Padding(0, 0, 0, 2),
         });
-        _uploadLimitBox = new TextBox
+        _form._uploadLimitBox = new TextBox
         {
             Text = (uploadSpeedBps / 1024).ToString(),
             Width = 120,
         };
-        _uploadLimitBox.KeyPress += NumericOnly_KeyPress;
-        bwPanel.Controls.Add(_uploadLimitBox);
+        _form._uploadLimitBox.KeyPress += NumericOnly_KeyPress;
+        bwPanel.Controls.Add(_form._uploadLimitBox);
 
         // 下载限速
         bwPanel.Controls.Add(new Label
@@ -41,13 +48,13 @@ public partial class SettingsForm
             AutoSize = true,
             Margin = new Padding(0, 10, 0, 2),
         });
-        _downloadLimitBox = new TextBox
+        _form._downloadLimitBox = new TextBox
         {
             Text = (downloadSpeedBps / 1024).ToString(),
             Width = 120,
         };
-        _downloadLimitBox.KeyPress += NumericOnly_KeyPress;
-        bwPanel.Controls.Add(_downloadLimitBox);
+        _form._downloadLimitBox.KeyPress += NumericOnly_KeyPress;
+        bwPanel.Controls.Add(_form._downloadLimitBox);
 
         // 预设按钮
         bwPanel.Controls.Add(new Label
@@ -100,7 +107,7 @@ public partial class SettingsForm
 
         bwPanel.Controls.Add(presetRow);
         bwTab.Controls.Add(bwPanel);
-        _tabs.TabPages.Add(bwTab);
+        _form._tabs.TabPages.Add(bwTab);
     }
 
     // ──────────────────────────────────────────────
@@ -112,8 +119,8 @@ public partial class SettingsForm
     {
         if (sender is Button btn && btn.Tag is int value)
         {
-            _uploadLimitBox.Text = value.ToString();
-            _downloadLimitBox.Text = value.ToString();
+            _form._uploadLimitBox.Text = value.ToString();
+            _form._downloadLimitBox.Text = value.ToString();
         }
     }
 

@@ -1,53 +1,51 @@
-using System.Drawing.Drawing2D;
-using System.Net;
-using System.Net.Sockets;
-using System.Text;
-using System.Text.Json;
-using CloudPan.Contract;
 using CloudPan.Infrastructure.Design;
 
 namespace CloudPan.Client.UI;
 
 /// <summary>
 /// 配置窗口——支持局域网自动发现服务端，输入校验与视觉反馈。
+/// 引导步骤（布局/校验/发现）外提为 SetupWizardLayout/SetupWizardValidation/SetupWizardDiscovery 协作类（T-109）。
 /// </summary>
 public partial class SetupForm : Form
 {
-    private static readonly TimeSpan SearchTimeout = TimeSpan.FromSeconds(5);
-    private const int FieldMargin = CloudPanSpacing.MarginStandard;
+    internal const int FieldMargin = CloudPanSpacing.MarginStandard;
 
     // 输入控件
-    private readonly TextBox _serverUrlBox;
-    private readonly TextBox _syncRootBox;
-    private readonly TextBox _tokenBox;
+    internal readonly TextBox _serverUrlBox;
+    internal readonly TextBox _syncRootBox;
+    internal readonly TextBox _tokenBox;
 
     // 按钮
-    private readonly Button _searchButton;
-    private readonly Button _browseButton;
-    private readonly Button _tokenToggleBtn;
-    private Button _okButton = null!;
+    internal readonly Button _searchButton;
+    internal readonly Button _browseButton;
+    internal readonly Button _tokenToggleBtn;
+    internal Button _okButton = null!;
 
     // 状态指示
-    private readonly Label _statusLabel;
-    private readonly Label _urlStatusIcon;
-    private readonly ProgressBar _progressBar;
+    internal readonly Label _statusLabel;
+    internal readonly Label _urlStatusIcon;
+    internal readonly ProgressBar _progressBar;
 
     // 字段级提示（深灰 = 信息性提示，红色 = 阻止提交的错误）
-    private readonly Label _urlErrorLabel;
-    private readonly Label _folderErrorLabel;
-    private readonly Label _tokenErrorLabel;
+    internal readonly Label _urlErrorLabel;
+    internal readonly Label _folderErrorLabel;
+    internal readonly Label _tokenErrorLabel;
 
     // Token 下方提示（替代占位符覆盖层）
-    private readonly Label _tokenHintLabel;
+    internal readonly Label _tokenHintLabel;
 
     // 搜索按钮旋转动画 + 搜索状态标记
-    private readonly System.Windows.Forms.Timer _searchAnimTimer;
-    private int _searchAnimFrame;
-    private bool _isSearching;
-    private bool _searchFound;  // 搜索成功后设置，防止 TextChanged 重置状态图标
-    private static readonly string[] SearchSpinner = ["|", "/", "-", "\\"];
+    internal readonly System.Windows.Forms.Timer _searchAnimTimer;
+    internal int _searchAnimFrame;
+    internal bool _isSearching;
+    internal bool _searchFound;  // 搜索成功后设置，防止 TextChanged 重置状态图标
 
     private bool _tokenMasked = true;
+
+    // T-109：引导职责外提协作类（布局/校验/发现），只持表单引用惰性访问控件
+    private readonly SetupWizardLayout _layout;
+    private readonly SetupWizardValidation _validation;
+    private readonly SetupWizardDiscovery _discovery;
 
     // ─── 公共属性（供 Program.cs 读取） ───────────────────────────
     public string ServerUrl => _serverUrlBox.Text.Trim();
@@ -68,10 +66,15 @@ public partial class SetupForm : Form
         Font = new Font(CloudPanFonts.FontFamily, 9F);
         Padding = new Padding(0);
 
+        // ====== 职责外提协作类（只存引用，控件在下方初始化后由协作类惰性访问） ======
+        _validation = new SetupWizardValidation(this);
+        _discovery = new SetupWizardDiscovery(this);
+        _layout = new SetupWizardLayout(this, _validation);
+
         // ====== 输入控件初始化 ======
-        _serverUrlBox = CreateTextBox(defaultUrl, "http://192.168.1.100:8443");
-        _syncRootBox = CreateTextBox(defaultSyncRoot, @"C:\Users\用户名\CloudPan");
-        _tokenBox = CreateTextBox(defaultToken, "粘贴 64 字符家庭 Token");
+        _serverUrlBox = SetupWizardLayout.CreateTextBox(defaultUrl, "http://192.168.1.100:8443");
+        _syncRootBox = SetupWizardLayout.CreateTextBox(defaultSyncRoot, @"C:\Users\用户名\CloudPan");
+        _tokenBox = SetupWizardLayout.CreateTextBox(defaultToken, "粘贴 64 字符家庭 Token");
 
         // ====== 搜索状态图标（地址框右侧） ======
         _urlStatusIcon = new Label
@@ -86,24 +89,24 @@ public partial class SetupForm : Form
         };
 
         // ====== 按钮初始化 ======
-        _searchButton = CreateFlatButton("搜索局域网", 100);
-        _searchButton.Click += SearchButton_Click;
+        _searchButton = SetupWizardLayout.CreateFlatButton("搜索局域网", 100);
+        _searchButton.Click += _discovery.SearchButton_Click;
 
-        _browseButton = CreateFlatButton("浏览...", 76);
-        _browseButton.Click += OnBrowseClick;
+        _browseButton = SetupWizardLayout.CreateFlatButton("浏览...", 76);
+        _browseButton.Click += _discovery.OnBrowseClick;
 
-        _tokenToggleBtn = CreateFlatButton("显示", 62);
+        _tokenToggleBtn = SetupWizardLayout.CreateFlatButton("显示", 62);
         _tokenToggleBtn.Click += ToggleTokenMask;
         _tokenBox.PasswordChar = '*'; // Token 默认遮蔽（与 SettingsForm 行为一致）
 
         // ====== 搜索动画定时器（默认停止；必须在 _searchButton 之后创建） ======
         _searchAnimTimer = new System.Windows.Forms.Timer { Interval = 120 };
-        _searchAnimTimer.Tick += SearchAnimTimer_Tick;
+        _searchAnimTimer.Tick += _discovery.SearchAnimTimer_Tick;
 
         // ====== 错误/提示标签 ======
-        _urlErrorLabel = CreateFieldMessageLabel();
-        _folderErrorLabel = CreateFieldMessageLabel();
-        _tokenErrorLabel = CreateFieldMessageLabel();
+        _urlErrorLabel = SetupWizardLayout.CreateFieldMessageLabel();
+        _folderErrorLabel = SetupWizardLayout.CreateFieldMessageLabel();
+        _tokenErrorLabel = SetupWizardLayout.CreateFieldMessageLabel();
 
         // ====== Token 下方提示（占位符替代方案） ======
         _tokenHintLabel = new Label
@@ -135,22 +138,22 @@ public partial class SetupForm : Form
         };
 
         // ====== 实时校验（失去焦点时立即验证） ======
-        _serverUrlBox.Leave += ServerUrlBox_Leave;
-        _syncRootBox.Leave += SyncRootBox_Leave;
-        _tokenBox.Leave += TokenBox_Leave;
+        _serverUrlBox.Leave += _validation.ServerUrlBox_Leave;
+        _syncRootBox.Leave += _validation.SyncRootBox_Leave;
+        _tokenBox.Leave += _validation.TokenBox_Leave;
 
         // 手工编辑地址时重置搜索状态（搜索过程中不重置，搜索成功后用户手动改写时重置）
-        _serverUrlBox.TextChanged += ServerUrlBox_TextChanged;
+        _serverUrlBox.TextChanged += _discovery.ServerUrlBox_TextChanged;
 
         // Token 箱自动清理首尾空白（无长度限制，防止粘贴带空格时显示异常）
-        _tokenBox.TextChanged += TokenBox_TextChanged;
+        _tokenBox.TextChanged += _validation.TokenBox_TextChanged;
 
         // ====== 主布局：Dock/Fill + Panel 嵌套 ======
         Panel outerPanel = new Panel { Dock = DockStyle.Fill, BackColor = CloudPanColors.BackgroundWhite };
 
         // 添加顺序：自底向上
         // 1) 按钮行（Dock.Bottom → 始终在最底）
-        var btnRow = BuildButtonRow();
+        var btnRow = _layout.BuildButtonRow();
         if (btnRow.Tag is Button cancelBtn)
         {
             CancelButton = cancelBtn;
@@ -165,7 +168,7 @@ public partial class SetupForm : Form
             Padding = new Padding(FieldMargin, 4, FieldMargin, 0),
             BackColor = CloudPanColors.BackgroundWhite,
         };
-        BuildContentStack(contentPanel);
+        _layout.BuildContentStack(contentPanel);
         outerPanel.Controls.Add(contentPanel);
 
         // 3) 分隔线（Dock.Top → header 下方）
@@ -183,7 +186,7 @@ public partial class SetupForm : Form
             Height = 76,
             BackColor = CloudPanColors.BackgroundWhite,
         };
-        headerPanel.Paint += OnHeaderPaint;
+        headerPanel.Paint += SetupWizardLayout.OnHeaderPaint;
         outerPanel.Controls.Add(headerPanel);
 
         Controls.Add(outerPanel);
@@ -196,10 +199,65 @@ public partial class SetupForm : Form
     }
 
     // ════════════════════════════════════════════════════════════════
+    //  共享校验入口（SettingsForm 保存前复用；T-075 下沉为共享静态方法）
+    // ════════════════════════════════════════════════════════════════
+
+    /// <summary>检查同步文件夹是否安全可用（复用入口）。返回错误文案，null 表示安全。</summary>
+    /// <remarks>拒绝磁盘根目录、系统目录、网络盘、可移动磁盘与 .cloudpan 元数据目录；SetupForm/SettingsForm 保存前复用。</remarks>
+    internal static string? ValidateFolderSafety(string folder)
+    {
+        try
+        {
+            string normalized = Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar);
+            if (Path.GetPathRoot(normalized) == normalized)
+            {
+                return "不能选择磁盘根目录，请选择具体文件夹";
+            }
+
+            // 禁止系统目录
+            string sysRoot = Path.GetFullPath(Environment.GetFolderPath(Environment.SpecialFolder.Windows));
+            string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            string progFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+            if (normalized.StartsWith(sysRoot, StringComparison.OrdinalIgnoreCase)
+                || normalized.StartsWith(progFiles, StringComparison.OrdinalIgnoreCase)
+                || normalized.StartsWith(progFilesX86, StringComparison.OrdinalIgnoreCase))
+            {
+                return "不能选择系统目录，请选择用户文件夹";
+            }
+
+            // 禁止可移动磁盘和网络驱动器
+            DriveInfo drive = new DriveInfo(Path.GetPathRoot(normalized)!);
+            if (drive.DriveType == DriveType.Network)
+            {
+                return "不支持网络驱动器，请选择本地文件夹";
+            }
+            if (drive.DriveType == DriveType.Removable)
+            {
+                return "不支持移动磁盘，请选择内置硬盘上的文件夹";
+            }
+
+            // 禁止把 .cloudpan 元数据目录（或其子目录）作为同步根
+            foreach (string segment in normalized.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (string.Equals(segment, ".cloudpan", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "不能将 .cloudpan 元数据目录作为同步文件夹";
+                }
+            }
+
+            return null; // 安全
+        }
+        catch (Exception ex)
+        {
+            return $"路径无效: {ex.Message}";
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════
     //  表单控制（取消 / Token 显示切换）
     // ════════════════════════════════════════════════════════════════
 
-    private void CancelBtn_Click(object? sender, EventArgs e)
+    internal void CancelBtn_Click(object? sender, EventArgs e)
     {
         DialogResult = DialogResult.Cancel;
         Close();

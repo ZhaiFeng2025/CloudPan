@@ -6,28 +6,34 @@ namespace CloudPan.Client.UI;
 
 /// <summary>
 /// 系统托盘应用上下文——管理托盘图标和右键菜单。
+/// 菜单/动作/事件状态外提为 TrayMenu/TrayActions/TrayEventHandlers 协作类（T-109）。
 /// </summary>
 public partial class TrayAppContext : ApplicationContext
 {
     public static NotifyIcon? TrayIcon { get; private set; }
 
-    private readonly NotifyIcon _trayIcon;
-    private readonly MainWindow _mainWindow;
-    private readonly Icon _normalIcon;
+    internal readonly NotifyIcon _trayIcon;
+    internal readonly MainWindow _mainWindow;
+    internal readonly Icon _normalIcon;
     private readonly Task _syncTask;
     private readonly Task _wsTask;
-    private readonly CancellationTokenSource _cts = new();
-    private readonly SyncEngine _engine;
+    internal readonly CancellationTokenSource _cts = new();
+    internal readonly SyncEngine _engine;
     private readonly WebSocketClient _wsClient;
-    private readonly CloudPan.Contract.IApiClient _api;
-    private readonly ClientConfig _config;
-    private readonly System.Collections.Concurrent.ConcurrentQueue<string> _conflictPaths = new();
-    private readonly System.Threading.SynchronizationContext? _syncCtx; // UI 同步上下文（构造函数捕获，供具名事件处理器）
-    private readonly System.Collections.Concurrent.ConcurrentQueue<string> _recentActivity = new(); // 最近同步活动（托盘文本）
-    private volatile bool _isPaused;
+    internal readonly CloudPan.Contract.IApiClient _api;
+    internal readonly ClientConfig _config;
+    internal readonly System.Collections.Concurrent.ConcurrentQueue<string> _conflictPaths = new();
+    internal readonly System.Threading.SynchronizationContext? _syncCtx; // UI 同步上下文（构造函数捕获，供具名事件处理器）
+    internal readonly System.Collections.Concurrent.ConcurrentQueue<string> _recentActivity = new(); // 最近同步活动（托盘文本）
+    internal volatile bool _isPaused;
 
     /// <summary>重配引导已提示过（F-34/T-034）：防 HTTP 队列与 WebSocket 双重 401 同时弹两次；连接恢复/重配成功后重置。</summary>
-    private volatile bool _reconfigPromptShown;
+    internal volatile bool _reconfigPromptShown;
+
+    // T-109：托盘职责外提协作类
+    internal readonly TrayActions _actions;
+    internal readonly TrayEventHandlers _events;
+    internal readonly TrayMenu _menu;
 
     public TrayAppContext(SyncEngine engine, WebSocketClient wsClient, CloudPan.Contract.IApiClient api, ClientConfig config)
     {
@@ -36,6 +42,10 @@ public partial class TrayAppContext : ApplicationContext
         _api = api;
         _config = config;
         _mainWindow = new MainWindow(engine, config, api);
+
+        _actions = new TrayActions(this);
+        _events = new TrayEventHandlers(this);
+        _menu = new TrayMenu(this);
 
         // ===== 托盘图标 =====
         // 不设 ContextMenuStrip，避免拦截鼠标事件。
@@ -49,7 +59,7 @@ public partial class TrayAppContext : ApplicationContext
         TrayIcon = _trayIcon;
         _normalIcon = IconFactory.CreateClient();
 
-        _trayIcon.MouseUp += TrayIcon_MouseUp;
+        _trayIcon.MouseUp += _events.TrayIcon_MouseUp;
 
         // 捕获 UI 线程同步上下文（提升为字段，供具名事件处理器使用）
         _syncCtx = System.Threading.SynchronizationContext.Current;
@@ -89,18 +99,18 @@ public partial class TrayAppContext : ApplicationContext
         }, TaskContinuationOptions.OnlyOnFaulted);
 
         // 冲突检测 → 托盘气泡 + 警告图标
-        engine.ConflictDetected += OnConflictDetected;
+        engine.ConflictDetected += _events.OnConflictDetected;
         // 冲突解决
-        engine.ConflictResolved += OnConflictResolved;
+        engine.ConflictResolved += _events.OnConflictResolved;
         // 断连 / 重连通知
-        wsClient.OnDisconnected += OnWsDisconnected;
-        wsClient.OnConnected += OnWsConnected;
+        wsClient.OnDisconnected += _events.OnWsDisconnected;
+        wsClient.OnConnected += _events.OnWsConnected;
         // 认证失败
-        wsClient.OnPermanentFailure += OnWsPermanentFailure;
+        wsClient.OnPermanentFailure += _events.OnWsPermanentFailure;
         // F-34/T-034：连续 401（Token 或服务端配置已变更）→ 重配引导
-        engine.ReconfigurationRequired += OnReconfigurationRequired;
+        engine.ReconfigurationRequired += _events.OnReconfigurationRequired;
         // 状态更新
-        engine.StatusChanged += OnStatusChanged;
+        engine.StatusChanged += _events.OnStatusChanged;
     }
 
     protected override void Dispose(bool disposing)
@@ -114,14 +124,14 @@ public partial class TrayAppContext : ApplicationContext
             _trayIcon.Dispose();
             _normalIcon.Dispose();
             _mainWindow.Dispose();
-            _engine.ReconfigurationRequired -= OnReconfigurationRequired; // 退订重配引导事件（CP300）
+            _engine.ReconfigurationRequired -= _events.OnReconfigurationRequired; // 退订重配引导事件（CP300）
             _engine.Dispose();     // 释放 SyncEngine（取消 WS 事件订阅、释放 _syncLock、_fileWatcher）
             _wsClient.Dispose();   // 释放 WebSocketClient（Socket、信号量、事件委托）
         }
         base.Dispose(disposing);
     }
 
-    private void ShowWindow()
+    internal void ShowWindow()
     {
         _mainWindow.Show();
         _mainWindow.WindowState = FormWindowState.Normal;

@@ -120,14 +120,8 @@ public class CodeQualityTests
         // ── T-070 范围外的既有大型类型（T-081 登记、T-099 重校准 TargetCeiling=当前聚合）──
         // T-099 起『聚合≤TargetCeiling』断言硬约束：重校准为当前聚合使断言可绿；强制兑现力由
         // Deadline（批次 9 完成 → 必须 ≤400）承载，到期未拆=测试失败，不再以登记合法化。
-        new("CloudPan.Client.UI.SetupForm", 1095, 1091, "批次 9：同步根路径校验等下沉后 ≤400",
-            "T-075：同步根路径安全校验下沉为共享静态方法（SetupForm/SettingsForm 复用）使聚合 1074→1091。"),
-        new("CloudPan.Client.UI.FileBrowserView", 854, 847, "批次 9：多选/批量视图拆分后 ≤400",
-            "T-070 范围外既有大型类型，记录现状上限防膨胀。"),
-        new("CloudPan.Client.UI.SettingsForm", 745, 684, "批次 9：保存前校验下沉后 ≤400",
-            "T-075：保存前同步根路径安全校验 + saveHint 统一重启提示使聚合 731→741。"),
-        new("CloudPan.Client.UI.TrayAppContext", 522, 522, "批次 9：托盘菜单/逻辑拆分后 ≤400",
-            "T-070 范围外既有大型类型，记录现状上限防膨胀。"),
+        // T-109 真实拆分后移除：SetupForm（1091→273）/FileBrowserView（847→253）/
+        // SettingsForm（684→176）/TrayAppContext（522→140），逻辑外提为 internal 协作类，达 ≤400 从表移除。
         // （ApiClient 聚合 562→323：T-097 删除手写 GetThumbnailAsync 后已 ≤400，T-099 按『达 ≤400 从表移除』移出）
         new("CloudPan.Server.UI.ServerInstaller", 861, 861, "批次 9：安装步骤拆分后 ≤400",
             "T-070 范围外既有大型类型，记录现状上限防膨胀。"),

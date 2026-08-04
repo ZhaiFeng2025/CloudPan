@@ -1,81 +1,28 @@
-using System.Drawing.Drawing2D;
-using System.Net;
-using System.Net.Sockets;
-using System.Text;
-using System.Text.Json;
-using CloudPan.Contract;
 using CloudPan.Infrastructure.Design;
 
 namespace CloudPan.Client.UI;
 
-/// <summary>SetupForm 部分类：输入校验、文件夹安全检查与提交。</summary>
-public partial class SetupForm
+/// <summary>配置窗口校验协作类（T-109）：实时校验、文件夹安全检查、提交前完整校验与字段消息反馈。</summary>
+internal sealed class SetupWizardValidation
 {
+    private enum MessageSeverity { Hint, Error }
 
-    // ════════════════════════════════════════════════════════════════
-    //  文件夹安全验证（保持原逻辑不变）
-    // ════════════════════════════════════════════════════════════════
+    private readonly SetupForm _form;
 
-    /// <summary>检查同步文件夹是否安全可用（复用入口）。返回错误文案，null 表示安全。</summary>
-    /// <remarks>拒绝磁盘根目录、系统目录、网络盘、可移动磁盘与 .cloudpan 元数据目录；SetupForm/SettingsForm 保存前复用。</remarks>
-    internal static string? ValidateFolderSafety(string folder)
+    public SetupWizardValidation(SetupForm form)
     {
-        try
-        {
-            string normalized = Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar);
-            if (Path.GetPathRoot(normalized) == normalized)
-            {
-                return "不能选择磁盘根目录，请选择具体文件夹";
-            }
-
-            // 禁止系统目录
-            string sysRoot = Path.GetFullPath(Environment.GetFolderPath(Environment.SpecialFolder.Windows));
-            string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-            string progFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
-            if (normalized.StartsWith(sysRoot, StringComparison.OrdinalIgnoreCase)
-                || normalized.StartsWith(progFiles, StringComparison.OrdinalIgnoreCase)
-                || normalized.StartsWith(progFilesX86, StringComparison.OrdinalIgnoreCase))
-            {
-                return "不能选择系统目录，请选择用户文件夹";
-            }
-
-            // 禁止可移动磁盘和网络驱动器
-            DriveInfo drive = new DriveInfo(Path.GetPathRoot(normalized)!);
-            if (drive.DriveType == DriveType.Network)
-            {
-                return "不支持网络驱动器，请选择本地文件夹";
-            }
-            if (drive.DriveType == DriveType.Removable)
-            {
-                return "不支持移动磁盘，请选择内置硬盘上的文件夹";
-            }
-
-            // 禁止把 .cloudpan 元数据目录（或其子目录）作为同步根
-            foreach (string segment in normalized.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
-            {
-                if (string.Equals(segment, ".cloudpan", StringComparison.OrdinalIgnoreCase))
-                {
-                    return "不能将 .cloudpan 元数据目录作为同步文件夹";
-                }
-            }
-
-            return null; // 安全
-        }
-        catch (Exception ex)
-        {
-            return $"路径无效: {ex.Message}";
-        }
+        _form = form;
     }
 
     /// <summary>检查文件夹是否安全可用——禁止系统目录、根目录、移动设备，并显示字段提示与文件统计。</summary>
     /// <param name="useHintColors">实时校验时用深灰提示色，提交时用红色。</param>
-    private bool ValidateFolderSafetyWithFeedback(string folder, bool useHintColors = false)
+    public bool ValidateFolderSafetyWithFeedback(string folder, bool useHintColors = false)
     {
         // T-075：阻塞性安全校验下沉为共享静态方法（SetupForm/SettingsForm 复用）
-        string? error = ValidateFolderSafety(folder);
+        string? error = SetupForm.ValidateFolderSafety(folder);
         if (error != null)
         {
-            ShowFieldMessage(_folderErrorLabel, error,
+            ShowFieldMessage(_form._folderErrorLabel, error,
                 useHintColors ? MessageSeverity.Hint : MessageSeverity.Error);
             return false;
         }
@@ -95,7 +42,7 @@ public partial class SetupForm
         {
             if (!string.IsNullOrEmpty(cloudPath) && normalized.StartsWith(cloudPath, StringComparison.OrdinalIgnoreCase))
             {
-                ShowFieldMessage(_folderErrorLabel,
+                ShowFieldMessage(_form._folderErrorLabel,
                     $"此文件夹在 {serviceName} 同步范围内，可能造成同步冲突。确认要使用此文件夹吗？",
                     MessageSeverity.Hint); // 改为提示不阻断，让用户自行确认
                 // 不 return false，仅提示
@@ -111,17 +58,17 @@ public partial class SetupForm
             {
                 string sizeStr = totalSize > 1_048_576 ? $"{totalSize / 1_048_576} MB"
                     : totalSize > 1024 ? $"{totalSize / 1024} KB" : $"{totalSize} B";
-                _folderErrorLabel.Text = count >= 10000
+                _form._folderErrorLabel.Text = count >= 10000
                     ? $"此文件夹包含超过 {count} 个文件，首次同步需要较长时间"
                     : count > 100
                     ? $"此文件夹包含 {count} 个文件（约 {sizeStr}），首次同步需要一些时间"
                     : $"此文件夹包含 {count} 个文件（{sizeStr}）";
-                _folderErrorLabel.ForeColor = CloudPanColors.TextDarkGray;
-                _folderErrorLabel.Visible = true;
+                _form._folderErrorLabel.ForeColor = CloudPanColors.TextDarkGray;
+                _form._folderErrorLabel.Visible = true;
             }
             else
             {
-                HideFieldMessage(_folderErrorLabel);
+                HideFieldMessage(_form._folderErrorLabel);
             }
         }
         catch { /* 权限不足 —— 不干扰用户 */ }
@@ -133,88 +80,88 @@ public partial class SetupForm
     //  实时校验（失去焦点时显示柔和提示）
     // ════════════════════════════════════════════════════════════════
 
-    private void ValidateServerUrlField()
+    public void ValidateServerUrlField()
     {
-        string url = _serverUrlBox.Text.Trim();
+        string url = _form._serverUrlBox.Text.Trim();
         if (string.IsNullOrWhiteSpace(url))
         {
-            ShowFieldHint(_urlErrorLabel, "请输入服务端地址，如 http://192.168.1.100:8443");
+            ShowFieldHint(_form._urlErrorLabel, "请输入服务端地址，如 http://192.168.1.100:8443");
             return;
         }
         if (!url.StartsWith("http://") && !url.StartsWith("https://"))
         {
-            ShowFieldHint(_urlErrorLabel, "地址需以 http:// 或 https:// 开头");
+            ShowFieldHint(_form._urlErrorLabel, "地址需以 http:// 或 https:// 开头");
             return;
         }
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
             || string.IsNullOrWhiteSpace(uri.Host)
             || uri.Port < 1 || uri.Port > 65535)
         {
-            ShowFieldHint(_urlErrorLabel, "地址格式不正确（请检查 IP/域名和端口号 1-65535）");
+            ShowFieldHint(_form._urlErrorLabel, "地址格式不正确（请检查 IP/域名和端口号 1-65535）");
             return;
         }
         if (!string.IsNullOrEmpty(uri.AbsolutePath) && uri.AbsolutePath != "/")
         {
-            ShowFieldHint(_urlErrorLabel, "地址不应包含路径，只需 http://IP:端口");
+            ShowFieldHint(_form._urlErrorLabel, "地址不应包含路径，只需 http://IP:端口");
             return;
         }
-        HideFieldMessage(_urlErrorLabel);
+        HideFieldMessage(_form._urlErrorLabel);
     }
 
-    private void ValidateSyncRootField()
+    public void ValidateSyncRootField()
     {
-        string folder = _syncRootBox.Text.Trim();
+        string folder = _form._syncRootBox.Text.Trim();
         if (string.IsNullOrWhiteSpace(folder))
         {
-            ShowFieldHint(_folderErrorLabel, "请选择或输入同步文件夹路径");
+            ShowFieldHint(_form._folderErrorLabel, "请选择或输入同步文件夹路径");
             return;
         }
         if (folder.IndexOfAny(Path.GetInvalidPathChars()) >= 0)
         {
-            ShowFieldHint(_folderErrorLabel, "路径包含非法字符");
+            ShowFieldHint(_form._folderErrorLabel, "路径包含非法字符");
             return;
         }
         // 安全校验 + 统计信息，实时模式用深灰提示
         ValidateFolderSafetyWithFeedback(folder, useHintColors: true);
     }
 
-    private void ValidateTokenField()
+    public void ValidateTokenField()
     {
-        string token = _tokenBox.Text.Trim();
+        string token = _form._tokenBox.Text.Trim();
         if (string.IsNullOrWhiteSpace(token))
         {
-            ShowFieldHint(_tokenErrorLabel, "请输入家庭 Token");
+            ShowFieldHint(_form._tokenErrorLabel, "请输入家庭 Token");
             return;
         }
         if (token.Length != 64 || !IsHexString(token))
         {
-            ShowFieldHint(_tokenErrorLabel, "Token 应为 64 个十六进制字符");
+            ShowFieldHint(_form._tokenErrorLabel, "Token 应为 64 个十六进制字符");
             return;
         }
-        HideFieldMessage(_tokenErrorLabel);
+        HideFieldMessage(_form._tokenErrorLabel);
     }
 
     // ════════════════════════════════════════════════════════════════
     //  OK 点击 —— 完整校验 + 提交
     // ════════════════════════════════════════════════════════════════
 
-    private void OnOkClick(object? sender, EventArgs e)
+    public void OnOkClick(object? sender, EventArgs e)
     {
         // 搜索进行中禁止提交
-        if (_isSearching)
+        if (_form._isSearching)
         {
-            ShowFieldHint(_statusLabel, "请等待搜索完成后再连接服务器");
+            ShowFieldHint(_form._statusLabel, "请等待搜索完成后再连接服务器");
             return;
         }
 
-        _okButton.Enabled = false;
+        _form._okButton.Enabled = false;
         if (!ValidateInputs())
         {
-            _okButton.Enabled = true;
+            _form._okButton.Enabled = true;
             return;
         }
-        DialogResult = DialogResult.OK;
-        Close();
+        _form.DialogResult = DialogResult.OK;
+        _form.Close();
     }
 
     private bool ValidateInputs()
@@ -223,73 +170,73 @@ public partial class SetupForm
         bool focusSet = false;
 
         // 服务端地址
-        string url = ServerUrl;
+        string url = _form.ServerUrl;
         if (string.IsNullOrWhiteSpace(url))
         {
-            ShowFieldError(_urlErrorLabel, "请输入服务端地址");
+            ShowFieldError(_form._urlErrorLabel, "请输入服务端地址");
             valid = false;
-            if (!focusSet) { _serverUrlBox.Focus(); focusSet = true; }
+            if (!focusSet) { _form._serverUrlBox.Focus(); focusSet = true; }
         }
         else if (!url.StartsWith("http://") && !url.StartsWith("https://"))
         {
-            ShowFieldError(_urlErrorLabel, "请输入完整地址，如 http://192.168.1.100:8443");
+            ShowFieldError(_form._urlErrorLabel, "请输入完整地址，如 http://192.168.1.100:8443");
             valid = false;
-            if (!focusSet) { _serverUrlBox.Focus(); focusSet = true; }
+            if (!focusSet) { _form._serverUrlBox.Focus(); focusSet = true; }
         }
         else if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
                  || string.IsNullOrWhiteSpace(uri.Host)
                  || uri.Port < 1 || uri.Port > 65535)
         {
-            ShowFieldError(_urlErrorLabel, "地址格式不正确（请检查 IP/域名和端口号 1-65535）");
+            ShowFieldError(_form._urlErrorLabel, "地址格式不正确（请检查 IP/域名和端口号 1-65535）");
             valid = false;
-            if (!focusSet) { _serverUrlBox.Focus(); focusSet = true; }
+            if (!focusSet) { _form._serverUrlBox.Focus(); focusSet = true; }
         }
         else
         {
-            HideFieldMessage(_urlErrorLabel);
+            HideFieldMessage(_form._urlErrorLabel);
         }
 
         // 同步文件夹
-        string folder = SyncRoot;
+        string folder = _form.SyncRoot;
         if (string.IsNullOrWhiteSpace(folder))
         {
-            ShowFieldError(_folderErrorLabel, "请输入同步文件夹路径");
+            ShowFieldError(_form._folderErrorLabel, "请输入同步文件夹路径");
             valid = false;
-            if (!focusSet) { _syncRootBox.Focus(); focusSet = true; }
+            if (!focusSet) { _form._syncRootBox.Focus(); focusSet = true; }
         }
         else if (folder.IndexOfAny(Path.GetInvalidPathChars()) >= 0)
         {
-            ShowFieldError(_folderErrorLabel, "路径包含非法字符");
+            ShowFieldError(_form._folderErrorLabel, "路径包含非法字符");
             valid = false;
-            if (!focusSet) { _syncRootBox.Focus(); focusSet = true; }
+            if (!focusSet) { _form._syncRootBox.Focus(); focusSet = true; }
         }
         else if (!ValidateFolderSafetyWithFeedback(folder, useHintColors: false))
         {
             valid = false;
-            if (!focusSet) { _syncRootBox.Focus(); focusSet = true; }
+            if (!focusSet) { _form._syncRootBox.Focus(); focusSet = true; }
         }
         else
         {
-            HideFieldMessage(_folderErrorLabel);
+            HideFieldMessage(_form._folderErrorLabel);
         }
 
         // 家庭 Token
-        string token = Token;
+        string token = _form.Token;
         if (string.IsNullOrWhiteSpace(token))
         {
-            ShowFieldError(_tokenErrorLabel, "请输入家庭 Token");
+            ShowFieldError(_form._tokenErrorLabel, "请输入家庭 Token");
             valid = false;
-            if (!focusSet) { _tokenBox.Focus(); focusSet = true; }
+            if (!focusSet) { _form._tokenBox.Focus(); focusSet = true; }
         }
         else if (token.Length != 64 || !IsHexString(token))
         {
-            ShowFieldError(_tokenErrorLabel, "Token 格式不正确，请完整粘贴服务端显示的 64 个字符");
+            ShowFieldError(_form._tokenErrorLabel, "Token 格式不正确，请完整粘贴服务端显示的 64 个字符");
             valid = false;
-            if (!focusSet) { _tokenBox.Focus(); focusSet = true; }
+            if (!focusSet) { _form._tokenBox.Focus(); focusSet = true; }
         }
         else
         {
-            HideFieldMessage(_tokenErrorLabel);
+            HideFieldMessage(_form._tokenErrorLabel);
         }
 
         return valid;
@@ -337,10 +284,8 @@ public partial class SetupForm
     //  字段消息辅助方法
     // ════════════════════════════════════════════════════════════════
 
-    private enum MessageSeverity { Hint, Error }
-
     /// <summary>显示柔和提示（深灰色，用于实时校验和引导信息）。</summary>
-    private static void ShowFieldHint(Label label, string text)
+    public static void ShowFieldHint(Label label, string text)
     {
         label.ForeColor = CloudPanColors.TextDarkGray;
         label.Text = text;
@@ -348,7 +293,7 @@ public partial class SetupForm
     }
 
     /// <summary>显示阻断错误（红色，用户提交时无效输入的反馈）。</summary>
-    private static void ShowFieldError(Label label, string text)
+    public static void ShowFieldError(Label label, string text)
     {
         label.ForeColor = CloudPanColors.ErrorRed;
         label.Text = text;
@@ -367,7 +312,7 @@ public partial class SetupForm
         }
     }
 
-    private static void HideFieldMessage(Label label)
+    public static void HideFieldMessage(Label label)
     {
         label.Text = "";
         label.Visible = false;
@@ -377,18 +322,18 @@ public partial class SetupForm
     // 字段校验具名事件处理器（CP301：避免匿名 lambda 订阅无法退订）
     // ================================================================
 
-    private void ServerUrlBox_Leave(object? sender, EventArgs e) => ValidateServerUrlField();
+    public void ServerUrlBox_Leave(object? sender, EventArgs e) => ValidateServerUrlField();
 
-    private void SyncRootBox_Leave(object? sender, EventArgs e) => ValidateSyncRootField();
+    public void SyncRootBox_Leave(object? sender, EventArgs e) => ValidateSyncRootField();
 
-    private void TokenBox_Leave(object? sender, EventArgs e) => ValidateTokenField();
+    public void TokenBox_Leave(object? sender, EventArgs e) => ValidateTokenField();
 
-    private void TokenBox_TextChanged(object? sender, EventArgs e)
+    public void TokenBox_TextChanged(object? sender, EventArgs e)
     {
-        string trimmed = _tokenBox.Text.Trim();
-        if (trimmed != _tokenBox.Text)
+        string trimmed = _form._tokenBox.Text.Trim();
+        if (trimmed != _form._tokenBox.Text)
         {
-            _tokenBox.Text = trimmed;
+            _form._tokenBox.Text = trimmed;
         }
     }
 }

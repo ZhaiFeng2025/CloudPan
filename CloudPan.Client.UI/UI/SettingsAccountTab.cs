@@ -3,14 +3,26 @@ using CloudPan.Infrastructure.Design;
 
 namespace CloudPan.Client.UI;
 
-/// <summary>SettingsForm 部分类：账户 Tab 页（服务端地址/同步文件夹/存储信息/Token）及测试连接、文件夹大小计算。</summary>
-public partial class SettingsForm
+/// <summary>设置窗口账户 Tab 协作类（T-109）：账户页构建（服务端地址/同步文件夹/存储信息/Token）、测试连接与文件夹大小计算。</summary>
+internal sealed class SettingsAccountTab
 {
+    // 文件夹大小缓存（5分钟有效）
+    private static long CachedSize;
+    private static DateTime LastSizeCheck;
+    private static string CachedPath = "";
+
+    private readonly SettingsForm _form;
+
+    public SettingsAccountTab(SettingsForm form)
+    {
+        _form = form;
+    }
+
     // ──────────────────────────────────────────────
     // Tab 1: 账户（含存储信息）
     // ──────────────────────────────────────────────
 
-    private void BuildAccountTab(string serverUrl, string syncRoot, string token)
+    public void BuildAccountTab(string serverUrl, string syncRoot, string token)
     {
         TabPage accountTab = new TabPage("账户");
         TableLayoutPanel panel = new TableLayoutPanel
@@ -50,15 +62,15 @@ public partial class SettingsForm
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
         };
 
-        _serverBox = new TextBox
+        _form._serverBox = new TextBox
         {
             Text = serverUrl,
             Width = 340,
             PlaceholderText = "http://192.168.1.100:8443",
         };
-        serverRow.Controls.Add(_serverBox);
+        serverRow.Controls.Add(_form._serverBox);
 
-        _testConnBtn = new Button
+        _form._testConnBtn = new Button
         {
             Text = "测试连接",
             Width = CloudPanSpacing.ButtonWidth,
@@ -67,10 +79,10 @@ public partial class SettingsForm
             Cursor = Cursors.Hand,
             Margin = new Padding(8, 0, 0, 0),
         };
-        _testConnBtn.Click += TestConnection_Click;
-        serverRow.Controls.Add(_testConnBtn);
+        _form._testConnBtn.Click += TestConnection_Click;
+        serverRow.Controls.Add(_form._testConnBtn);
 
-        _connResultIcon = new Label
+        _form._connResultIcon = new Label
         {
             Text = "",
             AutoSize = true,
@@ -78,10 +90,10 @@ public partial class SettingsForm
             Margin = new Padding(4, 0, 0, 0),
             TextAlign = ContentAlignment.MiddleCenter,
         };
-        serverRow.Controls.Add(_connResultIcon);
+        serverRow.Controls.Add(_form._connResultIcon);
 
         // T-053：测试连接结果白话文字（成功/失败原因+下一步），随图标一起反馈，不弹模态框
-        _connResultText = new Label
+        _form._connResultText = new Label
         {
             Text = "",
             AutoSize = true,
@@ -89,7 +101,7 @@ public partial class SettingsForm
             TextAlign = ContentAlignment.MiddleLeft,
             MaximumSize = new Size(300, 0),
         };
-        serverRow.Controls.Add(_connResultText);
+        serverRow.Controls.Add(_form._connResultText);
 
         panel.Controls.Add(serverRow, 0, 2);
 
@@ -105,18 +117,18 @@ public partial class SettingsForm
         panel.Controls.Add(new Label { Text = "同步文件夹", AutoSize = true }, 0, 5);
 
         // ── Row 7: 文件夹输入框 ──
-        _folderBox = new TextBox { Text = syncRoot, Dock = DockStyle.Fill };
-        panel.Controls.Add(_folderBox, 0, 7);
+        _form._folderBox = new TextBox { Text = syncRoot, Dock = DockStyle.Fill };
+        panel.Controls.Add(_form._folderBox, 0, 7);
 
         // ── Row 9: 存储大小（计算中占位）──
-        _storageSizeLabel = new Label
+        _form._storageSizeLabel = new Label
         {
             Text = "占用: 计算中...",
             AutoSize = true,
             Font = new Font(CloudPanFonts.FontFamily, CloudPanFonts.SizeBody, FontStyle.Italic),
             ForeColor = CloudPanColors.TextMuted,
         };
-        panel.Controls.Add(_storageSizeLabel, 0, 9);
+        panel.Controls.Add(_form._storageSizeLabel, 0, 9);
 
         // ── Row 10: 磁盘信息与存储提示 ──
         FlowLayoutPanel storageInfo = new FlowLayoutPanel
@@ -181,14 +193,14 @@ public partial class SettingsForm
         tokenInputRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         tokenInputRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 62F));
 
-        _tokenBox = new TextBox
+        _form._tokenBox = new TextBox
         {
             Text = token,
             Dock = DockStyle.Fill,
             UseSystemPasswordChar = true,
         };
 
-        _tokenToggleBtn = new Button
+        _form._tokenToggleBtn = new Button
         {
             Text = "显示",
             Width = 58,
@@ -201,13 +213,13 @@ public partial class SettingsForm
             TextAlign = ContentAlignment.MiddleCenter,
             UseVisualStyleBackColor = false,
         };
-        _tokenToggleBtn.FlatAppearance.BorderColor = CloudPanColors.BorderLight;
-        _tokenToggleBtn.FlatAppearance.MouseOverBackColor = CloudPanColors.ButtonHoverBg;
-        _tokenToggleBtn.FlatAppearance.MouseDownBackColor = CloudPanColors.ButtonPressBg;
-        _tokenToggleBtn.Click += ToggleTokenMask;
+        _form._tokenToggleBtn.FlatAppearance.BorderColor = CloudPanColors.BorderLight;
+        _form._tokenToggleBtn.FlatAppearance.MouseOverBackColor = CloudPanColors.ButtonHoverBg;
+        _form._tokenToggleBtn.FlatAppearance.MouseDownBackColor = CloudPanColors.ButtonPressBg;
+        _form._tokenToggleBtn.Click += ToggleTokenMask;
 
-        tokenInputRow.Controls.Add(_tokenBox, 0, 0);
-        tokenInputRow.Controls.Add(_tokenToggleBtn, 1, 0);
+        tokenInputRow.Controls.Add(_form._tokenBox, 0, 0);
+        tokenInputRow.Controls.Add(_form._tokenToggleBtn, 1, 0);
         panel.Controls.Add(tokenInputRow, 0, 14);
 
         // ── Row 15: Token 提示 ──
@@ -219,7 +231,7 @@ public partial class SettingsForm
         }, 0, 15);
 
         accountTab.Controls.Add(panel);
-        _tabs.TabPages.Add(accountTab);
+        _form._tabs.TabPages.Add(accountTab);
     }
 
     // ──────────────────────────────────────────────
@@ -228,10 +240,10 @@ public partial class SettingsForm
 
     private void ToggleTokenMask(object? sender, EventArgs e)
     {
-        _tokenMasked = !_tokenMasked;
-        _tokenBox.UseSystemPasswordChar = _tokenMasked;
-        _tokenToggleBtn.Text = _tokenMasked ? "显示" : "隐藏";
-        _tokenBox.Select(_tokenBox.TextLength, 0);
+        _form._tokenMasked = !_form._tokenMasked;
+        _form._tokenBox.UseSystemPasswordChar = _form._tokenMasked;
+        _form._tokenToggleBtn.Text = _form._tokenMasked ? "显示" : "隐藏";
+        _form._tokenBox.Select(_form._tokenBox.TextLength, 0);
     }
 
     // ──────────────────────────────────────────────
@@ -241,46 +253,46 @@ public partial class SettingsForm
     private async void TestConnection_Click(object? sender, EventArgs e)
     {
         // 清除上次连接结果反馈
-        _connResultIcon.Text = "";
-        _connResultText.Text = "";
+        _form._connResultIcon.Text = "";
+        _form._connResultText.Text = "";
 
-        string url = _serverBox.Text.Trim().TrimEnd('/');
+        string url = _form._serverBox.Text.Trim().TrimEnd('/');
         if (string.IsNullOrEmpty(url))
         {
-            _connResultIcon.Text = "✗";
-            _connResultIcon.ForeColor = CloudPanColors.ErrorRed;
-            _connResultText.Text = "请先输入服务端地址";
-            _connResultText.ForeColor = CloudPanColors.ErrorRed;
+            _form._connResultIcon.Text = "✗";
+            _form._connResultIcon.ForeColor = CloudPanColors.ErrorRed;
+            _form._connResultText.Text = "请先输入服务端地址";
+            _form._connResultText.ForeColor = CloudPanColors.ErrorRed;
             return;
         }
 
-        _testConnBtn.Enabled = false;
-        _testConnBtn.Text = "连接中...";
+        _form._testConnBtn.Enabled = false;
+        _form._testConnBtn.Text = "连接中...";
         try
         {
             // T-053：改走 ApiClient（唯一证书/代理/超时装配点），不再手建 HttpClient 拼 /api/health；
             // 自签证书静默接受 → 测试结果与真实同步连接一致，不自签服务端上假失败
             using CancellationTokenSource cts = new(TimeSpan.FromSeconds(5));
-            using ApiClient api = new(url, _tokenBox.Text.Trim());
+            using ApiClient api = new(url, _form._tokenBox.Text.Trim());
             await api.EnsureHealthAsync(cts.Token);
 
-            _connResultIcon.Text = "✓";
-            _connResultIcon.ForeColor = CloudPanColors.SuccessGreen;
-            _connResultText.Text = "连接成功，服务端正常运行";
-            _connResultText.ForeColor = CloudPanColors.SuccessGreen;
+            _form._connResultIcon.Text = "✓";
+            _form._connResultIcon.ForeColor = CloudPanColors.SuccessGreen;
+            _form._connResultText.Text = "连接成功，服务端正常运行";
+            _form._connResultText.ForeColor = CloudPanColors.SuccessGreen;
         }
         catch (Exception ex)
         {
             ErrorAttribution attribution = ErrorAttribution.FromException(ex, ErrorAttributionScenario.TestConnection);
-            _connResultIcon.Text = "✗";
-            _connResultIcon.ForeColor = CloudPanColors.ErrorRed;
-            _connResultText.Text = string.IsNullOrEmpty(attribution.NextStep) ? attribution.Message : $"{attribution.Message}（{attribution.NextStep}）";
-            _connResultText.ForeColor = CloudPanColors.ErrorRed;
+            _form._connResultIcon.Text = "✗";
+            _form._connResultIcon.ForeColor = CloudPanColors.ErrorRed;
+            _form._connResultText.Text = string.IsNullOrEmpty(attribution.NextStep) ? attribution.Message : $"{attribution.Message}（{attribution.NextStep}）";
+            _form._connResultText.ForeColor = CloudPanColors.ErrorRed;
         }
         finally
         {
-            _testConnBtn.Enabled = true;
-            _testConnBtn.Text = "测试连接";
+            _form._testConnBtn.Enabled = true;
+            _form._testConnBtn.Text = "测试连接";
         }
     }
 
@@ -322,7 +334,7 @@ public partial class SettingsForm
     }
 
     /// <summary>异步更新存储标签页的文件夹大小显示。</summary>
-    private async Task UpdateFolderSizeAsync(string syncRoot)
+    public async Task UpdateFolderSizeAsync(string syncRoot)
     {
         if (string.IsNullOrEmpty(syncRoot))
         {
@@ -335,9 +347,9 @@ public partial class SettingsForm
             : $"{syncSize / 1_048_576.0:F0} MB";
 
         // 计算完成后平滑替换——恢复粗体深色
-        _storageSizeLabel.ForeColor = CloudPanColors.TextSecondary;
-        _storageSizeLabel.Font = new Font(CloudPanFonts.FontFamily, CloudPanFonts.SizeBody, FontStyle.Bold);
-        _storageSizeLabel.Text = $"占用: {usedText}";
+        _form._storageSizeLabel.ForeColor = CloudPanColors.TextSecondary;
+        _form._storageSizeLabel.Font = new Font(CloudPanFonts.FontFamily, CloudPanFonts.SizeBody, FontStyle.Bold);
+        _form._storageSizeLabel.Text = $"占用: {usedText}";
     }
 
 }

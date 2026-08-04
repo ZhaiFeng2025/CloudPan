@@ -1,27 +1,26 @@
 using System.Drawing.Drawing2D;
-using System.Net;
-using System.Net.Sockets;
-using System.Text;
-using System.Text.Json;
-using CloudPan.Contract;
 using CloudPan.Infrastructure.Design;
 
 namespace CloudPan.Client.UI;
 
-/// <summary>SetupForm 部分类：布局构建、辅助构建与 Header 绘制。</summary>
-public partial class SetupForm
+/// <summary>配置窗口布局协作类（T-109）：内容区堆叠、各输入行、底部按钮行与 Header 绘制。</summary>
+internal sealed class SetupWizardLayout
 {
+    private readonly SetupForm _form;
+    private readonly SetupWizardValidation _validation;
 
-    // ════════════════════════════════════════════════════════════════
-    //  布局构建
-    // ════════════════════════════════════════════════════════════════
+    public SetupWizardLayout(SetupForm form, SetupWizardValidation validation)
+    {
+        _form = form;
+        _validation = validation;
+    }
 
     /// <summary>构建内容区的垂直堆叠控件。</summary>
     /// <remarks>
     /// 使用 Dock.Top 堆叠，添加顺序即为视觉从上到下的顺序。
     /// （Dock 按逆 Z 序处理，最后添加的控件 Z 序最高、最先被 Dock → 顶部。）
     /// </remarks>
-    private void BuildContentStack(Panel parent)
+    public void BuildContentStack(Panel parent)
     {
         // 弹性填充（确保所有字段靠上，额外空间在底部留白）
         parent.Controls.Add(new Panel { Dock = DockStyle.Fill });
@@ -34,18 +33,18 @@ public partial class SetupForm
             WrapContents = false,
             Height = 28,
         };
-        statusRow.Controls.Add(_progressBar);
-        statusRow.Controls.Add(_statusLabel);
+        statusRow.Controls.Add(_form._progressBar);
+        statusRow.Controls.Add(_form._statusLabel);
         parent.Controls.Add(statusRow);
 
         // Spacer
         parent.Controls.Add(new Panel { Dock = DockStyle.Top, Height = 6 });
 
         // ── Token 提示（输入框下方常驻说明） ──
-        parent.Controls.Add(_tokenHintLabel);
+        parent.Controls.Add(_form._tokenHintLabel);
 
         // ── Token 错误标签（在输入行下方、提示上方） ──
-        parent.Controls.Add(_tokenErrorLabel);
+        parent.Controls.Add(_form._tokenErrorLabel);
 
         // ── Token 输入行 ──
         parent.Controls.Add(BuildTokenInputRow());
@@ -72,10 +71,10 @@ public partial class SetupForm
         parent.Controls.Add(new Panel { Dock = DockStyle.Top, Height = 6 });
 
         // ── 文件夹错误标签 ──
-        parent.Controls.Add(_folderErrorLabel);
+        parent.Controls.Add(_form._folderErrorLabel);
 
         // ── 文件夹输入行 ──
-        parent.Controls.Add(BuildInputRow(_syncRootBox, _browseButton));
+        parent.Controls.Add(BuildInputRow(_form._syncRootBox, _form._browseButton));
 
         // ── 文件夹标签 ──
         parent.Controls.Add(new Label
@@ -93,7 +92,7 @@ public partial class SetupForm
         parent.Controls.Add(new Panel { Dock = DockStyle.Top, Height = 6 });
 
         // ── URL 错误标签 ──
-        parent.Controls.Add(_urlErrorLabel);
+        parent.Controls.Add(_form._urlErrorLabel);
 
         // ── URL 输入行（TextBox + 状态图标 + 搜索按钮） ──
         parent.Controls.Add(BuildUrlInputRow());
@@ -112,7 +111,7 @@ public partial class SetupForm
     }
 
     /// <summary>URL 输入行：TextBox + 状态图标 + 搜索按钮。</summary>
-    private Panel BuildUrlInputRow()
+    public Panel BuildUrlInputRow()
     {
         TableLayoutPanel row = new TableLayoutPanel
         {
@@ -127,20 +126,20 @@ public partial class SetupForm
         row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 22F));
         row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100F));
 
-        _serverUrlBox.Dock = DockStyle.Fill;
-        _searchButton.Dock = DockStyle.Fill;
-        _searchButton.Margin = new Padding(6, 0, 0, 0);
-        _urlStatusIcon.Margin = new Padding(4, 0, 0, 0);
+        _form._serverUrlBox.Dock = DockStyle.Fill;
+        _form._searchButton.Dock = DockStyle.Fill;
+        _form._searchButton.Margin = new Padding(6, 0, 0, 0);
+        _form._urlStatusIcon.Margin = new Padding(4, 0, 0, 0);
 
-        row.Controls.Add(_serverUrlBox, 0, 0);
-        row.Controls.Add(_urlStatusIcon, 1, 0);
-        row.Controls.Add(_searchButton, 2, 0);
+        row.Controls.Add(_form._serverUrlBox, 0, 0);
+        row.Controls.Add(_form._urlStatusIcon, 1, 0);
+        row.Controls.Add(_form._searchButton, 2, 0);
 
         return row;
     }
 
     /// <summary>Token 输入行：TextBox + 显示/隐藏按钮。</summary>
-    private Panel BuildTokenInputRow()
+    public Panel BuildTokenInputRow()
     {
         TableLayoutPanel row = new TableLayoutPanel
         {
@@ -154,12 +153,12 @@ public partial class SetupForm
         row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 62F));
 
-        _tokenBox.Dock = DockStyle.Fill;
-        _tokenToggleBtn.Dock = DockStyle.Fill;
-        _tokenToggleBtn.Margin = new Padding(6, 0, 0, 0);
+        _form._tokenBox.Dock = DockStyle.Fill;
+        _form._tokenToggleBtn.Dock = DockStyle.Fill;
+        _form._tokenToggleBtn.Margin = new Padding(6, 0, 0, 0);
 
-        row.Controls.Add(_tokenBox, 0, 0);
-        row.Controls.Add(_tokenToggleBtn, 1, 0);
+        row.Controls.Add(_form._tokenBox, 0, 0);
+        row.Controls.Add(_form._tokenToggleBtn, 1, 0);
 
         return row;
     }
@@ -190,7 +189,7 @@ public partial class SetupForm
     }
 
     /// <summary>底部操作按钮行。内部创建 _okButton 和取消按钮。</summary>
-    private Panel BuildButtonRow()
+    public Panel BuildButtonRow()
     {
         FlowLayoutPanel btnRow = new FlowLayoutPanel
         {
@@ -198,11 +197,11 @@ public partial class SetupForm
             FlowDirection = FlowDirection.RightToLeft,
             WrapContents = false,
             Height = 56,
-            Padding = new Padding(FieldMargin, 0, FieldMargin, 12),
+            Padding = new Padding(SetupForm.FieldMargin, 0, SetupForm.FieldMargin, 12),
             BackColor = CloudPanColors.BackgroundWhite,
         };
 
-        _okButton = new Button
+        _form._okButton = new Button
         {
             Text = "连接服务器",
             Width = CloudPanSpacing.ButtonWidth,
@@ -214,10 +213,10 @@ public partial class SetupForm
             Cursor = Cursors.Hand,
             UseVisualStyleBackColor = false,
         };
-        _okButton.FlatAppearance.BorderSize = 0;
-        _okButton.FlatAppearance.MouseOverBackColor = CloudPanColors.PrimaryBlueHover;
-        _okButton.FlatAppearance.MouseDownBackColor = CloudPanColors.PrimaryBluePress;
-        _okButton.Click += OnOkClick;
+        _form._okButton.FlatAppearance.BorderSize = 0;
+        _form._okButton.FlatAppearance.MouseOverBackColor = CloudPanColors.PrimaryBlueHover;
+        _form._okButton.FlatAppearance.MouseDownBackColor = CloudPanColors.PrimaryBluePress;
+        _form._okButton.Click += _validation.OnOkClick;
 
         Button cancelBtn = new Button
         {
@@ -235,9 +234,9 @@ public partial class SetupForm
         cancelBtn.FlatAppearance.BorderColor = CloudPanColors.BorderLight;
         cancelBtn.FlatAppearance.MouseOverBackColor = CloudPanColors.ButtonHoverBg;
         cancelBtn.FlatAppearance.MouseDownBackColor = CloudPanColors.ButtonPressBg;
-        cancelBtn.Click += CancelBtn_Click;
+        cancelBtn.Click += _form.CancelBtn_Click;
 
-        btnRow.Controls.Add(_okButton);
+        btnRow.Controls.Add(_form._okButton);
         btnRow.Controls.Add(cancelBtn);
 
         // CancelButton 在构造函数中设置
@@ -249,7 +248,7 @@ public partial class SetupForm
     //  辅助构建
     // ════════════════════════════════════════════════════════════════
 
-    private static TextBox CreateTextBox(string text, string placeholder)
+    public static TextBox CreateTextBox(string text, string placeholder)
     {
         return new TextBox
         {
@@ -262,7 +261,7 @@ public partial class SetupForm
         };
     }
 
-    private static Button CreateFlatButton(string text, int width)
+    public static Button CreateFlatButton(string text, int width)
     {
         Button btn = new Button
         {
@@ -282,7 +281,7 @@ public partial class SetupForm
         return btn;
     }
 
-    private static Label CreateFieldMessageLabel()
+    public static Label CreateFieldMessageLabel()
     {
         return new Label
         {
@@ -300,7 +299,7 @@ public partial class SetupForm
     //  Header 绘制（复用 CloudPanIcon，保证与托盘图标一致）
     // ════════════════════════════════════════════════════════════════
 
-    private static void OnHeaderPaint(object? sender, PaintEventArgs e)
+    public static void OnHeaderPaint(object? sender, PaintEventArgs e)
     {
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;

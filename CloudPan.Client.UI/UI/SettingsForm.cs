@@ -4,32 +4,33 @@ namespace CloudPan.Client.UI;
 
 /// <summary>
 /// 设置窗口——同步管理、账户配置（含存储信息）、带宽限制、选择性同步。
+/// 各 Tab 构建/事件逻辑外提为 SettingsAccountTab/SettingsBandwidthTab/SettingsSyncTab 协作类（T-109）。
 /// </summary>
 public partial class SettingsForm : Form
 {
-    private readonly TabControl _tabs;
-    private TextBox _serverBox = null!;
-    private TextBox _folderBox = null!;
-    private TextBox _tokenBox = null!;
-    private TextBox _uploadLimitBox = null!;
-    private TextBox _downloadLimitBox = null!;
-    private SelectiveSyncPanel _syncPanel = null!;
+    internal readonly TabControl _tabs;
+    internal TextBox _serverBox = null!;
+    internal TextBox _folderBox = null!;
+    internal TextBox _tokenBox = null!;
+    internal TextBox _uploadLimitBox = null!;
+    internal TextBox _downloadLimitBox = null!;
+    internal SelectiveSyncPanel _syncPanel = null!;
     private Button _saveBtn = null!;
-    private Button _testConnBtn = null!;
-    private Label _connResultIcon = null!;
-    private Label _connResultText = null!;
-    private Button _tokenToggleBtn = null!;
-    private Label _storageSizeLabel = null!;
+    internal Button _testConnBtn = null!;
+    internal Label _connResultIcon = null!;
+    internal Label _connResultText = null!;
+    internal Button _tokenToggleBtn = null!;
+    internal Label _storageSizeLabel = null!;
 
-    // 文件夹大小缓存（5分钟有效）
-    private static long CachedSize;
-    private static DateTime LastSizeCheck;
-    private static string CachedPath = "";
-
-    private bool _tokenMasked = true;
+    internal bool _tokenMasked = true;
 
     // T-074：目录树加载器（从 SyncEngine.GetDirectoryTreePathsAsync 注入），供同步页异步填充勾选树
-    private readonly Func<Task<List<string>>>? _directoryTreeLoader;
+    internal readonly Func<Task<List<string>>>? _directoryTreeLoader;
+
+    // T-109：各 Tab 逻辑外提协作类
+    private readonly SettingsAccountTab _accountTab;
+    private readonly SettingsBandwidthTab _bandwidthTab;
+    private readonly SettingsSyncTab _syncTab;
 
     public string ServerUrl => _serverBox.Text.Trim();
     public string SyncRoot => _folderBox.Text.Trim();
@@ -48,15 +49,19 @@ public partial class SettingsForm : Form
         _directoryTreeLoader = directoryTreeLoader;
         _tabs = new TabControl { Dock = DockStyle.Fill };
 
-        BuildAccountTab(serverUrl, syncRoot, token);
-        BuildBandwidthTab(uploadSpeedBps, downloadSpeedBps);
-        BuildSyncTab(selectedPaths);
+        _accountTab = new SettingsAccountTab(this);
+        _bandwidthTab = new SettingsBandwidthTab(this);
+        _syncTab = new SettingsSyncTab(this);
+
+        _accountTab.BuildAccountTab(serverUrl, syncRoot, token);
+        _bandwidthTab.BuildBandwidthTab(uploadSpeedBps, downloadSpeedBps);
+        _syncTab.BuildSyncTab(selectedPaths);
         BuildBottomPanel();
 
         Controls.Add(_tabs);
 
         // 异步计算文件夹大小
-        _ = UpdateFolderSizeAsync(syncRoot);
+        _ = _accountTab.UpdateFolderSizeAsync(syncRoot);
 
         // T-032 深色模式：接入主题跟随（当前主题归一化 + 系统切换时刷新，含内部 SelectiveSyncPanel 树）
         ThemeWatcher.Watch(this);
