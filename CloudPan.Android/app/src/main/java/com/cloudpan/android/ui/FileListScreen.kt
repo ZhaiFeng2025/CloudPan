@@ -4,14 +4,24 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.os.Environment
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.ExperimentalMaterialApi
@@ -26,14 +36,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.cloudpan.android.UploadUiState
 import com.cloudpan.android.data.AppDatabase
+import com.cloudpan.android.data.ThumbnailLoader
 import com.cloudpan.android.data.FileConflictException
 import com.cloudpan.android.data.FileEntryDto
 import com.cloudpan.android.data.FileRepository
@@ -86,6 +103,56 @@ private fun formatTimestamp(iso: String): String {
 
 private fun fileName(path: String): String =
     path.trimEnd('/').substringAfterLast('/').ifEmpty { "/" }
+
+// ---- T-113：照片墙辅助（缩略图/网格/预览） ----
+
+/** 判断是否为图片文件——扩展名与服务端 ThumbnailService.SupportedExts 对齐（含 heic/heif）。 */
+private fun isImagePath(path: String): Boolean {
+    val lower = path.lowercase(Locale.ROOT)
+    return lower.matches(Regex(".*\\.(jpg|jpeg|png|gif|bmp|webp|heic|heif)$"))
+}
+
+/** 时间分组键（yyyy-MM）。lastModified 为 ISO 字符串，取前 7 位即月分组；解析失败归入「未知时间」。 */
+private fun monthKey(lastModified: String): String = lastModified.take(7).ifEmpty { "未知时间" }
+
+/** 月份标签展示：2026-08 → 「2026 年 8 月」；非 yyyy-MM 键原样返回。 */
+private fun monthLabel(key: String): String {
+    val parts = key.split("-")
+    return if (parts.size == 2) "${parts[0]} 年 ${parts[1].toIntOrNull() ?: parts[1]} 月" else key
+}
+
+/**
+ * 缩略图渲染（T-113）：内存→磁盘→网络三级加载（ThumbnailLoader），
+ * 加载中/失败统一降级为类型图标（Image），不崩溃；滚动离开时协程取消即中止加载。
+ */
+@Composable
+private fun ThumbnailImage(
+    loader: ThumbnailLoader,
+    path: String,
+    widthPx: Int,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Crop,
+    contentDescription: String? = null
+) {
+    val bitmap by produceState<Bitmap?>(initialValue = null, key1 = path, key2 = widthPx) {
+        value = loader.load(path, widthPx)
+    }
+    val bmp = bitmap
+    if (bmp != null) {
+        Image(
+            bitmap = bmp.asImageBitmap(),
+            contentDescription = contentDescription,
+            contentScale = contentScale,
+            modifier = modifier
+        )
+    } else {
+        Icon(
+            Icons.Default.Image, contentDescription,
+            modifier = modifier,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
 
 // ---- T-107：文件同步状态（FileEntryDto.state，与 shared-spec.json → CloudPan.Contract.FileState 一致） ----
 
@@ -208,6 +275,9 @@ fun FileListScreen(
     var lastAutoLoadCursor by remember { mutableStateOf<String?>(null) }
     var showBulkDeleteDialog by remember { mutableStateOf(false) }
     var showTrashDialog by remember { mutableStateOf(false) } // T-050：回收站入口
+    // T-113：照片墙——列表/网格视图切换 + 全屏预览索引（photos 顺序下标，null=未预览）
+    var viewMode by remember { mutableStateOf("list") }
+    var previewIndex by remember { mutableStateOf<Int?>(null) }
 
     // 离线缓存下载状态
     var offlineDownloadFile by remember { mutableStateOf<FileEntryDto?>(null) }
@@ -222,8 +292,11 @@ fun FileListScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val density = LocalDensity.current
     // FIX 4: 数据库实例提到 Composable 顶层，不在 LazyColumn items 中重复创建
     val db = remember { AppDatabase.getInstance(context) }
+    // T-113：缩略图加载器（内存/磁盘缓存 + 并发上限），FileListScreen 生命周期内复用，不进 cacheDir 外再落盘
+    val thumbnailLoader = remember { ThumbnailLoader(repository, File(context.cacheDir, "thumbnails")) }
 
     // ---- 加载逻辑 ----
 
@@ -772,6 +845,20 @@ fun FileListScreen(
         )
     }
 
+    // ---- T-113：照片墙数据——当前目录图片文件按时间倒序，yyyy-MM 分组；网格与全屏预览共用同一顺序 ----
+    val photos = remember(files) {
+        files.filter { it.type == 0 && isImagePath(it.path) }
+            .sortedByDescending { it.lastModified }
+    }
+    val groupedPhotos = remember(photos) {
+        photos.groupBy { monthKey(it.lastModified) }
+            .toList()
+            .sortedByDescending { it.first } // 新月份在前
+    }
+    val photoIndexByPath = remember(photos) {
+        photos.mapIndexed { index, p -> p.path to index }.toMap()
+    }
+
     // ---- 主布局 ----
 
     Scaffold(
@@ -904,6 +991,15 @@ fun FileListScreen(
                                 }
                             }
 
+                            // T-113：照片墙视图切换（列表/网格）
+                            IconButton(onClick = {
+                                viewMode = if (viewMode == "list") "grid" else "list"
+                            }) {
+                                Icon(
+                                    if (viewMode == "list") Icons.Default.GridView else Icons.Default.ViewList,
+                                    if (viewMode == "list") "切换到照片墙" else "切换到列表"
+                                )
+                            }
                             IconButton(onClick = { showNewFolderDialog = true }) {
                                 Icon(Icons.Default.CreateNewFolder, "新建文件夹")
                             }
@@ -1058,6 +1154,36 @@ fun FileListScreen(
                             )
                         }
                     }
+                } else if (viewMode == "grid") {
+                    // T-113：照片墙网格视图（yyyy-MM 分组，点击进入全屏预览）
+                    if (photos.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    Icons.Default.Photo, null,
+                                    modifier = Modifier.size(72.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        .copy(alpha = 0.5f)
+                                )
+                                Spacer(Modifier.height(16.dp))
+                                Text(
+                                    "此文件夹暂无照片",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    } else {
+                        PhotoGrid(
+                            groupedPhotos = groupedPhotos,
+                            photoIndexByPath = photoIndexByPath,
+                            thumbnailLoader = thumbnailLoader,
+                            onPhotoClick = { previewIndex = it }
+                        )
+                    }
                 } else {
                     LazyColumn {
                         items(files, key = { it.path }) { file ->
@@ -1076,13 +1202,27 @@ fun FileListScreen(
                             // FIX 1: 📁🖼️📄⭐☆ → Material Icons
                             ListItem(
                                 leadingContent = {
-                                    Icon(
-                                        getFileIcon(file), null,
-                                        modifier = Modifier.size(24.dp),
-                                        tint = if (file.type == 1)
-                                            MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                    if (file.type == 0 && isImagePath(file.path)) {
+                                        // T-113：图片行接入缩略图（getThumbnail），失败降级类型图标
+                                        val thumbWidthPx = with(density) { 40.dp.roundToPx() }
+                                        ThumbnailImage(
+                                            loader = thumbnailLoader,
+                                            path = file.path,
+                                            widthPx = thumbWidthPx,
+                                            modifier = Modifier
+                                                .size(40.dp)
+                                                .clip(RoundedCornerShape(6.dp)),
+                                            contentDescription = shortName
+                                        )
+                                    } else {
+                                        Icon(
+                                            getFileIcon(file), null,
+                                            modifier = Modifier.size(24.dp),
+                                            tint = if (file.type == 1)
+                                                MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 },
                                 headlineContent = {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1231,6 +1371,18 @@ fun FileListScreen(
                 refreshing = isRefreshing,
                 state = pullRefreshState,
                 modifier = Modifier.align(Alignment.TopCenter)
+            )
+        }
+    }
+
+    // T-113：全屏预览（photos 顺序下标进入，HorizontalPager 左右翻页，返回键关闭）
+    previewIndex?.let { index ->
+        if (photos.isNotEmpty()) {
+            PhotoPreview(
+                photos = photos,
+                initialIndex = index.coerceIn(0, photos.lastIndex),
+                loader = thumbnailLoader,
+                onDismiss = { previewIndex = null }
             )
         }
     }
@@ -1464,4 +1616,114 @@ private fun TrashDialog(
             }
         }
     )
+}
+
+// ---- T-113：相册网格视图（yyyy-MM 分组，3 列缩略图，点击进入全屏预览） ----
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PhotoGrid(
+    groupedPhotos: List<Pair<String, List<FileEntryDto>>>,
+    photoIndexByPath: Map<String, Int>,
+    thumbnailLoader: ThumbnailLoader,
+    onPhotoClick: (Int) -> Unit
+) {
+    val density = LocalDensity.current
+    val screenWidthPx = with(density) { LocalConfiguration.current.screenWidthDp.dp.roundToPx() }
+    val cellWidthPx = (screenWidthPx / 3).coerceAtLeast(1)
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(3),
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        groupedPhotos.forEach { (key, monthPhotos) ->
+            item(key = "header_$key", span = { GridItemSpan(maxLineSpan) }) {
+                Text(
+                    monthLabel(key),
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            items(monthPhotos, key = { it.path }) { photo ->
+                ThumbnailImage(
+                    loader = thumbnailLoader,
+                    path = photo.path,
+                    widthPx = cellWidthPx,
+                    modifier = Modifier
+                        .aspectRatio(1f)
+                        .clip(RoundedCornerShape(4.dp))
+                        .clickable { onPhotoClick(photoIndexByPath[photo.path] ?: 0) },
+                    contentDescription = fileName(photo.path)
+                )
+            }
+        }
+    }
+}
+
+// ---- T-113：全屏预览（黑色背景 + 左右滑动翻页 + 页号/文件名指示） ----
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PhotoPreview(
+    photos: List<FileEntryDto>,
+    initialIndex: Int,
+    loader: ThumbnailLoader,
+    onDismiss: () -> Unit
+) {
+    val density = LocalDensity.current
+    val screenWidthPx = with(density) { LocalConfiguration.current.screenWidthDp.dp.roundToPx() }
+    val pagerState = rememberPagerState(
+        initialPage = initialIndex.coerceIn(0, photos.lastIndex)
+    ) { photos.size }
+    BackHandler(onBack = onDismiss)
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            HorizontalPager(state = pagerState) { page ->
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    ThumbnailImage(
+                        loader = loader,
+                        path = photos[page].path,
+                        widthPx = screenWidthPx,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit,
+                        contentDescription = fileName(photos[page].path)
+                    )
+                }
+            }
+            // 页号指示 + 关闭按钮 + 文件名
+            Text(
+                "${pagerState.currentPage + 1} / ${photos.size}",
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 20.dp),
+                color = Color.White,
+                style = MaterialTheme.typography.titleSmall
+            )
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
+            ) {
+                Icon(Icons.Default.Close, "关闭预览", tint = Color.White)
+            }
+            Text(
+                fileName(photos[pagerState.currentPage].path),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 28.dp),
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
 }

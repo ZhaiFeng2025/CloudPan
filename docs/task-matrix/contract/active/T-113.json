@@ -3,7 +3,7 @@
  "title": "Android 照片墙缩略图接入（getThumbnail + 相册网格 + 全屏预览翻页）",
  "dimension": "function",
  "priority": "P1",
- "status": "todo",
+ "status": "acceptance",
  "batch": 10,
  "findingId": "F-153",
  "dependsOn": [],
@@ -40,6 +40,6 @@
  ],
  "attempts": 0,
  "statusReason": null,
- "note": null,
- "updatedAt": null
+ "note": "改动文件：新增 data/ThumbnailLoader.kt（内存 LruCache 按 byteCount + 磁盘缓存 + Semaphore 并发上限）；data/FileRepository.kt 新增 fetchThumbnail 接线 CloudPanApi.getThumbnail(path,width)；ui/FileListScreen.kt 列表图片行缩略图 + 相册网格（yyyy-MM 分组 + 列表/网格切换）+ 全屏预览 HorizontalPager 翻页。验证：AC1 grep 'getThumbnail|thumbnail' FileListScreen.kt 有匹配（6 处）；Android 本机无 SDK/gradle，AC4 gradlew assembleDebug 无法执行；已做括号配平（非注释行 (==)）与逐文件人工语法自查；AC2/AC3 为手动行为断言，需真机验证（无真机）。",
+ "updatedAt": "2026-08-04"
 }

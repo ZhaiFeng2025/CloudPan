@@ -423,6 +423,25 @@ class FileRepository(private val settings: SettingsStore) {
         }
     }
 
+    /**
+     * 获取图片缩略图字节（GET /api/thumbnails，T-113，CloudPanApi.getThumbnail 接线）。
+     * 服务端返回 JPEG 小图（含 heic/heif 解码，见 ThumbnailsController）；非图片/解码失败返回错误。
+     * 失败返回 null（由 UI 降级类型图标）；协程取消重新抛出，保证滚动离开时加载即中止不占缓存。
+     */
+    suspend fun fetchThumbnail(path: String, width: Int): ByteArray? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = api().getThumbnail(path, width)
+                if (!response.isSuccessful) return@withContext null
+                response.body()?.bytes()
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                Log.e("CloudPan", "获取缩略图失败: $path", e)
+                null
+            }
+        }
+    }
+
     suspend fun getDevices(): Result<List<DeviceItem>> {
         return safeCall {
             val response = api().getDevices()
