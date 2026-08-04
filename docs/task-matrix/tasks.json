@@ -5219,7 +5219,7 @@
       "title": "Android 大文件分块上传（>50MB 走 /api/files/upload/chunk，对齐 C#）",
       "dimension": "function",
       "priority": "P2",
-      "status": "in-progress",
+      "status": "acceptance",
       "batch": 9,
       "findingId": "F-147",
       "dependsOn": [],
