@@ -1,7 +1,7 @@
 # CloudPan 任务矩阵 — 状态板
 
 > 契约: docs/task-matrix/tasks.json（schemaVersion=2）｜ 更新: 2026-08-04
-> 统计: 108 任务 = 105 done / 3 待人工确认 / 0 todo
+> 统计: 108 任务 = 108 done / 0 待人工确认 / 0 todo
 
 | ID | 标题 | 维度 | 优先级 | 状态 | 批次 |
 |---|---|---|---|---|---|
