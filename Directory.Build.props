@@ -7,7 +7,7 @@
     <SerilogVersion>4.3.0</SerilogVersion>
     <SerilogAspNetCoreVersion>8.0.3</SerilogAspNetCoreVersion>
     <SerilogExtensionsLoggingVersion>8.0.0</SerilogExtensionsLoggingVersion>
-    <SerilogSinksConsoleVersion>6.0.0</SerilogSinksConsoleVersion>
+    <SerilogSinksConsoleVersion>6.1.1</SerilogSinksConsoleVersion>
     <SerilogSinksFileVersion>6.0.0</SerilogSinksFileVersion>
   </PropertyGroup>
   <ItemGroup Condition="'$(MSBuildProjectName)' != 'CloudPan.CodeGen' and '$(MSBuildProjectName)' != 'CloudPan.Analyzers'">
