@@ -28,7 +28,7 @@
     <!-- WebSocket 心跳托管服务（T-057 WebSocketHeartbeatHostedService）用 BackgroundService/IHostedService -->
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.0.1" />
     <!-- 缩略图生成（ThumbnailService 使用，与 Host 端版本对齐） -->
-    <PackageReference Include="SkiaSharp" Version="4.150.1" />
+    <PackageReference Include="SkiaSharp" Version="4.151.1" />
   </ItemGroup>
 
 </Project>
