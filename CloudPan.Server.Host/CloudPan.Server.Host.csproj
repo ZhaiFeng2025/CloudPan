@@ -30,7 +30,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.10" />
-    <PackageReference Include="SkiaSharp" Version="4.150.1" />
+    <PackageReference Include="SkiaSharp" Version="4.151.1" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
     <!-- 版本由 Directory.Build.props 单源化（T-096） -->
     <PackageReference Include="Serilog.AspNetCore" Version="$(SerilogAspNetCoreVersion)" />
