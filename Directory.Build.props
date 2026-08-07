@@ -4,7 +4,7 @@
        各 csproj 经 $(Serilog*Version) 引用，改版本只改此处。注：NuGet CPM 为全仓库启用（会强制集中全部包），
        本任务仅统一 Serilog 系列，故用 MSBuild 属性常量单源化（与 CPM 等价的效果、零侵入）。 -->
   <PropertyGroup>
-    <SerilogVersion>4.3.0</SerilogVersion>
+    <SerilogVersion>4.4.0</SerilogVersion>
     <SerilogAspNetCoreVersion>8.0.3</SerilogAspNetCoreVersion>
     <SerilogExtensionsLoggingVersion>8.0.0</SerilogExtensionsLoggingVersion>
     <SerilogSinksConsoleVersion>6.0.0</SerilogSinksConsoleVersion>
