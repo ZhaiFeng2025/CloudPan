@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <!-- T-096：日志工厂（SerilogFactory）宿主；版本由 Directory.Build.props 单源化 -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
     <PackageReference Include="Serilog" Version="$(SerilogVersion)" />
     <PackageReference Include="Serilog.Sinks.Console" Version="$(SerilogSinksConsoleVersion)" />
     <PackageReference Include="Serilog.Sinks.File" Version="$(SerilogSinksFileVersion)" />
